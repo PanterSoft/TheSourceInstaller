@@ -248,8 +248,10 @@ jobs:
                           for dep_type in ['dependencies', 'build_dependencies']:
                               deps = data.get(dep_type, [])
                               for dep in deps:
-                                  if dep not in package_names:
-                                      print(f"❌ {pkg_name}: {dep_type} '{dep}' not found in packages/")
+                                  # Extract package name from dependency (may be package@version)
+                                  dep_name = dep.split('@')[0] if '@' in dep else dep
+                                  if dep_name not in package_names:
+                                      print(f"❌ {pkg_name}: {dep_type} '{dep}' (package '{dep_name}') not found in packages/")
                                       failed = True
 
                   except Exception as e:
