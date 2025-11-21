@@ -131,12 +131,35 @@ static int cmd_install(int argc, char **argv) {
 
     printf("Resolved %zu dependencies\n", deps_count);
 
+    // Debug: print resolved packages
+    if (deps_count > 0) {
+        printf("Packages to build: ");
+        for (size_t i = 0; i < deps_count; i++) {
+            printf("%s ", deps[i]);
+        }
+        printf("\n");
+    }
+
     // Get build order
     size_t build_order_count = 0;
     char **build_order = resolver_get_build_order(resolver, deps, deps_count, &build_order_count);
 
     if (!build_order) {
         fprintf(stderr, "Error: Failed to determine build order\n");
+        if (deps_count > 0) {
+            fprintf(stderr, "  Packages: ");
+            for (size_t i = 0; i < deps_count; i++) {
+                fprintf(stderr, "%s ", deps[i]);
+            }
+            fprintf(stderr, "\n");
+            // Check if packages exist in repository
+            for (size_t i = 0; i < deps_count; i++) {
+                Package *pkg = repository_get_package(repo, deps[i]);
+                if (!pkg) {
+                    fprintf(stderr, "  Warning: Package '%s' not found in repository\n", deps[i]);
+                }
+            }
+        }
         for (size_t i = 0; i < deps_count; i++) free(deps[i]);
         free(deps);
         if (installed) {

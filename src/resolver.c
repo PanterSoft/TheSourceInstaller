@@ -113,13 +113,34 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
 char** resolver_get_build_order(DependencyResolver *resolver, char **packages, size_t packages_count, size_t *result_count) {
     // Simple topological sort
     *result_count = 0;
-    if (packages_count == 0) return NULL;
+    if (packages_count == 0) {
+        return NULL;
+    }
+
+    // Special case: single package with no dependencies
+    if (packages_count == 1) {
+        char **result = malloc(sizeof(char*));
+        result[0] = strdup(packages[0]);
+        *result_count = 1;
+        return result;
+    }
 
     char **result = malloc(sizeof(char*) * packages_count);
+    if (!result) return NULL;
+
     bool *added = calloc(packages_count, sizeof(bool));
+    if (!added) {
+        free(result);
+        return NULL;
+    }
 
     // Build dependency graph
     int *in_degree = calloc(packages_count, sizeof(int));
+    if (!in_degree) {
+        free(result);
+        free(added);
+        return NULL;
+    }
 
     for (size_t i = 0; i < packages_count; i++) {
         Package *pkg = repository_get_package(resolver->repository, packages[i]);
@@ -136,6 +157,9 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
                     in_degree[i]++;
                 }
             }
+        } else {
+            // Package not found in repository - this is an error
+            // But we'll continue and handle it later
         }
     }
 
@@ -166,9 +190,31 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
             }
         }
         if (!found) {
-            // Circular dependency or error
+            // Circular dependency or error - check if we added all packages
+            if (*result_count < packages_count) {
+                // Failed to add all packages - free result and return NULL
+                for (size_t i = 0; i < *result_count; i++) {
+                    free(result[i]);
+                }
+                free(result);
+                free(added);
+                free(in_degree);
+                return NULL;
+            }
             break;
         }
+    }
+
+    // Verify all packages were added
+    if (*result_count < packages_count) {
+        // Failed to add all packages - free result and return NULL
+        for (size_t i = 0; i < *result_count; i++) {
+            free(result[i]);
+        }
+        free(result);
+        free(added);
+        free(in_degree);
+        return NULL;
     }
 
     free(added);
