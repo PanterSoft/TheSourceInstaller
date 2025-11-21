@@ -74,18 +74,24 @@ run_test() {
     # Run test script in a fresh container (--rm removes container after run)
     echo "Running installation test..."
     set +e  # Temporarily disable exit on error for command substitution
-    if docker compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1; then
-        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
-        TEST_EXIT_CODE=0
-    elif docker-compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1; then
-        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
-        TEST_EXIT_CODE=0
+    # Determine which docker compose command to use
+    DOCKER_COMPOSE_CMD=""
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker-compose"
     else
-        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
-        TEST_EXIT_CODE=$?
+        echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+        set -e
+        return 1
     fi
-    set -e  # Re-enable exit on error
+    
+    # Run the test
+    $DOCKER_COMPOSE_CMD run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1
+    TEST_EXIT_CODE=$?
+    TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
     rm -f /tmp/test-output-$$.log
+    set -e  # Re-enable exit on error
     echo "$TEST_OUTPUT" | tee "/tmp/tsi-test-${service}.log"
 
     # Check result based on expected outcome
