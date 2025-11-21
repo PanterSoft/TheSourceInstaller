@@ -173,24 +173,31 @@ jobs:
       - name: Test package parsing
         run: |
           echo "Testing if TSI can parse all package files..."
+          
+          # Set up TSI repository directory
+          mkdir -p ~/.tsi/repos
+          cp packages/*.json ~/.tsi/repos/
+          
           FAILED=0
-
+          
           for pkg in packages/*.json; do
             if [ -f "$pkg" ]; then
               PKG_NAME=$(basename "$pkg" .json)
-              echo "Testing: $pkg"
-
+              # Extract package name from JSON (in case filename differs)
+              ACTUAL_NAME=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('name', '$PKG_NAME'))" 2>/dev/null || echo "$PKG_NAME")
+              echo "Testing: $pkg (package name: $ACTUAL_NAME)"
+              
               # Use TSI info command to test parsing
-              if ./src/bin/tsi info "$PKG_NAME" > /dev/null 2>&1; then
+              if ./src/bin/tsi info "$ACTUAL_NAME" > /dev/null 2>&1; then
                 echo "✓ TSI can parse: $pkg"
               else
                 echo "❌ TSI cannot parse: $pkg"
-                ./src/bin/tsi info "$PKG_NAME" 2>&1 || true
+                ./src/bin/tsi info "$ACTUAL_NAME" 2>&1 || true
                 FAILED=1
               fi
             fi
           done
-
+          
           if [ $FAILED -eq 1 ]; then
             echo "::error::TSI cannot parse some package files"
             exit 1
