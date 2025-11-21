@@ -316,7 +316,26 @@ static int cmd_install(int argc, char **argv) {
 
         printf("Installing dependency: %s\n", build_order[i]);
 
-        Package *dep_pkg = repository_get_package(repo, build_order[i]);
+        // Parse package@version from build_order if present
+        char *dep_name = NULL;
+        char *dep_version = NULL;
+        char *at_pos = strchr(build_order[i], '@');
+        if (at_pos) {
+            size_t name_len = at_pos - build_order[i];
+            dep_name = malloc(name_len + 1);
+            if (dep_name) {
+                strncpy(dep_name, build_order[i], name_len);
+                dep_name[name_len] = '\0';
+            }
+            dep_version = strdup(at_pos + 1);
+        } else {
+            dep_name = strdup(build_order[i]);
+        }
+        
+        Package *dep_pkg = dep_version ? repository_get_package_version(repo, dep_name ? dep_name : build_order[i], dep_version) : repository_get_package(repo, dep_name ? dep_name : build_order[i]);
+        
+        if (dep_name) free(dep_name);
+        if (dep_version) free(dep_version);
         if (!dep_pkg) {
             printf("Warning: Dependency package not found: %s\n", build_order[i]);
             continue;
@@ -507,7 +526,7 @@ static int cmd_info(int argc, char **argv) {
 
     printf("Package: %s\n", pkg->name ? pkg->name : "unknown");
     printf("Version: %s\n", pkg->version ? pkg->version : "unknown");
-    
+
     // List all available versions
     size_t versions_count = 0;
     char **versions = repository_list_versions(repo, pkg->name, &versions_count);
