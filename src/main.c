@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include "package.h"
 #include "database.h"
 #include "resolver.h"
@@ -15,9 +16,11 @@ static void print_usage(const char *prog_name) {
     printf("Usage: %s <command> [options]\n\n", prog_name);
     printf("Commands:\n");
     printf("  install [--force] [--prefix PATH] <package>  Install a package\n");
-    printf("  remove <package>                             Remove a package\n");
+    printf("  remove <package>                             Remove an installed package\n");
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
+    printf("  update [--repo URL] [--local PATH]           Update package repository\n");
+    printf("  uninstall [--all] [--prefix PATH]            Uninstall TSI\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
 }
@@ -382,6 +385,267 @@ static int cmd_info(int argc, char **argv) {
     return 0;
 }
 
+static int cmd_update(int argc, char **argv) {
+    const char *repo_url = NULL;
+    const char *local_path = NULL;
+    const char *prefix = NULL;
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--repo") == 0 && i + 1 < argc) {
+            repo_url = argv[++i];
+        } else if (strcmp(argv[i], "--local") == 0 && i + 1 < argc) {
+            local_path = argv[++i];
+        } else if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
+            prefix = argv[++i];
+        }
+    }
+
+    const char *home = getenv("HOME");
+    if (!home) home = "/root";
+
+    char tsi_prefix[1024];
+    int len;
+    if (prefix) {
+        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
+        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
+    } else {
+        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
+        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
+    }
+
+    char repo_dir[1024];
+    len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    if (len < 0 || (size_t)len >= sizeof(repo_dir)) {
+        fprintf(stderr, "Error: Path too long\n");
+        return 1;
+    }
+
+    // Create repo directory if it doesn't exist
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", repo_dir);
+    system(cmd);
+
+    printf("Updating package repository...\n");
+    printf("Repository directory: %s\n", repo_dir);
+
+    bool success = false;
+
+    // Update from local path
+    if (local_path) {
+        printf("Updating from local path: %s\n", local_path);
+        char copy_cmd[1024];
+        snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
+        if (system(copy_cmd) == 0) {
+            printf("✓ Packages copied from local path\n");
+            success = true;
+        } else {
+            fprintf(stderr, "Error: Failed to copy packages from local path\n");
+        }
+    }
+    // Update from git repository
+    else if (repo_url) {
+        printf("Updating from repository: %s\n", repo_url);
+        char temp_dir[1024];
+        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+
+        // Clone or update repository
+        char git_cmd[1024];
+        struct stat st;
+        if (stat(temp_dir, &st) == 0) {
+            // Update existing clone
+            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+        } else {
+            // Clone repository
+            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", repo_url, temp_dir);
+        }
+
+        if (system(git_cmd) == 0) {
+            // Copy package files
+            char packages_dir[1024];
+            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+
+            // Check if packages directory exists, otherwise try root
+            if (stat(packages_dir, &st) != 0) {
+                strncpy(packages_dir, temp_dir, sizeof(packages_dir) - 1);
+                packages_dir[sizeof(packages_dir) - 1] = '\0';
+            }
+
+            char copy_cmd[1024];
+            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (system(copy_cmd) == 0) {
+                printf("✓ Packages updated from repository\n");
+                success = true;
+            } else {
+                fprintf(stderr, "Error: Failed to copy packages from repository\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Failed to clone/update repository\n");
+        }
+    }
+    // Default: Update from TSI source repository
+    else {
+        const char *default_repo = "https://github.com/PanterSoft/tsi.git";
+        printf("Updating from default repository: %s\n", default_repo);
+
+        char temp_dir[1024];
+        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+
+        // Clone or update repository
+        char git_cmd[1024];
+        struct stat st;
+        if (stat(temp_dir, &st) == 0) {
+            // Update existing clone
+            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+        } else {
+            // Clone repository
+            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", default_repo, temp_dir);
+        }
+
+        if (system(git_cmd) == 0) {
+            // Copy package files
+            char packages_dir[1024];
+            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+
+            char copy_cmd[1024];
+            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (system(copy_cmd) == 0) {
+                printf("✓ Packages updated from default repository\n");
+                success = true;
+            } else {
+                fprintf(stderr, "Error: Failed to copy packages from repository\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Failed to clone/update repository\n");
+            fprintf(stderr, "Hint: Make sure git is installed and you have internet access\n");
+        }
+    }
+
+    if (success) {
+        // Count updated packages
+        DIR *dir = opendir(repo_dir);
+        int count = 0;
+        if (dir) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] != '.' && strstr(entry->d_name, ".json")) {
+                    count++;
+                }
+            }
+            closedir(dir);
+        }
+        printf("\nRepository updated successfully!\n");
+        printf("Total packages available: %d\n", count);
+        printf("\nUse 'tsi info <package>' to see package details\n");
+    } else {
+        fprintf(stderr, "\nFailed to update repository\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+static int cmd_uninstall(int argc, char **argv) {
+    bool remove_all = false;
+    const char *prefix = NULL;
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--all") == 0) {
+            remove_all = true;
+        } else if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
+            prefix = argv[++i];
+        }
+    }
+
+    const char *home = getenv("HOME");
+    if (!home) home = "/root";
+
+    char tsi_prefix[1024];
+    int len;
+    if (prefix) {
+        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
+        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
+    } else {
+        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
+        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
+    }
+
+    printf("Uninstalling TSI from: %s\n", tsi_prefix);
+    printf("\n");
+
+    // Remove binary
+    char bin_path[1024];
+    len = snprintf(bin_path, sizeof(bin_path), "%s/bin/tsi", tsi_prefix);
+    if (len >= 0 && (size_t)len < sizeof(bin_path)) {
+        if (unlink(bin_path) == 0) {
+            printf("✓ Removed binary: %s\n", bin_path);
+        } else {
+            printf("⚠ Binary not found: %s\n", bin_path);
+        }
+    }
+
+    // Remove completion scripts
+    char completions_dir[1024];
+    len = snprintf(completions_dir, sizeof(completions_dir), "%s/share/completions", tsi_prefix);
+    if (len >= 0 && (size_t)len < sizeof(completions_dir)) {
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", completions_dir);
+        if (system(cmd) == 0) {
+            printf("✓ Removed completion scripts\n");
+        }
+    }
+
+    // Remove share directory if empty
+    char share_dir[1024];
+    len = snprintf(share_dir, sizeof(share_dir), "%s/share", tsi_prefix);
+    if (len >= 0 && (size_t)len < sizeof(share_dir)) {
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", share_dir);
+        system(cmd);
+    }
+
+    // Remove bin directory if empty
+    char bin_dir[1024];
+    len = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", tsi_prefix);
+    if (len >= 0 && (size_t)len < sizeof(bin_dir)) {
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", bin_dir);
+        system(cmd);
+    }
+
+    if (remove_all) {
+        printf("\nRemoving all TSI data...\n");
+
+        // Remove all TSI directories
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
+        if (system(cmd) == 0) {
+            printf("✓ Removed all TSI data: %s\n", tsi_prefix);
+        } else {
+            fprintf(stderr, "Error: Failed to remove TSI data\n");
+            return 1;
+        }
+    } else {
+        printf("\nTSI binary and completion scripts removed.\n");
+        printf("TSI data (packages, database, etc.) preserved at: %s\n", tsi_prefix);
+        printf("Use 'tsi uninstall --all' to remove all data.\n");
+    }
+
+    printf("\n✓ TSI uninstalled successfully!\n");
+    printf("\nNote: You may want to remove TSI from your PATH:\n");
+    printf("  Remove 'export PATH=\"%s/bin:\\$PATH\"' from your shell profile\n", tsi_prefix);
+    printf("  (~/.bashrc, ~/.zshrc, etc.)\n");
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -400,15 +664,23 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "install") == 0) {
         return cmd_install(argc - 1, argv + 1);
-    } else if (strcmp(argv[1], "remove") == 0 || strcmp(argv[1], "uninstall") == 0) {
+    } else if (strcmp(argv[1], "uninstall") == 0) {
+        // TSI uninstall (check before package remove)
+        return cmd_uninstall(argc - 1, argv + 1);
+    } else if (strcmp(argv[1], "remove") == 0) {
+        // Package removal
         if (argc < 3) {
             fprintf(stderr, "Error: package name required\n");
             return 1;
         }
         const char *home = getenv("HOME");
         if (!home) home = "/root";
-        char db_dir[512];
-        snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+        char db_dir[1024];
+        int len = snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+        if (len < 0 || (size_t)len >= sizeof(db_dir)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
         Database *db = database_new(db_dir);
         if (database_remove_package(db, argv[2])) {
             printf("Removed %s\n", argv[2]);
@@ -423,6 +695,8 @@ int main(int argc, char **argv) {
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {
         return cmd_info(argc - 1, argv + 1);
+    } else if (strcmp(argv[1], "update") == 0) {
+        return cmd_update(argc - 1, argv + 1);
     } else {
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
         print_usage(argv[0]);

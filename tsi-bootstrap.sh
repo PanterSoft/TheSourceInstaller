@@ -9,6 +9,7 @@ PREFIX="${PREFIX:-$HOME/.tsi}"
 TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
+REPAIR_MODE=false
 
 log_info() {
     echo "[INFO] $*"
@@ -39,10 +40,92 @@ download_tarball() {
     fi
 }
 
+check_tsi_installed() {
+    local tsi_bin="$PREFIX/bin/tsi"
+    if [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ]; then
+        # Try to run tsi --version
+        if "$tsi_bin" --version >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+check_tsi_outdated() {
+    local tsi_bin="$PREFIX/bin/tsi"
+    if [ -f "$tsi_bin" ]; then
+        # Check if binary is older than 7 days (simple heuristic)
+        if [ -n "$(find "$tsi_bin" -mtime +7 2>/dev/null)" ]; then
+            return 0
+        fi
+        # Or check if source is newer
+        if [ -d "$INSTALL_DIR/tsi" ] && [ "$INSTALL_DIR/tsi/src/main.c" -nt "$tsi_bin" ] 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 main() {
-    log_info "TSI One-Line Bootstrap Installer"
-    log_info "=================================="
-    log_info ""
+    # Parse command line arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --repair)
+                REPAIR_MODE=true
+                shift
+                ;;
+            --prefix)
+                PREFIX="$2"
+                shift 2
+                ;;
+            --help|-h)
+                echo "TSI Bootstrap Installer"
+                echo ""
+                echo "Usage: $0 [options]"
+                echo ""
+                echo "Options:"
+                echo "  --repair          Repair/update existing TSI installation"
+                echo "  --prefix PATH     Installation prefix (default: \$HOME/.tsi)"
+                echo "  --help, -h        Show this help"
+                echo ""
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+    if [ "$REPAIR_MODE" = true ]; then
+        log_info "TSI Repair/Update Mode"
+        log_info "======================"
+        log_info ""
+
+        if check_tsi_installed; then
+            log_info "TSI is installed at: $PREFIX/bin/tsi"
+            if check_tsi_outdated; then
+                log_info "TSI appears to be outdated, will rebuild..."
+            else
+                log_info "TSI installation found, will rebuild to repair..."
+            fi
+        else
+            log_info "TSI binary not found or broken, will install..."
+        fi
+        log_info ""
+    else
+        log_info "TSI One-Line Bootstrap Installer"
+        log_info "=================================="
+        log_info ""
+
+        # Check if already installed
+        if check_tsi_installed; then
+            log_warn "TSI is already installed at: $PREFIX/bin/tsi"
+            log_warn "Use --repair to update or repair the installation"
+            log_warn "Continuing with fresh installation..."
+            log_info ""
+        fi
+    fi
 
     # Check for C compiler
     CC=""
@@ -163,6 +246,35 @@ main() {
     cp bin/tsi "$PREFIX/bin/tsi"
     chmod +x "$PREFIX/bin/tsi"
 
+    # Install completion scripts
+    log_info "Installing shell completion scripts..."
+    mkdir -p "$PREFIX/share/completions"
+
+    # Find completions directory (could be in tsi/ or parent)
+    COMPLETIONS_DIR=""
+    if [ -d "../completions" ]; then
+        COMPLETIONS_DIR="../completions"
+    elif [ -d "completions" ]; then
+        COMPLETIONS_DIR="completions"
+    elif [ -d "../../completions" ]; then
+        COMPLETIONS_DIR="../../completions"
+    fi
+
+    if [ -n "$COMPLETIONS_DIR" ]; then
+        if [ -f "$COMPLETIONS_DIR/tsi.bash" ]; then
+            cp "$COMPLETIONS_DIR/tsi.bash" "$PREFIX/share/completions/tsi.bash"
+            chmod 644 "$PREFIX/share/completions/tsi.bash"
+            log_info "  Installed bash completion"
+        fi
+        if [ -f "$COMPLETIONS_DIR/tsi.zsh" ]; then
+            cp "$COMPLETIONS_DIR/tsi.zsh" "$PREFIX/share/completions/tsi.zsh"
+            chmod 644 "$PREFIX/share/completions/tsi.zsh"
+            log_info "  Installed zsh completion"
+        fi
+    else
+        log_warn "  Completion scripts not found (optional)"
+    fi
+
     log_info ""
     log_info "========================================="
     log_info "TSI installed successfully!"
@@ -174,8 +286,14 @@ main() {
     log_info "Or add to your shell profile:"
     if [ -n "$ZSH_VERSION" ]; then
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
+        log_info ""
+        log_info "Enable autocomplete (zsh):"
+        log_info "  echo 'source $PREFIX/share/completions/tsi.zsh' >> ~/.zshrc"
     else
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.bashrc"
+        log_info ""
+        log_info "Enable autocomplete (bash):"
+        log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
     fi
     log_info ""
     log_info "Then run: tsi --help"

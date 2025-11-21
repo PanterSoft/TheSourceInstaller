@@ -55,6 +55,16 @@ The installer will automatically:
 PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
+**Repair/Update existing installation:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+```
+
+This will rebuild and reinstall TSI, useful for:
+- Fixing broken installations
+- Updating to the latest version
+- Rebuilding after system changes
+
 After installation, add to your PATH:
 ```bash
 export PATH="$HOME/.tsi/bin:$PATH"
@@ -93,11 +103,34 @@ After installation, add TSI to your PATH:
 
 ```bash
 # For bash/zsh
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.tsi/bin:$PATH"
 
 # Or add to your shell profile
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="$HOME/.tsi/bin:$PATH"' >> ~/.bashrc
 ```
+
+### Enable Autocomplete
+
+TSI includes shell completion for bash and zsh:
+
+**Bash:**
+```bash
+source ~/.tsi/share/completions/tsi.bash
+# Or add to ~/.bashrc:
+echo 'source ~/.tsi/share/completions/tsi.bash' >> ~/.bashrc
+```
+
+**Zsh:**
+```bash
+source ~/.tsi/share/completions/tsi.zsh
+# Or add to ~/.zshrc:
+echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
+```
+
+After enabling, you can use Tab completion for:
+- Commands: `tsi <TAB>` shows available commands
+- Packages: `tsi install <TAB>` shows available packages
+- Installed packages: `tsi remove <TAB>` shows installed packages
 
 ## Usage
 
@@ -116,17 +149,21 @@ tsi list
 # Show package information
 tsi info <package-name>
 
-# Search for packages
-tsi search <query>
-
 # Remove a package
 tsi remove <package-name>
 
-# Update a package
-tsi update <package-name>
+# Update package repository
+tsi update                                    # Update from default TSI repository
+tsi update --repo https://github.com/user/repo.git  # Update from custom repository
+tsi update --local /path/to/packages          # Update from local directory
 
-# Build without installing
-tsi build <package-name>
+# Uninstall TSI
+tsi uninstall                                 # Remove TSI binary and completion scripts
+tsi uninstall --all                           # Remove TSI and all data (packages, database, etc.)
+tsi uninstall --prefix /opt/tsi              # Uninstall from custom location
+
+# List installed packages
+tsi list
 ```
 
 ## Package Manifest Format
