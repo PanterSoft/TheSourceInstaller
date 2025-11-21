@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -467,19 +468,162 @@ Repository* repository_new(const char *repo_dir) {
         while ((entry = readdir(dir)) != NULL) {
             if (entry->d_name[0] == '.') continue;
 
+            // Only process .json files
+            size_t name_len = strlen(entry->d_name);
+            if (name_len < 5 || strcmp(entry->d_name + name_len - 5, ".json") != 0) {
+                continue;
+            }
+
             char path[512];
             snprintf(path, sizeof(path), "%s/%s", repo_dir, entry->d_name);
 
             struct stat st;
             if (stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
-                // Try to load as package
-                Package *pkg = package_new();
-                if (package_load_from_file(pkg, path)) {
-                    repo->packages = realloc(repo->packages, sizeof(Package*) * (repo->packages_count + 1));
-                    repo->packages[repo->packages_count++] = pkg;
-                } else {
-                    package_free(pkg);
+                // Load file content
+                FILE *f = fopen(path, "r");
+                if (!f) continue;
+
+                fseek(f, 0, SEEK_END);
+                long file_size = ftell(f);
+                fseek(f, 0, SEEK_SET);
+
+                if (file_size <= 0 || file_size > 1024 * 1024) { // Max 1MB
+                    fclose(f);
+                    continue;
                 }
+
+                char *json = malloc(file_size + 1);
+                if (!json) {
+                    fclose(f);
+                    continue;
+                }
+
+                size_t read = fread(json, 1, file_size, f);
+                fclose(f);
+                json[read] = '\0';
+
+                // Check if this is a multi-version file (has "versions" array)
+                // Look for "versions" key followed by ':' and then '['
+                const char *versions_key = strstr(json, "\"versions\"");
+                bool is_multi_version = false;
+                if (versions_key) {
+                    // Check if it's followed by ':' (making it a key) and then '[' (making it an array)
+                    const char *colon = strchr(versions_key, ':');
+                    if (colon) {
+                        colon++; // Skip ':'
+                        while (isspace(*colon)) colon++; // Skip whitespace
+                        if (*colon == '[') {
+                            // This is a "versions" array - multi-version format
+                            // Multi-version format: {"name": "...", "versions": [...]}
+                            // Parse each version and create a Package for each
+                            const char *versions_start = colon; // Already points to '['
+                            versions_start++; // Skip '['
+
+                        // Find the package name first (shared across all versions)
+                        char *package_name = NULL;
+                        const char *name_pos = strstr(json, "\"name\"");
+                        if (name_pos) {
+                            name_pos = strchr(name_pos, ':');
+                            if (name_pos) {
+                                name_pos++;
+                                while (isspace(*name_pos)) name_pos++;
+                                if (*name_pos == '"') {
+                                    name_pos++;
+                                    const char *name_end = strchr(name_pos, '"');
+                                    if (name_end) {
+                                        size_t name_len = name_end - name_pos;
+                                        package_name = malloc(name_len + 1);
+                                        if (package_name) {
+                                            strncpy(package_name, name_pos, name_len);
+                                            package_name[name_len] = '\0';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Parse each version object in the array
+                        const char *p = versions_start;
+                        int brace_depth = 0;
+                        int bracket_depth = 1; // Start at 1 since we're already inside the versions array '['
+                        const char *obj_start = NULL;
+
+                        while (*p) {
+                            if (*p == '[') {
+                                bracket_depth++;
+                            } else if (*p == ']') {
+                                bracket_depth--;
+                                // Only stop if we've closed the versions array (bracket_depth == 0)
+                                if (bracket_depth == 0) {
+                                    break;
+                                }
+                            } else if (*p == '{') {
+                                if (brace_depth == 0 && bracket_depth == 1) {
+                                    // Top-level object in versions array
+                                    obj_start = p;
+                                }
+                                brace_depth++;
+                            } else if (*p == '}') {
+                                brace_depth--;
+                                if (brace_depth == 0 && bracket_depth == 1 && obj_start) {
+                                    // Extract this version object
+                                    size_t obj_len = p - obj_start + 1;
+                                    char *version_json = malloc(obj_len + 1);
+                                    if (version_json) {
+                                        strncpy(version_json, obj_start, obj_len);
+                                        version_json[obj_len] = '\0';
+
+                                        // Create package from this version
+                                        // First, add the name to the version JSON temporarily
+                                        char *version_json_with_name = NULL;
+                                        if (package_name) {
+                                            // Insert name at the beginning: {"name":"...", ...existing json...}
+                                            size_t name_json_len = strlen(package_name) + 20; // "{\"name\":\"\","
+                                            size_t version_json_len = strlen(version_json);
+                                            version_json_with_name = malloc(name_json_len + version_json_len + 1);
+                                            if (version_json_with_name) {
+                                                snprintf(version_json_with_name, name_json_len + version_json_len + 1,
+                                                        "{\"name\":\"%s\",%s", package_name, version_json + 1); // Skip first {
+                                            }
+                                        }
+
+                                        Package *pkg = package_new();
+                                        const char *json_to_parse = version_json_with_name ? version_json_with_name : version_json;
+                                        if (package_load_from_json(pkg, json_to_parse)) {
+                                            repo->packages = realloc(repo->packages, sizeof(Package*) * (repo->packages_count + 1));
+                                            repo->packages[repo->packages_count++] = pkg;
+                                        } else {
+                                            package_free(pkg);
+                                        }
+
+                                        if (version_json_with_name) {
+                                            free(version_json_with_name);
+                                        }
+                                        free(version_json);
+                                    }
+                                    obj_start = NULL;
+                                }
+                            }
+                            p++;
+                        }
+
+                            if (package_name) free(package_name);
+                        }
+                    }
+                }
+
+                if (!is_multi_version) {
+                    // Single version format: {"name": "...", "version": "...", ...}
+                    Package *pkg = package_new();
+                    if (package_load_from_file(pkg, path)) {
+                        repo->packages = realloc(repo->packages, sizeof(Package*) * (repo->packages_count + 1));
+                        repo->packages[repo->packages_count++] = pkg;
+                    } else {
+                        package_free(pkg);
+                    }
+                }
+
+                free(json);
             }
         }
         closedir(dir);
