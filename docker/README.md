@@ -19,50 +19,34 @@ This will test TSI installation on all configured minimal system scenarios.
 cd docker
 
 # Build and run a specific test
-docker-compose build alpine-minimal
-docker-compose run --rm alpine-minimal /bin/sh /root/tsi/docker/test-install.sh
+docker-compose build alpine-c-only
+docker-compose run --rm alpine-c-only /bin/sh /root/tsi-source/docker/test-install-c.sh
 
 # Or enter the container interactively
-docker-compose run --rm alpine-minimal /bin/sh
+docker-compose run --rm alpine-c-only /bin/sh
 ```
 
 ## Test Scenarios
 
-### Alpine Linux
+### C Version Tests
 
 1. **alpine-minimal**: Absolutely minimal system
-   - No Python
+   - No C compiler
    - No build tools
    - No package manager
    - Tests: Should fail gracefully with helpful error
 
-2. **alpine-python**: Python available, no build tools
-   - Python 3.x installed
-   - No gcc/make
-   - Tests: Should install TSI directly using Python
-
-3. **alpine-build**: Build tools available, no Python
-   - gcc, make, wget, curl available
+2. **alpine-c-only**: C compiler only
+   - gcc, make available
    - No Python
-   - Tests: Should bootstrap Python from source, then install TSI
+   - Tests: Should build C version successfully
+   - Tests: Should run basic CLI commands
 
-### Ubuntu/Debian
-
-4. **ubuntu-minimal**: Minimal Ubuntu system
-   - No Python
+3. **ubuntu-minimal**: Minimal Ubuntu system
+   - No C compiler
    - No build tools
    - No package manager
    - Tests: Should fail gracefully
-
-5. **ubuntu-python**: Python available, no build tools
-   - Python 3.x installed
-   - No gcc/make
-   - Tests: Should install TSI directly
-
-6. **ubuntu-build**: Build tools available, no Python
-   - gcc, make, wget, curl available
-   - No Python
-   - Tests: Should bootstrap Python from source
 
 ## Manual Testing
 
@@ -70,31 +54,30 @@ docker-compose run --rm alpine-minimal /bin/sh
 
 ```bash
 cd docker
-docker-compose run --rm alpine-python /bin/sh
+docker-compose run --rm alpine-c-only /bin/sh
 ```
 
 Inside the container:
 
 ```sh
 # Check available tools
-which python3
 which gcc
 which make
 
-# Run the bootstrap installer
-cd /root/tsi
-./bootstrap-default.sh
+# Build TSI
+cd /root/tsi-source/src
+make
 
 # Test TSI
-~/.tsi/bin/tsi --help
+./bin/tsi --help
 ```
 
-### Test One-Line Install
+### Test Bootstrap Install
 
 ```bash
-docker-compose run --rm alpine-python /bin/sh -c "
-cd /root/tsi
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-default.sh | sh
+docker-compose run --rm alpine-c-only /bin/sh -c "
+cd /root/tsi-source
+./bootstrap-c.sh
 "
 ```
 
@@ -105,36 +88,46 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-defau
 The minimal containers have:
 - Package managers removed (simulating minimal systems)
 - Only essential POSIX tools
-- No Python, no build tools
+- No C compiler, no build tools
 
-### Python Containers
+### C-Only Container
 
-Containers with Python have:
-- Python 3.x installed
-- pip available
-- No build tools (gcc, make)
-
-### Build Tool Containers
-
-Containers with build tools have:
+The C-only container has:
 - gcc/g++ compiler
 - make
-- wget/curl
+- wget/curl (for downloading sources)
 - tar/gzip
 - No Python
 
 ## Test Script
 
-The `test-install.sh` script:
+The `test-install-c.sh` script:
 1. Shows system information
 2. Lists available tools
-3. Runs the bootstrap installer
+3. Builds TSI from source
 4. Verifies TSI installation
 5. Tests TSI command
 
 ## Continuous Integration
 
-These Docker containers can be used in CI/CD pipelines:
+TSI includes CI/CD configurations for automated testing:
+
+### GitHub Actions
+
+Located in `.github/workflows/test.yml`:
+- Tests C version build and functionality
+- Builds C version for multiple architectures
+- Lints code
+- Runs on push, PR, and manual trigger
+
+### GitLab CI
+
+Located in `.gitlab-ci.yml`:
+- Similar test structure
+- Builds static binaries
+- Uploads artifacts
+
+### Running in CI
 
 ```yaml
 # Example GitHub Actions
@@ -165,7 +158,7 @@ cat /tmp/tsi-test-<scenario>.log
 
 ```bash
 chmod +x docker/run-tests.sh
-chmod +x docker/test-install.sh
+chmod +x docker/test-install-c.sh
 ```
 
 ## Adding New Test Scenarios
@@ -175,7 +168,7 @@ chmod +x docker/test-install.sh
    FROM <base-image>
    # Install specific tools
    # Remove package manager
-   COPY . /root/tsi/
+   COPY . /root/tsi-source/
    ```
 
 2. Add to `docker-compose.yml`:
@@ -193,16 +186,8 @@ chmod +x docker/test-install.sh
 Xilinx systems are typically:
 - Minimal Linux (often based on Debian/Ubuntu)
 - No package manager
-- May have Python or build tools depending on SDK
+- May have C compiler and build tools depending on SDK
 
 Use the appropriate container:
 - `ubuntu-minimal` - Bare Xilinx system
-- `ubuntu-python` - Xilinx with Python SDK
-- `ubuntu-build` - Xilinx with build tools
-
-## See Also
-
-- [INSTALL.md](../INSTALL.md) - Installation guide
-- [BOOTSTRAP.md](../BOOTSTRAP.md) - Bootstrap reference
-- [INTELLIGENT-INSTALLER.md](../INTELLIGENT-INSTALLER.md) - Installer details
-
+- `alpine-c-only` - Xilinx with build tools

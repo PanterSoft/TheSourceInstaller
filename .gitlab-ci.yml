@@ -1,0 +1,134 @@
+stages:
+  - test
+  - build
+  - lint
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Python version tests
+test:python:alpine-minimal:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build alpine-minimal
+    - docker-compose run --rm alpine-minimal /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+test:python:alpine-python:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build alpine-python
+    - docker-compose run --rm alpine-python /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+test:python:alpine-build:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build alpine-build
+    - docker-compose run --rm alpine-build /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+test:python:ubuntu-minimal:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build ubuntu-minimal
+    - docker-compose run --rm ubuntu-minimal /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+test:python:ubuntu-python:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build ubuntu-python
+    - docker-compose run --rm ubuntu-python /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+test:python:ubuntu-build:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build ubuntu-build
+    - docker-compose run --rm ubuntu-build /bin/sh /root/tsi-source/docker/test-install.sh
+  tags:
+    - docker
+
+# C version tests
+test:c:build:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build alpine-c-only
+    - docker-compose run --rm alpine-c-only /bin/sh /root/tsi-source/docker/test-install-c.sh
+  tags:
+    - docker
+
+# Build C version
+build:c:static:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd docker
+    - docker-compose build alpine-c-only
+    - docker-compose run --rm alpine-c-only sh -c "cd /root/tsi-source/src && make clean && make"
+    - docker cp $(docker create alpine-c-only):/root/tsi-source/src/bin/tsi ./tsi-static
+  artifacts:
+    paths:
+      - tsi-static
+    expire_in: 1 week
+  tags:
+    - docker
+
+# Lint
+lint:python:
+  stage: lint
+  image: python:3.11
+  script:
+    - pip install flake8 pylint
+    - flake8 tsi/ --count --select=E9,F63,F7,F82 --show-source --statistics
+    - flake8 tsi/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+  tags:
+    - docker
+
+lint:c:
+  stage: lint
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache clang
+  script:
+    - find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror || true
+  tags:
+    - docker
+

@@ -1,8 +1,0 @@
-# TSI uses only Python standard library
-# No external dependencies required for basic operation
-#
-# Optional dependencies (for building packages):
-# - git (for git-based sources)
-# - curl (for faster downloads, Python urllib is fallback)
-# - make, gcc/clang (for compiling packages)
-

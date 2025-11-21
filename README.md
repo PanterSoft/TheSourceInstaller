@@ -2,51 +2,57 @@
 
 A distribution-independent source-based package manager that enables building packages from source with all their dependencies.
 
+**Pure C implementation - No Python required!**
+
 ## Features
 
 - **Distribution Independent**: Works on any Linux/Unix distribution
 - **Source-Based**: Builds everything from source code
 - **Dependency Resolution**: Automatically resolves and builds dependencies
-- **Multiple Build Systems**: Supports autotools, CMake, Meson, Make, Cargo, Python, and custom build scripts
-- **Minimal Requirements**: Can be installed with just Python 3.8+
+- **Multiple Build Systems**: Supports autotools, CMake, Meson, Make
+- **Minimal Requirements**: Only needs a C compiler!
 - **Isolated Installation**: Installs packages to a separate prefix, avoiding conflicts
+- **Single Static Binary**: No runtime dependencies after compilation
 
 ## Minimal Requirements
 
-TSI itself requires minimal dependencies:
-
-- **Python 3.8+** (standard library only)
+TSI requires only:
+- **C compiler** (gcc, clang, or cc)
+- **make** (for building TSI itself)
 - **Basic build tools** (for building packages):
   - `make` (usually pre-installed)
   - `gcc` or `clang` (for compiling C/C++ packages)
   - `git` (optional, only needed for git-based sources)
-  - `curl` (optional, Python urllib is used as fallback)
+  - `wget` or `curl` (optional, for downloading sources)
+
+**No Python or other runtime dependencies needed!**
+
+Perfect for Xilinx and other minimal embedded systems.
 
 ## Installation
 
 ### One-Line Install (Recommended)
 
-Install TSI with a single command. The installer downloads TSI source code and automatically detects available tools:
+Install TSI with a single command. The installer downloads TSI source and builds it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
 ```
 
 Or using `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
+wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
 ```
 
 The installer will automatically:
 - Download TSI source code (via git clone or tarball)
-- Detect available tools (Python, compilers, build tools)
-- Bootstrap Python if needed
+- Build TSI using your C compiler
 - Install TSI to `~/.tsi`
 
 **Custom installation location:**
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
+PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
 ```
 
 After installation, add to your PATH:
@@ -54,57 +60,32 @@ After installation, add to your PATH:
 export PATH="$HOME/.tsi/bin:$PATH"
 ```
 
-### For Minimal Systems (Xilinx, Embedded, etc.)
-
-TSI provides intelligent bootstrap installers that automatically detect available tools:
-
-```bash
-# Recommended: Intelligent installer (detects tools and adapts)
-chmod +x bootstrap-default.sh
-./bootstrap-default.sh
-
-# Alternative: Manual selection
-# If you have Python 3.8+ available
-./bootstrap-minimal.sh
-
-# If you need to bootstrap Python from source
-./bootstrap.sh
-```
-
-**Key Features:**
-- **Intelligent detection**: Automatically detects available tools (Python, gcc, make, wget, curl, etc.)
-- **Adaptive installation**: Chooses the best installation method based on available tools
-- **POSIX-compliant**: Works with `/bin/sh` on any POSIX system
-- **Graceful fallbacks**: Falls back to alternative methods when tools are missing
-- **No external dependencies**: TSI itself uses only Python standard library
-- **Works on Xilinx systems**: Designed for minimal embedded systems
-
-See [INSTALL.md](INSTALL.md) for detailed installation instructions and [BOOTSTRAP.md](BOOTSTRAP.md) for quick reference.
-
-### Quick Install (Standard Systems)
-
-```bash
-# Using the shell script
-chmod +x install.sh
-./install.sh
-
-# Or using Python directly
-python3 install.py
-```
-
-### Manual Install
+### Manual Build
 
 ```bash
 # Clone the repository
 git clone https://github.com/PanterSoft/tsi.git
 cd tsi
 
-# Install using setuptools
-python3 setup.py install --user
+# Build
+cd src
+make
 
-# Or install to a custom prefix
-PREFIX=/opt/tsi python3 setup.py install --prefix=$PREFIX
+# Install
+sudo make install
+
+# Or install to custom location
+make install DESTDIR=/opt/tsi
 ```
+
+### Requirements
+
+- **C compiler** (gcc, clang, or cc)
+- **make**
+- **git** or **wget/curl** (for downloading sources)
+- **tar** (for extracting archives)
+
+That's it! No Python, no other dependencies.
 
 ### Add to PATH
 
@@ -186,7 +167,6 @@ Packages are defined using JSON manifests. Here's an example:
 - **meson**: Meson build system
 - **make**: Plain Makefile
 - **cargo**: Rust/Cargo projects
-- **python**: Python packages (pip install)
 - **custom**: Use `build_commands` for custom build steps
 
 ## Example Package Definitions
@@ -228,27 +208,29 @@ TSI achieves distribution independence by:
 
 ## Testing
 
-TSI includes Docker-based testing to verify installation on minimal systems:
+TSI includes comprehensive Docker-based testing:
 
 ```bash
-# Run all test scenarios
+# Run all tests
+make test
+
+# Or manually
 cd docker
 ./run-tests.sh
-
-# Test a specific scenario
-docker-compose run --rm alpine-python /bin/sh /root/tsi-source/docker/test-install.sh
-
-# Enter a container interactively
-docker-compose run --rm alpine-python /bin/sh
 ```
 
-Test scenarios include:
-- Minimal Alpine/Ubuntu (no tools)
-- Systems with Python but no build tools
-- Systems with build tools but no Python
-- Various combinations to simulate Xilinx and embedded systems
+### Test Scenarios
 
-See [docker/README.md](docker/README.md) for detailed testing documentation.
+- Minimal Alpine/Ubuntu (no tools) - should fail gracefully
+- Systems with C compiler only - should build and work
+
+### CI/CD
+
+Tests run automatically on:
+- **GitHub Actions**: On push, PR, and manual trigger
+- **GitLab CI**: Similar automated testing
+
+See [tests/README.md](tests/README.md) and [docker/README.md](docker/README.md) for detailed testing documentation.
 
 ## Contributing
 

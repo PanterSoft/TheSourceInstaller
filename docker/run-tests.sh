@@ -19,19 +19,19 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Test scenarios
+# Format: "service:description:expected_result"
+# expected_result: "pass" or "fail" (fail means expected to fail gracefully)
 declare -a SCENARIOS=(
-    "alpine-minimal:Alpine Linux - Absolutely minimal (no tools)"
-    "alpine-python:Alpine Linux - Python available, no build tools"
-    "alpine-build:Alpine Linux - Build tools available, no Python"
-    "ubuntu-minimal:Ubuntu - Minimal system (no tools)"
-    "ubuntu-python:Ubuntu - Python available, no build tools"
-    "ubuntu-build:Ubuntu - Build tools available, no Python"
+    "alpine-minimal:Alpine Linux - Absolutely minimal (no tools):fail"
+    "alpine-c-only:Alpine Linux - C compiler only:pass"
+    "ubuntu-minimal:Ubuntu - Minimal system (no tools):fail"
 )
 
 # Function to run test
 run_test() {
     local service=$1
     local description=$2
+    local expected=$3
 
     echo ""
     echo "=========================================="
@@ -48,17 +48,40 @@ run_test() {
         return 1
     fi
 
+    # Use C version test script
+    TEST_SCRIPT="test-install-c.sh"
+
     # Run test script
     echo "Running installation test..."
-    if docker-compose run --rm "$service" /bin/sh /root/tsi-source/docker/test-install.sh 2>&1 | tee "/tmp/tsi-test-${service}.log"; then
-        echo ""
-        echo "${GREEN}✓ Test passed: $description${NC}"
-        return 0
+    TEST_OUTPUT=$(docker-compose run --rm "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1)
+    TEST_EXIT_CODE=$?
+    echo "$TEST_OUTPUT" | tee "/tmp/tsi-test-${service}.log"
+
+    # Check result based on expected outcome
+    if [ "$expected" = "fail" ]; then
+        # Expected to fail - check if it failed gracefully
+        if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo ""
+            echo "${GREEN}✓ Test passed (expected failure): $description${NC}"
+            return 0
+        else
+            echo ""
+            echo "${YELLOW}⚠ Test unexpectedly succeeded: $description${NC}"
+            echo "Log saved to: /tmp/tsi-test-${service}.log"
+            return 1
+        fi
     else
-        echo ""
-        echo "${RED}✗ Test failed: $description${NC}"
-        echo "Log saved to: /tmp/tsi-test-${service}.log"
-        return 1
+        # Expected to pass
+        if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+            echo ""
+            echo "${GREEN}✓ Test passed: $description${NC}"
+            return 0
+        else
+            echo ""
+            echo "${RED}✗ Test failed: $description${NC}"
+            echo "Log saved to: /tmp/tsi-test-${service}.log"
+            return 1
+        fi
     fi
 }
 
@@ -67,9 +90,9 @@ PASSED=0
 FAILED=0
 
 for scenario in "${SCENARIOS[@]}"; do
-    IFS=':' read -r service description <<< "$scenario"
+    IFS=':' read -r service description expected <<< "$scenario"
 
-    if run_test "$service" "$description"; then
+    if run_test "$service" "$description" "$expected"; then
         ((PASSED++))
     else
         ((FAILED++))
