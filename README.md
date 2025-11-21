@@ -111,7 +111,7 @@ echo 'export PATH="$HOME/.tsi/bin:$PATH"' >> ~/.bashrc
 
 ### Enable Autocomplete
 
-TSI includes shell completion for bash and zsh:
+TSI includes comprehensive shell completion for bash and zsh with full support for all commands and options:
 
 **Bash:**
 ```bash
@@ -127,10 +127,23 @@ source ~/.tsi/share/completions/tsi.zsh
 echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
 ```
 
-After enabling, you can use Tab completion for:
-- Commands: `tsi <TAB>` shows available commands
-- Packages: `tsi install <TAB>` shows available packages
-- Installed packages: `tsi remove <TAB>` shows installed packages
+**Complete autocomplete support:**
+
+- **Command completion**: `tsi <TAB>` - Shows all commands (install, remove, list, info, update, uninstall, --help, --version)
+- **Package completion**:
+  - `tsi install <TAB>` - Shows available packages from repository
+  - `tsi install --force <TAB>` - Shows packages (after options)
+  - `tsi info <TAB>` - Shows available packages
+- **Installed package completion**:
+  - `tsi remove <TAB>` - Shows installed packages
+- **Option completion**:
+  - `tsi install --<TAB>` - Shows `--force`, `--prefix`
+  - `tsi update --<TAB>` - Shows `--repo`, `--local`, `--prefix`
+  - `tsi uninstall --<TAB>` - Shows `--all`, `--prefix`
+- **Directory completion**:
+  - `tsi install --prefix <TAB>` - Completes directory paths
+  - `tsi update --local <TAB>` - Completes directory paths
+  - `tsi uninstall --prefix <TAB>` - Completes directory paths
 
 ## Usage
 

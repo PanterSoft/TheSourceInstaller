@@ -47,17 +47,34 @@ autoload -U compinit && compinit
 ## Features
 
 ### Command Completion
-- `tsi <TAB>` - Shows all available commands (install, remove, list, info, etc.)
+- `tsi <TAB>` - Shows all available commands:
+  - `install` - Install a package
+  - `remove` - Remove an installed package
+  - `list` - List installed packages
+  - `info` - Show package information
+  - `update` - Update package repository
+  - `uninstall` - Uninstall TSI
+  - `--help`, `--version` - Help and version
 
 ### Package Completion
 - `tsi install <TAB>` - Shows available packages from repository (`~/.tsi/repos/*.json`)
+- `tsi install --force <TAB>` - Shows available packages (after --force)
 - `tsi info <TAB>` - Shows available packages from repository
-- `tsi remove <TAB>` - Shows installed packages
-- `tsi uninstall <TAB>` - Shows installed packages
+- `tsi remove <TAB>` - Shows installed packages (from `tsi list` output)
 
 ### Option Completion
-- `tsi install --<TAB>` - Shows available options (--force, --prefix)
+- `tsi install --<TAB>` - Shows options: `--force`, `--prefix`
 - `tsi install --prefix <TAB>` - Completes directory paths
+- `tsi update --<TAB>` - Shows options: `--repo`, `--local`, `--prefix`
+- `tsi update --local <TAB>` - Completes directory paths
+- `tsi update --prefix <TAB>` - Completes directory paths
+- `tsi uninstall --<TAB>` - Shows options: `--all`, `--prefix`
+- `tsi uninstall --prefix <TAB>` - Completes directory paths
+
+### Multi-Word Command Completion
+- `tsi install --force <TAB>` - Completes packages after --force
+- `tsi install --prefix /path <TAB>` - Completes packages after --prefix
+- All commands support proper option and argument completion
 
 ## How It Works
 

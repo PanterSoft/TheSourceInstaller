@@ -31,18 +31,25 @@ PREFIX=/opt/tsi ./tsi-bootstrap.sh --repair
 ### What Repair Does
 
 1. **Detects existing installation**: Checks if TSI is already installed
-2. **Checks for updates**: Detects if TSI is outdated (binary older than 7 days or source is newer)
-3. **Rebuilds TSI**: Downloads latest source (if needed) and rebuilds
+2. **Checks for source updates**:
+   - If source is a git repository: Fetches and checks for remote changes
+   - If source has changed: Updates using `git pull` or re-downloads
+   - If source is up to date: Uses existing source
+3. **Rebuilds TSI**: Builds TSI from the updated source
 4. **Reinstalls**: Copies new binary and completion scripts to installation directory
 
 ### Repair Process
 
 The repair mode will:
-- ✅ Preserve your package database (`~/.tsi/db/`)
-- ✅ Preserve installed packages (`~/.tsi/install/`)
-- ✅ Preserve package repository (`~/.tsi/repos/`)
-- ✅ Preserve downloaded sources (`~/.tsi/sources/`)
-- ✅ Only replace the TSI binary and completion scripts
+- ✅ **Check for source updates**: Automatically detects if source code has changed
+- ✅ **Update source if needed**: Uses `git pull` for git repositories, or re-downloads if needed
+- ✅ **Rebuild TSI**: Compiles fresh binary from updated source
+- ✅ **Preserve all data**:
+  - Package database (`~/.tsi/db/`)
+  - Installed packages (`~/.tsi/install/`)
+  - Package repository (`~/.tsi/repos/`)
+  - Downloaded sources (`~/.tsi/sources/`)
+- ✅ **Only replace**: TSI binary and completion scripts
 
 ## Uninstalling TSI
 

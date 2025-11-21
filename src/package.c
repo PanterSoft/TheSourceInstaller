@@ -217,8 +217,15 @@ bool package_load_from_json(Package *pkg, const char *json_string) {
 }
 
 bool package_has_dependency(const Package *pkg, const char *dep_name) {
+    // Check regular dependencies
     for (size_t i = 0; i < pkg->dependencies_count; i++) {
         if (strcmp(pkg->dependencies[i], dep_name) == 0) {
+            return true;
+        }
+    }
+    // Check build dependencies
+    for (size_t i = 0; i < pkg->build_dependencies_count; i++) {
+        if (strcmp(pkg->build_dependencies[i], dep_name) == 0) {
             return true;
         }
     }
