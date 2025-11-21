@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsi"
+version = "0.1.0"
+description = "TheSourceInstaller - Distribution-independent source-based package manager"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Nico"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+tsi = "tsi.cli:main"
+
