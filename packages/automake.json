@@ -9,7 +9,7 @@
   "dependencies": ["autoconf"],
   "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": []
+  "configure_args": [],
   "env": {}
 }
 
