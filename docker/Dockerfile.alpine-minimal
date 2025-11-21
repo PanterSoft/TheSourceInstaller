@@ -1,0 +1,21 @@
+# Minimal Alpine Linux - simulates very minimal system
+FROM alpine:latest
+
+# Remove package manager to simulate minimal system
+RUN rm -rf /sbin/apk /sbin/apk.static /usr/bin/apk /usr/bin/apk.static /etc/apk
+
+# Remove package metadata
+RUN rm -rf /var/cache/apk /etc/periodic /etc/update-exclude
+
+# Keep only essential tools
+# This simulates a system with minimal tools - no Python, no build tools
+WORKDIR /root
+
+# Copy TSI source
+COPY . /root/tsi/
+
+WORKDIR /root/tsi
+
+# Default command
+CMD ["/bin/sh"]
+

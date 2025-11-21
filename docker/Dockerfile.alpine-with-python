@@ -1,0 +1,19 @@
+# Alpine with Python but no build tools
+FROM alpine:latest
+
+# Install Python only (no build tools)
+RUN apk add --no-cache python3 py3-pip
+
+# Remove package manager
+RUN rm -rf /sbin/apk /sbin/apk.static /usr/bin/apk /usr/bin/apk.static /etc/apk
+RUN rm -rf /var/cache/apk
+
+WORKDIR /root
+
+# Copy TSI source
+COPY . /root/tsi/
+
+WORKDIR /root/tsi
+
+CMD ["/bin/sh"]
+

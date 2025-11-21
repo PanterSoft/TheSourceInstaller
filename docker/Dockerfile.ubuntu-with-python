@@ -1,0 +1,25 @@
+# Ubuntu with Python but no build tools
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Remove package manager
+RUN rm -rf /usr/bin/apt* /usr/bin/dpkg* /etc/apt
+
+WORKDIR /root
+
+# Copy TSI source
+COPY . /root/tsi/
+
+WORKDIR /root/tsi
+
+CMD ["/bin/sh"]
+

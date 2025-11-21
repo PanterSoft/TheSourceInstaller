@@ -1,0 +1,24 @@
+# Minimal Ubuntu - simulates minimal Debian/Ubuntu system
+FROM ubuntu:20.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only essential tools (no Python, no build tools)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Remove package manager to simulate minimal system
+RUN rm -rf /usr/bin/apt* /usr/bin/dpkg* /etc/apt
+
+WORKDIR /root
+
+# Copy TSI source
+COPY . /root/tsi/
+
+WORKDIR /root/tsi
+
+CMD ["/bin/sh"]
+

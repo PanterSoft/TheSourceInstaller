@@ -1,0 +1,19 @@
+# Ignore files not needed in Docker containers
+.git
+.gitignore
+*.md
+docker/
+.devcontainer/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.tsi/
+*.log
+

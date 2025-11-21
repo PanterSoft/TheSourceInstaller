@@ -26,22 +26,28 @@ TSI itself requires minimal dependencies:
 
 ### One-Line Install (Recommended)
 
-Install TSI with a single command. The installer automatically detects available tools and adapts:
+Install TSI with a single command. The installer downloads TSI source code and automatically detects available tools:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-default.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
 ```
 
 Or using `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-default.sh | sh
+wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
 ```
 
 The installer will automatically:
+- Download TSI source code (via git clone or tarball)
 - Detect available tools (Python, compilers, build tools)
 - Bootstrap Python if needed
 - Install TSI to `~/.tsi`
+
+**Custom installation location:**
+```bash
+PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/install-oneline.sh | sh
+```
 
 After installation, add to your PATH:
 ```bash
@@ -219,6 +225,30 @@ TSI achieves distribution independence by:
 - Installing to an isolated prefix
 - Setting up environment variables (PATH, PKG_CONFIG_PATH, LD_LIBRARY_PATH, etc.)
 - Not relying on distribution-specific package managers
+
+## Testing
+
+TSI includes Docker-based testing to verify installation on minimal systems:
+
+```bash
+# Run all test scenarios
+cd docker
+./run-tests.sh
+
+# Test a specific scenario
+docker-compose run --rm alpine-python /bin/sh /root/tsi-source/docker/test-install.sh
+
+# Enter a container interactively
+docker-compose run --rm alpine-python /bin/sh
+```
+
+Test scenarios include:
+- Minimal Alpine/Ubuntu (no tools)
+- Systems with Python but no build tools
+- Systems with build tools but no Python
+- Various combinations to simulate Xilinx and embedded systems
+
+See [docker/README.md](docker/README.md) for detailed testing documentation.
 
 ## Contributing
 

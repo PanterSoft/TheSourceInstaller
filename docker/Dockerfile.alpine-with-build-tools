@@ -1,0 +1,28 @@
+# Alpine with build tools but no Python
+FROM alpine:latest
+
+# Install build tools but not Python
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    make \
+    musl-dev \
+    linux-headers \
+    wget \
+    curl \
+    tar \
+    gzip
+
+# Remove package manager
+RUN rm -rf /sbin/apk /sbin/apk.static /usr/bin/apk /usr/bin/apk.static /etc/apk
+RUN rm -rf /var/cache/apk
+
+WORKDIR /root
+
+# Copy TSI source
+COPY . /root/tsi/
+
+WORKDIR /root/tsi
+
+CMD ["/bin/sh"]
+

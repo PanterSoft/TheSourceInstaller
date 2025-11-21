@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Minimal Alpine - absolutely minimal system
+  alpine-minimal:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.alpine-minimal
+    container_name: tsi-test-alpine-minimal
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
+  # Alpine with Python but no build tools
+  alpine-python:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.alpine-with-python
+    container_name: tsi-test-alpine-python
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
+  # Alpine with build tools but no Python
+  alpine-build:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.alpine-with-build-tools
+    container_name: tsi-test-alpine-build
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
+  # Minimal Ubuntu
+  ubuntu-minimal:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ubuntu-minimal
+    container_name: tsi-test-ubuntu-minimal
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
+  # Ubuntu with Python
+  ubuntu-python:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ubuntu-with-python
+    container_name: tsi-test-ubuntu-python
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
+  # Ubuntu with build tools
+  ubuntu-build:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ubuntu-with-build-tools
+    container_name: tsi-test-ubuntu-build
+    volumes:
+      - ../:/root/tsi-source:ro
+    command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
+
