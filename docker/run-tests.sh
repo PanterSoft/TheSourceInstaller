@@ -57,11 +57,11 @@ run_test() {
 
     # Clean up any existing containers and volumes for this service
     echo "Cleaning up any existing containers..."
-    docker-compose rm -f -v "$service" >/dev/null 2>&1 || true
-
+    docker compose rm -f -v "$service" >/dev/null 2>&1 || docker-compose rm -f -v "$service" >/dev/null 2>&1 || true
+    
     # Build the container (use cache for base image, but TSI will be fresh due to test script cleanup)
     echo "Building container (using cache for base image)..."
-    if docker-compose build "$service" >/dev/null 2>&1; then
+    if docker compose build "$service" >/dev/null 2>&1 || docker-compose build "$service" >/dev/null 2>&1; then
         echo "✓ Container built"
     else
         echo "✗ Container build failed"
@@ -73,7 +73,7 @@ run_test() {
 
     # Run test script in a fresh container (--rm removes container after run)
     echo "Running installation test..."
-    TEST_OUTPUT=$(docker-compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1)
+    TEST_OUTPUT=$(docker compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1 || docker-compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1)
     TEST_EXIT_CODE=$?
     echo "$TEST_OUTPUT" | tee "/tmp/tsi-test-${service}.log"
 
@@ -120,9 +120,9 @@ for scenario in "${SCENARIOS[@]}"; do
 
     # Clean up containers and volumes
     echo "Cleaning up containers and volumes..."
-    docker-compose down -v >/dev/null 2>&1 || true
+    docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1 || true
     # Also remove any orphaned containers
-    docker-compose rm -f -v >/dev/null 2>&1 || true
+    docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1 || true
 done
 
 # Summary
