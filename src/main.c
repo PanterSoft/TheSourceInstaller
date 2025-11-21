@@ -430,6 +430,9 @@ static int cmd_install(int argc, char **argv) {
             continue;
         }
 
+        // Set package-specific install directory
+        builder_config_set_package_dir(builder_config, dep_pkg->name, dep_pkg->version);
+
         // Build
         char build_dir[1024];
         if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
@@ -450,7 +453,10 @@ static int cmd_install(int argc, char **argv) {
             continue;
         }
 
-        // Record in database
+        // Create symlinks to main install directory
+        builder_create_symlinks(builder_config, dep_pkg->name, dep_pkg->version);
+
+        // Record in database with package-specific path
         database_add_package(db, dep_pkg->name, dep_pkg->version, builder_config->install_dir, (const char **)dep_pkg->dependencies, dep_pkg->dependencies_count);
         free(dep_source_dir);
     }
@@ -459,6 +465,9 @@ static int cmd_install(int argc, char **argv) {
     printf("Installing %s...\n", package_name);
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {
+        // Set package-specific install directory
+        builder_config_set_package_dir(builder_config, main_pkg->name, main_pkg->version);
+
         char *main_source_dir = fetcher_fetch(fetcher, main_pkg, force);
         if (main_source_dir) {
             char build_dir[1024];
@@ -466,6 +475,10 @@ static int cmd_install(int argc, char **argv) {
 
             if (builder_build(builder_config, main_pkg, main_source_dir, build_dir)) {
                 if (builder_install(builder_config, main_pkg, main_source_dir, build_dir)) {
+                    // Create symlinks to main install directory
+                    builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
+
+                    // Record in database with package-specific path
                     database_add_package(db, main_pkg->name, main_pkg->version, builder_config->install_dir, (const char **)main_pkg->dependencies, main_pkg->dependencies_count);
                     printf("Successfully installed %s\n", package_name);
                 } else {
@@ -697,7 +710,35 @@ static int cmd_info(int argc, char **argv) {
         printf("\n");
     }
 
+    // Check if package is installed
+    char db_dir[1024];
+    snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+    Database *db = database_new(db_dir);
+    if (db) {
+        InstalledPackage *installed_pkg = database_get_package(db, pkg->name);
+        if (installed_pkg) {
+            // Check if the requested version matches the installed version
+            bool version_matches = false;
+            if (version && installed_pkg->version) {
+                version_matches = (strcmp(installed_pkg->version, version) == 0);
+            } else if (!version && installed_pkg->version) {
+                version_matches = true; // No version specified, show any installed version
+            }
+
+            if (version_matches || !version) {
+                printf("\nInstallation Status: Installed\n");
+                printf("  Installed Version: %s\n", installed_pkg->version ? installed_pkg->version : "unknown");
+                printf("  Install Path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+            }
+        }
+        database_free(db);
+    }
+
     repository_free(repo);
+    if (at_pos) {
+        free(allocated_name);
+        free((char*)version);
+    }
     return 0;
 }
 

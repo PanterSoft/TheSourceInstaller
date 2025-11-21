@@ -31,6 +31,24 @@ void builder_config_free(BuilderConfig *config) {
     free(config);
 }
 
+void builder_config_set_package_dir(BuilderConfig *config, const char *package_name, const char *package_version) {
+    if (!config || !package_name) return;
+
+    // Free old install_dir
+    if (config->install_dir) {
+        free(config->install_dir);
+    }
+
+    // Create package-specific directory: ~/.tsi/install/package-version/
+    char package_dir[1024];
+    if (package_version && strlen(package_version) > 0) {
+        snprintf(package_dir, sizeof(package_dir), "%s/install/%s-%s", config->prefix, package_name, package_version);
+    } else {
+        snprintf(package_dir, sizeof(package_dir), "%s/install/%s", config->prefix, package_name);
+    }
+    config->install_dir = strdup(package_dir);
+}
+
 bool builder_apply_patches(const char *source_dir, char **patches, size_t patches_count) {
     for (size_t i = 0; i < patches_count; i++) {
         char cmd[1024];
@@ -57,10 +75,31 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         builder_apply_patches(source_dir, pkg->patches, pkg->patches_count);
     }
 
-    // Set up environment
+    // Set up environment - use main install directory (parent of package-specific dir) for PATH
+    // Package dir is like ~/.tsi/install/package-version, main install dir is ~/.tsi/install
+    char main_install_dir[1024];
+    char *last_slash = strrchr(config->install_dir, '/');
+    if (last_slash) {
+        // Check if this is a package-specific directory (contains package name)
+        // If install_dir ends with /install, it's already the main dir
+        if (strstr(config->install_dir, "/install/") != NULL) {
+            // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
+            size_t len = strstr(config->install_dir, "/install/") - config->install_dir + strlen("/install");
+            strncpy(main_install_dir, config->install_dir, len);
+            main_install_dir[len] = '\0';
+        } else {
+            // Already main install directory
+            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+        }
+    } else {
+        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+    }
+
     char env[4096] = "";
     snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-             config->install_dir, config->install_dir, config->install_dir, config->install_dir, config->install_dir);
+             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
 
@@ -178,9 +217,24 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         return false;
     }
 
+    // Set up environment - use main install directory for PATH
+    // Package dir is like ~/.tsi/install/package-version, main install dir is ~/.tsi/install
+    char main_install_dir[1024];
+    char *install_pos = strstr(config->install_dir, "/install/");
+    if (install_pos) {
+        // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
+        size_t len = install_pos - config->install_dir + strlen("/install");
+        strncpy(main_install_dir, config->install_dir, len);
+        main_install_dir[len] = '\0';
+    } else {
+        // Already main install directory
+        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+    }
+
     char env[4096] = "";
     snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH",
-             config->install_dir, config->install_dir, config->install_dir);
+             main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     char cmd[1024];
@@ -198,5 +252,73 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     }
 
     return system(cmd) == 0;
+}
+
+bool builder_create_symlinks(const BuilderConfig *config, const char *package_name, const char *package_version) {
+    (void)package_version; // May be used in future for version-specific symlinks
+    if (!config || !package_name) return false;
+
+    // Get the main install directory (parent of package-specific directory)
+    char main_install_dir[1024];
+    char *last_slash = strrchr(config->install_dir, '/');
+    if (last_slash) {
+        size_t len = last_slash - config->install_dir;
+        strncpy(main_install_dir, config->install_dir, len);
+        main_install_dir[len] = '\0';
+    } else {
+        return false;
+    }
+
+    // Create main install directories if they don't exist
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s/bin' '%s/lib' '%s/include' '%s/share'",
+             main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    system(cmd);
+
+    // Create symlinks for binaries
+    char package_bin[1024];
+    snprintf(package_bin, sizeof(package_bin), "%s/bin", config->install_dir);
+    struct stat st;
+    if (stat(package_bin, &st) == 0 && S_ISDIR(st.st_mode)) {
+        // Find all binaries in package bin directory and symlink them
+        snprintf(cmd, sizeof(cmd),
+                 "for f in '%s'/*; do "
+                 "if [ -f \"$f\" ] && [ -x \"$f\" ]; then "
+                 "ln -sf \"$f\" '%s/bin/$(basename \"$f\")\" 2>/dev/null; "
+                 "fi; "
+                 "done",
+                 package_bin, main_install_dir);
+        system(cmd);
+    }
+
+    // Create symlinks for libraries
+    char package_lib[1024];
+    snprintf(package_lib, sizeof(package_lib), "%s/lib", config->install_dir);
+    if (stat(package_lib, &st) == 0 && S_ISDIR(st.st_mode)) {
+        snprintf(cmd, sizeof(cmd),
+                 "for f in '%s'/*; do "
+                 "if [ -f \"$f\" ]; then "
+                 "ln -sf \"$f\" '%s/lib/$(basename \"$f\")\" 2>/dev/null; "
+                 "fi; "
+                 "done",
+                 package_lib, main_install_dir);
+        system(cmd);
+    }
+
+    // Create symlinks for include files
+    char package_include[1024];
+    snprintf(package_include, sizeof(package_include), "%s/include", config->install_dir);
+    if (stat(package_include, &st) == 0 && S_ISDIR(st.st_mode)) {
+        snprintf(cmd, sizeof(cmd),
+                 "for f in '%s'/*; do "
+                 "if [ -f \"$f\" ] || [ -d \"$f\" ]; then "
+                 "ln -sf \"$f\" '%s/include/$(basename \"$f\")\" 2>/dev/null; "
+                 "fi; "
+                 "done",
+                 package_include, main_install_dir);
+        system(cmd);
+    }
+
+    return true;
 }
 
