@@ -1,4 +1,4 @@
-# TSI - TheSourceInstaller
+# TSI - The Source Installer
 
 A distribution-independent source-based package manager that enables building packages from source with all their dependencies.
 

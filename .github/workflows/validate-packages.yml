@@ -13,7 +13,7 @@ jobs:
   validate-format:
     name: Validate Package Format
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
               fi
             fi
           done
-          
+
           if [ $FAILED -eq 1 ]; then
             echo "::error::Some package files have invalid JSON syntax"
             exit 1
@@ -51,11 +51,11 @@ jobs:
         run: |
           echo "Validating package structure..."
           FAILED=0
-          
+
           for pkg in packages/*.json; do
             if [ -f "$pkg" ]; then
               echo "Validating structure: $pkg"
-              
+
               # Check required fields
               REQUIRED_FIELDS=("name" "source")
               for field in "${REQUIRED_FIELDS[@]}"; do
@@ -64,14 +64,14 @@ jobs:
                   FAILED=1
                 fi
               done
-              
+
               # Validate source object
               if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if isinstance(data.get('source'), dict) and 'type' in data.get('source', {}) and 'url' in data.get('source', {}) else 1)" 2>/dev/null; then
                 echo "❌ Invalid or missing 'source' object in $pkg"
                 echo "  Source must be an object with 'type' and 'url' fields"
                 FAILED=1
               fi
-              
+
               # Validate source type
               SOURCE_TYPE=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('source', {}).get('type', ''))" 2>/dev/null)
               VALID_TYPES=("git" "tarball" "zip" "local")
@@ -80,7 +80,7 @@ jobs:
                 echo "  Valid types: ${VALID_TYPES[*]}"
                 FAILED=1
               fi
-              
+
               # Validate build_system if present
               BUILD_SYSTEM=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('build_system', ''))" 2>/dev/null)
               if [ -n "$BUILD_SYSTEM" ]; then
@@ -91,7 +91,7 @@ jobs:
                   FAILED=1
                 fi
               fi
-              
+
               # Validate arrays are actually arrays
               ARRAY_FIELDS=("dependencies" "build_dependencies" "configure_args" "cmake_args" "make_args" "patches")
               for field in "${ARRAY_FIELDS[@]}"; do
@@ -100,19 +100,19 @@ jobs:
                   FAILED=1
                 fi
               done
-              
+
               # Validate env is an object if present
               if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if 'env' not in data or isinstance(data.get('env'), dict) else 1)" 2>/dev/null; then
                 echo "❌ Field 'env' must be an object in $pkg"
                 FAILED=1
               fi
-              
+
               if [ $FAILED -eq 0 ]; then
                 echo "✓ Valid structure: $pkg"
               fi
             fi
           done
-          
+
           if [ $FAILED -eq 1 ]; then
             echo "::error::Some package files have invalid structure"
             exit 1
@@ -126,7 +126,7 @@ jobs:
           import json
           import os
           from collections import Counter
-          
+
           names = []
           for filename in os.listdir('packages'):
               if filename.endswith('.json'):
@@ -138,10 +138,10 @@ jobs:
                               names.append((data['name'], filepath))
                   except Exception as e:
                       print(f"Error reading {filepath}: {e}")
-          
+
           name_counts = Counter([name for name, _ in names])
           duplicates = {name: count for name, count in name_counts.items() if count > 1}
-          
+
           if duplicates:
               print("❌ Found duplicate package names:")
               for name, count in duplicates.items():
@@ -158,7 +158,7 @@ jobs:
     name: Validate TSI Can Parse Packages
     runs-on: ubuntu-latest
     needs: validate-format
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -173,12 +173,12 @@ jobs:
         run: |
           echo "Testing if TSI can parse all package files..."
           FAILED=0
-          
+
           for pkg in packages/*.json; do
             if [ -f "$pkg" ]; then
               PKG_NAME=$(basename "$pkg" .json)
               echo "Testing: $pkg"
-              
+
               # Use TSI info command to test parsing
               if ./src/bin/tsi info "$PKG_NAME" > /dev/null 2>&1; then
                 echo "✓ TSI can parse: $pkg"
@@ -189,7 +189,7 @@ jobs:
               fi
             fi
           done
-          
+
           if [ $FAILED -eq 1 ]; then
             echo "::error::TSI cannot parse some package files"
             exit 1
@@ -200,7 +200,7 @@ jobs:
     name: Validate Package Dependencies
     runs-on: ubuntu-latest
     needs: validate-format
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -212,7 +212,7 @@ jobs:
           import json
           import os
           import sys
-          
+
           # Load all package names
           package_names = set()
           for filename in os.listdir('packages'):
@@ -225,7 +225,7 @@ jobs:
                               package_names.add(data['name'])
                   except Exception as e:
                       print(f"Error reading {filepath}: {e}")
-          
+
           # Check dependencies
           failed = False
           for filename in os.listdir('packages'):
@@ -235,7 +235,7 @@ jobs:
                       with open(filepath, 'r') as f:
                           data = json.load(f)
                           pkg_name = data.get('name', 'unknown')
-                          
+
                           # Check dependencies
                           for dep_type in ['dependencies', 'build_dependencies']:
                               deps = data.get(dep_type, [])
@@ -243,10 +243,10 @@ jobs:
                                   if dep not in package_names:
                                       print(f"❌ {pkg_name}: {dep_type} '{dep}' not found in packages/")
                                       failed = True
-                          
+
                   except Exception as e:
                       print(f"Error reading {filepath}: {e}")
-          
+
           if failed:
               print("\n::error::Some dependencies reference non-existent packages")
               sys.exit(1)
@@ -259,7 +259,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-format, validate-tsi-parsing, validate-dependencies]
     if: contains(github.event.head_commit.message, '[test-install]')
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -283,7 +283,7 @@ jobs:
             mkdir -p /root/.tsi/bin
             cp bin/tsi /root/.tsi/bin/
             export PATH=\"/root/.tsi/bin:\$PATH\"
-            
+
             # Test installing a simple package
             echo 'Testing package installation...'
             tsi info zlib || echo 'Package zlib not found, skipping install test'
@@ -294,7 +294,7 @@ jobs:
             mkdir -p /root/.tsi/bin
             cp bin/tsi /root/.tsi/bin/
             export PATH=\"/root/.tsi/bin:\$PATH\"
-            
+
             echo 'Testing package installation...'
             tsi info zlib || echo 'Package zlib not found, skipping install test'
           "
