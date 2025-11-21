@@ -155,9 +155,59 @@ main() {
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
+    # Check if we should update source in repair mode
+    UPDATE_SOURCE=false
+    if [ "$REPAIR_MODE" = true ] && [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
+        if command_exists git && [ -d "tsi/.git" ]; then
+            log_info "Checking for source updates..."
+            cd tsi
+            # Set up remote if not already set
+            if ! git remote get-url origin >/dev/null 2>&1; then
+                git remote add origin "$TSI_REPO" 2>/dev/null || true
+            fi
+
+            # Fetch latest changes
+            if git fetch origin "$TSI_BRANCH" >/dev/null 2>&1; then
+                LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+                REMOTE_COMMIT=$(git rev-parse "origin/$TSI_BRANCH" 2>/dev/null)
+                if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ] && [ -n "$REMOTE_COMMIT" ]; then
+                    log_info "Source has changed (local: ${LOCAL_COMMIT:0:8}, remote: ${REMOTE_COMMIT:0:8})"
+                    log_info "Updating source..."
+                    if git pull origin "$TSI_BRANCH" >/dev/null 2>&1; then
+                        log_info "✓ Source updated successfully"
+                        cd ..
+                    else
+                        log_warn "Git pull failed, will re-clone..."
+                        cd ..
+                        UPDATE_SOURCE=true
+                    fi
+                else
+                    log_info "Source is up to date"
+                    cd ..
+                fi
+            else
+                log_warn "Cannot fetch updates (checking internet connection), will re-download..."
+                cd ..
+                UPDATE_SOURCE=true
+            fi
+        else
+            # Not a git repo or git not available, re-download to be safe
+            log_info "Source is not a git repository, will re-download..."
+            UPDATE_SOURCE=true
+        fi
+    fi
+
+    # Remove existing source if we need to re-download
+    if [ "$UPDATE_SOURCE" = true ]; then
+        log_info "Removing old source..."
+        rm -rf tsi
+    fi
+
     # Check if TSI is already downloaded
     if [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
-        log_info "TSI source already exists, using existing copy"
+        if [ "$REPAIR_MODE" = false ]; then
+            log_info "TSI source already exists, using existing copy"
+        fi
         cd tsi
     else
         log_info "Downloading TSI source code..."
