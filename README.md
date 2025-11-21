@@ -24,6 +24,30 @@ TSI itself requires minimal dependencies:
 
 ## Installation
 
+### One-Line Install (Recommended)
+
+Install TSI with a single command. The installer automatically detects available tools and adapts:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-default.sh | sh
+```
+
+Or using `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-default.sh | sh
+```
+
+The installer will automatically:
+- Detect available tools (Python, compilers, build tools)
+- Bootstrap Python if needed
+- Install TSI to `~/.tsi`
+
+After installation, add to your PATH:
+```bash
+export PATH="$HOME/.tsi/bin:$PATH"
+```
+
 ### For Minimal Systems (Xilinx, Embedded, etc.)
 
 TSI provides intelligent bootstrap installers that automatically detect available tools:
