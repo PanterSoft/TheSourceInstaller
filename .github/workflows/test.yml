@@ -66,6 +66,8 @@ jobs:
           docker-compose rm -f -v || true
           # Build container (use cache for base image)
           docker-compose build alpine-c-only
+          # Create artifacts directory
+          mkdir -p artifacts
           # Run build in fresh container
           docker-compose run --rm --no-deps -v $(pwd)/artifacts:/artifacts alpine-c-only sh -c "
             cd /root/tsi-source/src
