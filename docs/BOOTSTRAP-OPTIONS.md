@@ -9,7 +9,7 @@ TSI is implemented in pure C and requires only a C compiler to build.
 ### Method 1: One-Line Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
 This automatically:

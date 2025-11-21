@@ -77,7 +77,7 @@ make
 ```bash
 docker-compose run --rm alpine-c-only /bin/sh -c "
 cd /root/tsi-source
-./bootstrap-c.sh
+./tsi-bootstrap.sh
 "
 ```
 

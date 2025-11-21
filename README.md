@@ -36,13 +36,13 @@ Perfect for Xilinx and other minimal embedded systems.
 Install TSI with a single command. The installer downloads TSI source and builds it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
 Or using `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
+wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
 The installer will automatically:
@@ -52,7 +52,7 @@ The installer will automatically:
 
 **Custom installation location:**
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/bootstrap-c.sh | sh
+PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
 After installation, add to your PATH:
