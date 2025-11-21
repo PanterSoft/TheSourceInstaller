@@ -100,12 +100,40 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
         }
     }
 
-    // Add this package
+    // Add this package (always add the package itself)
     if (*result_count >= capacity) {
-        capacity = capacity ? capacity * 2 : 8;
-        result = realloc(result, sizeof(char*) * capacity);
+        size_t new_capacity = capacity ? capacity * 2 : 1;
+        char **new_result;
+        if (result) {
+            new_result = realloc(result, sizeof(char*) * new_capacity);
+        } else {
+            new_result = malloc(sizeof(char*) * new_capacity);
+        }
+        if (!new_result) {
+            // Clean up existing result if any
+            if (result) {
+                for (size_t i = 0; i < *result_count; i++) {
+                    if (result[i]) free(result[i]);
+                }
+                free(result);
+            }
+            *result_count = 0;
+            return NULL;
+        }
+        result = new_result;
+        capacity = new_capacity;
     }
-    result[*result_count++] = strdup(package_name);
+    result[*result_count] = strdup(package_name);
+    if (!result[*result_count]) {
+        // strdup failed - clean up
+        for (size_t i = 0; i < *result_count; i++) {
+            if (result[i]) free(result[i]);
+        }
+        free(result);
+        *result_count = 0;
+        return NULL;
+    }
+    (*result_count)++;
 
     return result;
 }
