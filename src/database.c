@@ -44,43 +44,6 @@ void database_free(Database *db) {
     free(db);
 }
 
-// Simple helper to skip whitespace
-static void skip_whitespace(FILE *f) {
-    int c;
-    while ((c = fgetc(f)) != EOF && (c == ' ' || c == '\t' || c == '\n' || c == '\r')) {
-        // Skip
-    }
-    if (c != EOF) ungetc(c, f);
-}
-
-// Simple helper to read a quoted string
-static char* read_quoted_string(FILE *f) {
-    skip_whitespace(f);
-    if (fgetc(f) != '"') return NULL;
-
-    char *str = NULL;
-    size_t len = 0;
-    size_t capacity = 32;
-    str = malloc(capacity);
-    if (!str) return NULL;
-
-    int c;
-    while ((c = fgetc(f)) != EOF && c != '"') {
-        if (c == '\\') {
-            c = fgetc(f);
-            if (c == EOF) break;
-        }
-        if (len + 1 >= capacity) {
-            capacity *= 2;
-            str = realloc(str, capacity);
-            if (!str) return NULL;
-        }
-        str[len++] = c;
-    }
-    str[len] = '\0';
-    return str;
-}
-
 // Simple helper to extract quoted string value from a line
 static char* extract_string_value(const char *line, const char *key) {
     char pattern[256];

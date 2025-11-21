@@ -471,9 +471,11 @@ static int cmd_update(int argc, char **argv) {
     }
 
     // Create repo directory if it doesn't exist
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", repo_dir);
-    system(cmd);
+    char cmd[2048];
+    int cmd_len = snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", repo_dir);
+    if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+        system(cmd);
+    }
 
     printf("Updating package repository...\n");
     printf("Repository directory: %s\n", repo_dir);
@@ -483,9 +485,9 @@ static int cmd_update(int argc, char **argv) {
     // Update from local path
     if (local_path) {
         printf("Updating from local path: %s\n", local_path);
-        char copy_cmd[1024];
-        snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
-        if (system(copy_cmd) == 0) {
+        char copy_cmd[2048];
+        int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
+        if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) && system(copy_cmd) == 0) {
             printf("✓ Packages copied from local path\n");
             success = true;
         } else {
@@ -496,23 +498,36 @@ static int cmd_update(int argc, char **argv) {
     else if (repo_url) {
         printf("Updating from repository: %s\n", repo_url);
         char temp_dir[1024];
-        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+        int temp_dir_len = snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+        if (temp_dir_len < 0 || (size_t)temp_dir_len >= sizeof(temp_dir)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
 
         // Clone or update repository
-        char git_cmd[1024];
+        char git_cmd[2048];
         struct stat st;
+        int git_cmd_len;
         if (stat(temp_dir, &st) == 0) {
             // Update existing clone
-            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
         } else {
             // Clone repository
-            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", repo_url, temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", repo_url, temp_dir);
+        }
+        if (git_cmd_len < 0 || (size_t)git_cmd_len >= sizeof(git_cmd)) {
+            fprintf(stderr, "Error: Command too long\n");
+            return 1;
         }
 
         if (system(git_cmd) == 0) {
             // Copy package files
             char packages_dir[1024];
-            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+            int packages_dir_len = snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+            if (packages_dir_len < 0 || (size_t)packages_dir_len >= sizeof(packages_dir)) {
+                fprintf(stderr, "Error: Path too long\n");
+                return 1;
+            }
 
             // Check if packages directory exists, otherwise try root
             if (stat(packages_dir, &st) != 0) {
@@ -520,8 +535,12 @@ static int cmd_update(int argc, char **argv) {
                 packages_dir[sizeof(packages_dir) - 1] = '\0';
             }
 
-            char copy_cmd[1024];
-            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            char copy_cmd[2048];
+            int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (copy_cmd_len < 0 || (size_t)copy_cmd_len >= sizeof(copy_cmd)) {
+                fprintf(stderr, "Error: Command too long\n");
+                return 1;
+            }
             if (system(copy_cmd) == 0) {
                 printf("✓ Packages updated from repository\n");
                 success = true;
@@ -538,27 +557,40 @@ static int cmd_update(int argc, char **argv) {
         printf("Updating from default repository: %s\n", default_repo);
 
         char temp_dir[1024];
-        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+        int temp_dir_len = snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+        if (temp_dir_len < 0 || (size_t)temp_dir_len >= sizeof(temp_dir)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
 
         // Clone or update repository
-        char git_cmd[1024];
+        char git_cmd[2048];
         struct stat st;
+        int git_cmd_len;
         if (stat(temp_dir, &st) == 0) {
             // Update existing clone
-            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
         } else {
             // Clone repository
-            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", default_repo, temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", default_repo, temp_dir);
+        }
+        if (git_cmd_len < 0 || (size_t)git_cmd_len >= sizeof(git_cmd)) {
+            fprintf(stderr, "Error: Command too long\n");
+            return 1;
         }
 
         if (system(git_cmd) == 0) {
             // Copy package files
             char packages_dir[1024];
-            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+            int packages_dir_len = snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+            if (packages_dir_len < 0 || (size_t)packages_dir_len >= sizeof(packages_dir)) {
+                fprintf(stderr, "Error: Path too long\n");
+                return 1;
+            }
 
-            char copy_cmd[1024];
-            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
-            if (system(copy_cmd) == 0) {
+            char copy_cmd[2048];
+            int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) && system(copy_cmd) == 0) {
                 printf("✓ Packages updated from default repository\n");
                 success = true;
             } else {
@@ -691,12 +723,14 @@ static int cmd_uninstall(int argc, char **argv) {
             }
 
             // Remove the entire install directory which contains all binaries, libraries, etc.
-            char cmd[1024];
-            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", install_dir);
-            if (system(cmd) == 0) {
-                printf("✓ Removed installed packages and binaries from: %s\n", install_dir);
-            } else {
-                printf("⚠ Warning: Failed to remove install directory\n");
+            char cmd[2048];
+            int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", install_dir);
+            if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+                if (system(cmd) == 0) {
+                    printf("✓ Removed installed packages and binaries from: %s\n", install_dir);
+                } else {
+                    printf("⚠ Warning: Failed to remove install directory\n");
+                }
             }
         }
     }
@@ -716,10 +750,12 @@ static int cmd_uninstall(int argc, char **argv) {
     char completions_dir[1024];
     len = snprintf(completions_dir, sizeof(completions_dir), "%s/share/completions", tsi_prefix);
     if (len >= 0 && (size_t)len < sizeof(completions_dir)) {
-        char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", completions_dir);
-        if (system(cmd) == 0) {
-            printf("✓ Removed completion scripts\n");
+        char cmd[2048];
+        int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", completions_dir);
+        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+            if (system(cmd) == 0) {
+                printf("✓ Removed completion scripts\n");
+            }
         }
     }
 
@@ -727,27 +763,31 @@ static int cmd_uninstall(int argc, char **argv) {
     char share_dir[1024];
     len = snprintf(share_dir, sizeof(share_dir), "%s/share", tsi_prefix);
     if (len >= 0 && (size_t)len < sizeof(share_dir)) {
-        char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", share_dir);
-        system(cmd);
+        char cmd[2048];
+        int cmd_len = snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", share_dir);
+        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+            system(cmd);
+        }
     }
 
     // Remove bin directory if empty
     char bin_dir[1024];
     len = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", tsi_prefix);
     if (len >= 0 && (size_t)len < sizeof(bin_dir)) {
-        char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", bin_dir);
-        system(cmd);
+        char cmd[2048];
+        int cmd_len = snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", bin_dir);
+        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+            system(cmd);
+        }
     }
 
     if (remove_all) {
         printf("\nRemoving all TSI data...\n");
 
         // Remove all TSI directories
-        char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
-        if (system(cmd) == 0) {
+        char cmd[2048];
+        int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
+        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd) && system(cmd) == 0) {
             printf("✓ Removed all TSI data: %s\n", tsi_prefix);
         } else {
             fprintf(stderr, "Error: Failed to remove TSI data\n");

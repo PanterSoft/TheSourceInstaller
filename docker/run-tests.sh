@@ -12,11 +12,27 @@ echo "TSI Docker Test Suite"
 echo "=========================================="
 echo ""
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# Colors - check if terminal supports colors
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    GREEN=$(tput setaf 2)
+    RED=$(tput setaf 1)
+    YELLOW=$(tput setaf 3)
+    NC=$(tput sgr0)
+else
+    # Fallback to ANSI codes if tput not available but terminal might support it
+    if [ -t 1 ]; then
+        GREEN='\033[0;32m'
+        RED='\033[0;31m'
+        YELLOW='\033[1;33m'
+        NC='\033[0m'
+    else
+        # No colors if output is redirected
+        GREEN=''
+        RED=''
+        YELLOW=''
+        NC=''
+    fi
+fi
 
 # Test scenarios
 # Format: "service:description:expected_result"
@@ -66,11 +82,11 @@ run_test() {
         # Expected to fail - check if it failed gracefully
         if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo ""
-            echo "${GREEN}✓ Test passed (expected failure): $description${NC}"
+            echo -e "${GREEN}✓ Test passed (expected failure): $description${NC}"
             return 0
         else
             echo ""
-            echo "${YELLOW}⚠ Test unexpectedly succeeded: $description${NC}"
+            echo -e "${YELLOW}⚠ Test unexpectedly succeeded: $description${NC}"
             echo "Log saved to: /tmp/tsi-test-${service}.log"
             return 1
         fi
@@ -78,11 +94,11 @@ run_test() {
         # Expected to pass
         if [ "$TEST_EXIT_CODE" -eq 0 ]; then
             echo ""
-            echo "${GREEN}✓ Test passed: $description${NC}"
+            echo -e "${GREEN}✓ Test passed: $description${NC}"
             return 0
         else
             echo ""
-            echo "${RED}✗ Test failed: $description${NC}"
+            echo -e "${RED}✗ Test failed: $description${NC}"
             echo "Log saved to: /tmp/tsi-test-${service}.log"
             return 1
         fi
@@ -115,16 +131,16 @@ echo "=========================================="
 echo "Test Summary"
 echo "=========================================="
 echo ""
-echo "Passed: ${GREEN}$PASSED${NC}"
-echo "Failed: ${RED}$FAILED${NC}"
+echo -e "Passed: ${GREEN}$PASSED${NC}"
+echo -e "Failed: ${RED}$FAILED${NC}"
 echo "Total:  $((PASSED + FAILED))"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo "${GREEN}All tests passed!${NC}"
+    echo -e "${GREEN}All tests passed!${NC}"
     exit 0
 else
-    echo "${RED}Some tests failed. Check logs in /tmp/tsi-test-*.log${NC}"
+    echo -e "${RED}Some tests failed. Check logs in /tmp/tsi-test-*.log${NC}"
     exit 1
 fi
 
