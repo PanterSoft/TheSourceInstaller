@@ -65,11 +65,78 @@ _tsi() {
     case $words[1] in
         install|info)
             if [[ $state == packages ]]; then
-                local repo_dir="${HOME}/.tsi/repos"
-                if [ -d "$repo_dir" ]; then
-                    local packages=($(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null))
-                    if [ ${#packages[@]} -gt 0 ]; then
-                        _describe 'package' packages
+                local cur="${words[CURRENT]}"
+                if [[ $cur == *@ ]]; then
+                    # User typed package@, show versions
+                    local pkg_name="${cur%@}"
+                    local repo_dir="${HOME}/.tsi/repos"
+                    if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                        local versions=($(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null))
+                        if [ ${#versions[@]} -gt 0 ]; then
+                            local version_completions=()
+                            for v in "${versions[@]}"; do
+                                version_completions+=("${pkg_name}@${v}")
+                            done
+                            _describe 'version' version_completions
+                        fi
+                    fi
+                elif [[ $cur == *@* ]]; then
+                    # User typed package@version, complete version part
+                    local pkg_name="${cur%%@*}"
+                    local version_part="${cur#*@}"
+                    local repo_dir="${HOME}/.tsi/repos"
+                    if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                        local versions=($(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null))
+                        if [ ${#versions[@]} -gt 0 ]; then
+                            local version_completions=()
+                            for v in "${versions[@]}"; do
+                                if [[ "$v" == "$version_part"* ]]; then
+                                    version_completions+=("${pkg_name}@${v}")
+                                fi
+                            done
+                            if [ ${#version_completions[@]} -gt 0 ]; then
+                                _describe 'version' version_completions
+                            fi
+                        fi
+                    fi
+                else
+                    # List packages from repository
+                    local repo_dir="${HOME}/.tsi/repos"
+                    if [ -d "$repo_dir" ]; then
+                        local packages=($(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null))
+                        if [ ${#packages[@]} -gt 0 ]; then
+                            _describe 'package' packages
+                        fi
                     fi
                 fi
             fi

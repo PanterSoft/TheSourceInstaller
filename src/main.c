@@ -118,10 +118,97 @@ static int cmd_install(int argc, char **argv) {
         fprintf(stderr, "Error: Failed to initialize resolver\n");
         repository_free(repo);
         database_free(db);
+        if (package_version) {
+            free((char*)package_version);
+            free((char*)package_name);
+        }
         return 1;
     }
 
-    printf("Installing package: %s\n", package_name);
+    // First verify package exists before proceeding
+    // Check if version string is incomplete (ends with dot or is empty after @)
+    bool incomplete_version = false;
+    if (package_version) {
+        size_t version_len = strlen(package_version);
+        if (version_len == 0 || package_version[version_len - 1] == '.') {
+            incomplete_version = true;
+        }
+    }
+
+    Package *pkg = NULL;
+    if (!incomplete_version) {
+        pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
+    }
+
+    if (!pkg || incomplete_version) {
+        if (package_version) {
+            if (incomplete_version) {
+                fprintf(stderr, "Error: Incomplete version specification '%s@%s'\n", package_name, package_version);
+            } else {
+                fprintf(stderr, "Error: Package '%s@%s' not found in repository\n", package_name, package_version);
+            }
+
+            // Check if package exists (but version doesn't or is incomplete)
+            Package *any_version = repository_get_package(repo, package_name);
+            if (any_version) {
+                // Package exists, show available versions
+                size_t versions_count = 0;
+                char **versions = repository_list_versions(repo, package_name, &versions_count);
+                if (versions && versions_count > 0) {
+                    if (incomplete_version) {
+                        // Show versions that match the prefix first
+                        bool found_match = false;
+                        fprintf(stderr, "\nVersions matching '%s*':\n", package_version);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            if (strncmp(versions[i], package_version, strlen(package_version)) == 0) {
+                                fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
+                                found_match = true;
+                            }
+                        }
+                        if (!found_match) {
+                            fprintf(stderr, "  (no versions match '%s*')\n", package_version);
+                        }
+                        fprintf(stderr, "\nAll available versions for '%s':\n", package_name);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
+                            free(versions[i]);
+                        }
+                        free(versions);
+                    } else {
+                        fprintf(stderr, "\nAvailable versions for '%s':\n", package_name);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
+                            free(versions[i]);
+                        }
+                        free(versions);
+                    }
+                }
+            } else {
+                // Package doesn't exist at all
+                fprintf(stderr, "\nPackage '%s' not found in repository.\n", package_name);
+                fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
+            fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+        }
+
+        // Clean up and return
+        if (package_version) {
+            free((char*)package_version);
+            free((char*)package_name);
+        }
+        resolver_free(resolver);
+        repository_free(repo);
+        database_free(db);
+        return 1;
+    }
+
+    printf("Installing package: %s", package_name);
+    if (package_version) {
+        printf("@%s", package_version);
+    }
+    printf("\n");
 
     // Check if already installed (check specific version if specified)
     if (!force) {
@@ -186,20 +273,15 @@ static int cmd_install(int argc, char **argv) {
     char **deps = resolver_resolve(resolver, package_name, installed, installed_count, &deps_count);
 
     if (!deps) {
-        // Check if package exists in repository
-        Package *pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
-        if (!pkg) {
-            if (package_version) {
-                fprintf(stderr, "Error: Package '%s@%s' not found in repository\n", package_name, package_version);
-            } else {
-                fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
-            }
-        } else {
-            fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
-        }
+        // Package exists but dependency resolution failed
+        fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
         if (installed) {
             for (size_t i = 0; i < installed_count; i++) free(installed[i]);
             free(installed);
+        }
+        if (package_version) {
+            free((char*)package_version);
+            free((char*)package_name);
         }
         resolver_free(resolver);
         repository_free(repo);
@@ -508,13 +590,70 @@ static int cmd_info(int argc, char **argv) {
         }
     }
 
-    Package *pkg = version ? repository_get_package_version(repo, actual_name, version) : repository_get_package(repo, actual_name);
+    // Check if version string is incomplete (ends with dot or is empty after @)
+    bool incomplete_version = false;
+    if (version) {
+        size_t version_len = strlen(version);
+        if (version_len == 0 || version[version_len - 1] == '.') {
+            incomplete_version = true;
+        }
+    }
 
-    if (!pkg) {
+    Package *pkg = NULL;
+    if (!incomplete_version) {
+        pkg = version ? repository_get_package_version(repo, actual_name, version) : repository_get_package(repo, actual_name);
+    }
+
+    if (!pkg || incomplete_version) {
         if (version) {
-            fprintf(stderr, "Package not found: %s@%s\n", actual_name, version);
+            if (incomplete_version) {
+                fprintf(stderr, "Error: Incomplete version specification '%s@%s'\n", actual_name, version);
+            } else {
+                fprintf(stderr, "Package not found: %s@%s\n", actual_name, version);
+            }
+
+            // Check if package exists (but version doesn't or is incomplete)
+            Package *any_version = repository_get_package(repo, actual_name);
+            if (any_version) {
+                // Package exists, show available versions
+                size_t versions_count = 0;
+                char **versions = repository_list_versions(repo, actual_name, &versions_count);
+                if (versions && versions_count > 0) {
+                    if (incomplete_version) {
+                        // Show versions that match the prefix first
+                        bool found_match = false;
+                        fprintf(stderr, "\nVersions matching '%s*':\n", version);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            if (strncmp(versions[i], version, strlen(version)) == 0) {
+                                fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
+                                found_match = true;
+                            }
+                        }
+                        if (!found_match) {
+                            fprintf(stderr, "  (no versions match '%s*')\n", version);
+                        }
+                        fprintf(stderr, "\nAll available versions for '%s':\n", actual_name);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
+                            free(versions[i]);
+                        }
+                        free(versions);
+                    } else {
+                        fprintf(stderr, "\nAvailable versions for '%s':\n", actual_name);
+                        for (size_t i = 0; i < versions_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
+                            free(versions[i]);
+                        }
+                        free(versions);
+                    }
+                }
+            } else {
+                fprintf(stderr, "Package '%s' not found in repository.\n", actual_name);
+                fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+            }
         } else {
             fprintf(stderr, "Package not found: %s\n", actual_name);
+            fprintf(stderr, "Use 'tsi list' to see available packages.\n");
         }
         if (at_pos) {
             free(allocated_name);

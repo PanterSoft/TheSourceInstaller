@@ -17,6 +17,66 @@ _tsi() {
         install)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--force --prefix" -- ${cur}))
+            elif [[ ${cur} == *@ ]]; then
+                # User typed package@, show versions
+                local pkg_name="${cur%@}"
+                local repo_dir="${HOME}/.tsi/repos"
+                if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                    # Parse JSON files to get versions
+                    local versions=$(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null)
+                    if [ -n "$versions" ]; then
+                        COMPREPLY=($(compgen -W "${versions}" -- ""))
+                        # Prefix with package name and @
+                        for i in "${!COMPREPLY[@]}"; do
+                            COMPREPLY[$i]="${pkg_name}@${COMPREPLY[$i]}"
+                        done
+                    fi
+                fi
+            elif [[ ${cur} == *@* ]]; then
+                # User typed package@version, complete version part
+                local pkg_name="${cur%%@*}"
+                local version_part="${cur#*@}"
+                local repo_dir="${HOME}/.tsi/repos"
+                if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                    local versions=$(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null)
+                    if [ -n "$versions" ]; then
+                        COMPREPLY=($(compgen -W "${versions}" -- "${version_part}"))
+                        # Prefix with package name and @
+                        for i in "${!COMPREPLY[@]}"; do
+                            COMPREPLY[$i]="${pkg_name}@${COMPREPLY[$i]}"
+                        done
+                    fi
+                fi
             else
                 # List packages from repository
                 local repo_dir="${HOME}/.tsi/repos"
@@ -40,12 +100,71 @@ _tsi() {
             ;;
 
         info)
-            # List packages from repository
-            local repo_dir="${HOME}/.tsi/repos"
-            if [ -d "$repo_dir" ]; then
-                local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
-                if [ -n "$packages" ]; then
-                    COMPREPLY=($(compgen -W "${packages}" -- ${cur}))
+            if [[ ${cur} == *@ ]]; then
+                # User typed package@, show versions
+                local pkg_name="${cur%@}"
+                local repo_dir="${HOME}/.tsi/repos"
+                if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                    local versions=$(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null)
+                    if [ -n "$versions" ]; then
+                        COMPREPLY=($(compgen -W "${versions}" -- ""))
+                        for i in "${!COMPREPLY[@]}"; do
+                            COMPREPLY[$i]="${pkg_name}@${COMPREPLY[$i]}"
+                        done
+                    fi
+                fi
+            elif [[ ${cur} == *@* ]]; then
+                # User typed package@version, complete version part
+                local pkg_name="${cur%%@*}"
+                local version_part="${cur#*@}"
+                local repo_dir="${HOME}/.tsi/repos"
+                if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
+                    local versions=$(python3 -c "
+import json, os, sys
+repo_dir = os.path.expanduser('$repo_dir')
+pkg_name = '$pkg_name'
+versions = []
+for f in os.listdir(repo_dir):
+    if f.endswith('.json'):
+        try:
+            with open(os.path.join(repo_dir, f), 'r') as file:
+                data = json.load(file)
+                if data.get('name') == pkg_name:
+                    versions.append(data.get('version', 'latest'))
+        except:
+            pass
+print(' '.join(sorted(set(versions), reverse=True)))
+" 2>/dev/null)
+                    if [ -n "$versions" ]; then
+                        COMPREPLY=($(compgen -W "${versions}" -- "${version_part}"))
+                        for i in "${!COMPREPLY[@]}"; do
+                            COMPREPLY[$i]="${pkg_name}@${COMPREPLY[$i]}"
+                        done
+                    fi
+                fi
+            else
+                # List packages from repository
+                local repo_dir="${HOME}/.tsi/repos"
+                if [ -d "$repo_dir" ]; then
+                    local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
+                    if [ -n "$packages" ]; then
+                        COMPREPLY=($(compgen -W "${packages}" -- ${cur}))
+                    fi
                 fi
             fi
             return 0
