@@ -34,3 +34,7 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Temporary files
+src/build/
+src/bin/
