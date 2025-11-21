@@ -34,7 +34,7 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     // Simple recursive resolution (no cycle detection for now)
     // Check if already installed
     for (size_t i = 0; i < installed_count; i++) {
-        if (strcmp(installed[i], package_name) == 0) {
+        if (installed[i] && strcmp(installed[i], package_name) == 0) {
             return NULL; // Already installed
         }
     }
@@ -47,12 +47,15 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
 
     // Resolve dependencies first
     for (size_t i = 0; i < pkg->dependencies_count; i++) {
+        if (!pkg->dependencies[i]) continue; // Skip NULL dependencies
         // Check if already in result
         bool found = false;
-        for (size_t j = 0; j < *result_count; j++) {
-            if (strcmp(result[j], pkg->dependencies[i]) == 0) {
-                found = true;
-                break;
+        if (result) {
+            for (size_t j = 0; j < *result_count; j++) {
+                if (result[j] && strcmp(result[j], pkg->dependencies[i]) == 0) {
+                    found = true;
+                    break;
+                }
             }
         }
 
@@ -61,26 +64,65 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             size_t deps_count = 0;
             char **deps = resolver_resolve(resolver, pkg->dependencies[i], installed, installed_count, &deps_count);
 
-            // Add dependencies to result
-            for (size_t j = 0; j < deps_count; j++) {
-                if (*result_count >= capacity) {
-                    capacity = capacity ? capacity * 2 : 8;
-                    result = realloc(result, sizeof(char*) * capacity);
+            // Add dependencies to result (if resolution succeeded)
+            if (deps && deps_count > 0) {
+                for (size_t j = 0; j < deps_count; j++) {
+                    if (deps[j]) { // Only add non-NULL dependencies
+                        if (*result_count >= capacity) {
+                            capacity = capacity ? capacity * 2 : 8;
+                            char **new_result = realloc(result, sizeof(char*) * capacity);
+                            if (!new_result) {
+                                // Allocation failed - clean up
+                                for (size_t k = 0; k < *result_count; k++) {
+                                    if (result && result[k]) free(result[k]);
+                                }
+                                if (result) free(result);
+                                for (size_t k = 0; k < deps_count; k++) {
+                                    if (deps[k]) free(deps[k]);
+                                }
+                                free(deps);
+                                *result_count = 0;
+                                return NULL;
+                            }
+                            result = new_result;
+                        }
+                        result[*result_count] = strdup(deps[j]);
+                        if (!result[*result_count]) {
+                            // strdup failed - clean up
+                            for (size_t k = 0; k < *result_count; k++) {
+                                if (result[k]) free(result[k]);
+                            }
+                            free(result);
+                            for (size_t k = 0; k < deps_count; k++) {
+                                if (deps[k]) free(deps[k]);
+                            }
+                            free(deps);
+                            *result_count = 0;
+                            return NULL;
+                        }
+                        (*result_count)++;
+                    }
+                    if (deps[j]) free(deps[j]);
                 }
-                result[*result_count++] = strdup(deps[j]);
-                free(deps[j]);
+                free(deps);
+            } else if (deps) {
+                // Empty result - free it
+                free(deps);
             }
-            free(deps);
+            // If deps is NULL, dependency not found or already installed - skip it
         }
     }
 
     // Add build dependencies
     for (size_t i = 0; i < pkg->build_dependencies_count; i++) {
+        if (!pkg->build_dependencies[i]) continue; // Skip NULL dependencies
         bool found = false;
-        for (size_t j = 0; j < *result_count; j++) {
-            if (strcmp(result[j], pkg->build_dependencies[i]) == 0) {
-                found = true;
-                break;
+        if (result) {
+            for (size_t j = 0; j < *result_count; j++) {
+                if (result[j] && strcmp(result[j], pkg->build_dependencies[i]) == 0) {
+                    found = true;
+                    break;
+                }
             }
         }
 
@@ -88,15 +130,52 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             size_t deps_count = 0;
             char **deps = resolver_resolve(resolver, pkg->build_dependencies[i], installed, installed_count, &deps_count);
 
-            for (size_t j = 0; j < deps_count; j++) {
-                if (*result_count >= capacity) {
-                    capacity = capacity ? capacity * 2 : 8;
-                    result = realloc(result, sizeof(char*) * capacity);
+            // Add dependencies to result (if resolution succeeded)
+            if (deps && deps_count > 0) {
+                for (size_t j = 0; j < deps_count; j++) {
+                    if (deps[j]) { // Only add non-NULL dependencies
+                        if (*result_count >= capacity) {
+                            capacity = capacity ? capacity * 2 : 8;
+                            char **new_result = realloc(result, sizeof(char*) * capacity);
+                            if (!new_result) {
+                                // Allocation failed - clean up
+                                for (size_t k = 0; k < *result_count; k++) {
+                                    if (result && result[k]) free(result[k]);
+                                }
+                                if (result) free(result);
+                                for (size_t k = 0; k < deps_count; k++) {
+                                    if (deps[k]) free(deps[k]);
+                                }
+                                free(deps);
+                                *result_count = 0;
+                                return NULL;
+                            }
+                            result = new_result;
+                        }
+                        result[*result_count] = strdup(deps[j]);
+                        if (!result[*result_count]) {
+                            // strdup failed - clean up
+                            for (size_t k = 0; k < *result_count; k++) {
+                                if (result[k]) free(result[k]);
+                            }
+                            free(result);
+                            for (size_t k = 0; k < deps_count; k++) {
+                                if (deps[k]) free(deps[k]);
+                            }
+                            free(deps);
+                            *result_count = 0;
+                            return NULL;
+                        }
+                        (*result_count)++;
+                    }
+                    if (deps[j]) free(deps[j]);
                 }
-                result[*result_count++] = strdup(deps[j]);
-                free(deps[j]);
+                free(deps);
+            } else if (deps) {
+                // Empty result - free it
+                free(deps);
             }
-            free(deps);
+            // If deps is NULL, dependency not found or already installed - skip it
         }
     }
 
