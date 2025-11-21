@@ -108,8 +108,22 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             } else if (deps) {
                 // Empty result - free it
                 free(deps);
+            } else {
+                // deps is NULL - check if dependency exists in repository
+                Package *dep_pkg = repository_get_package(resolver->repository, pkg->dependencies[i]);
+                if (!dep_pkg) {
+                    // Dependency not found in repository - this is an error
+                    if (result) {
+                        for (size_t k = 0; k < *result_count; k++) {
+                            if (result[k]) free(result[k]);
+                        }
+                        free(result);
+                    }
+                    *result_count = 0;
+                    return NULL;
+                }
+                // Dependency exists but was already installed (and not using force) - skip it
             }
-            // If deps is NULL, dependency not found or already installed - skip it
         }
     }
 
@@ -174,8 +188,22 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             } else if (deps) {
                 // Empty result - free it
                 free(deps);
+            } else {
+                // deps is NULL - check if build dependency exists in repository
+                Package *dep_pkg = repository_get_package(resolver->repository, pkg->build_dependencies[i]);
+                if (!dep_pkg) {
+                    // Build dependency not found in repository - this is an error
+                    if (result) {
+                        for (size_t k = 0; k < *result_count; k++) {
+                            if (result[k]) free(result[k]);
+                        }
+                        free(result);
+                    }
+                    *result_count = 0;
+                    return NULL;
+                }
+                // Build dependency exists but was already installed (and not using force) - skip it
             }
-            // If deps is NULL, dependency not found or already installed - skip it
         }
     }
 

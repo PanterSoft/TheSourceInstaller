@@ -123,16 +123,25 @@ static int cmd_install(int argc, char **argv) {
         }
     }
 
-    // Get installed packages list
+    // Get installed packages list (skip if force is enabled)
     size_t installed_count = 0;
-    char **installed = database_list_installed(db, &installed_count);
+    char **installed = NULL;
+    if (!force) {
+        installed = database_list_installed(db, &installed_count);
+    }
 
     // Resolve dependencies
     size_t deps_count = 0;
     char **deps = resolver_resolve(resolver, package_name, installed, installed_count, &deps_count);
 
     if (!deps) {
-        fprintf(stderr, "Error: Failed to resolve dependencies\n");
+        // Check if package exists in repository
+        Package *pkg = repository_get_package(repo, package_name);
+        if (!pkg) {
+            fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
+        } else {
+            fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
+        }
         if (installed) {
             for (size_t i = 0; i < installed_count; i++) free(installed[i]);
             free(installed);

@@ -122,22 +122,48 @@ bool database_load(Database *db) {
     db->packages_count = 0;
     db->packages = NULL;
 
+    // Check if file is empty
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (file_size == 0) {
+        fclose(f);
+        return true;
+    }
+
     // Simple JSON parsing - read line by line
     char line[2048];
     bool in_installed = false;
     InstalledPackage *current_pkg = NULL;
 
     while (fgets(line, sizeof(line), f)) {
+        // Remove trailing newline and carriage return
+        size_t len = strlen(line);
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) {
+            line[len-1] = '\0';
+            len--;
+        }
+
+        // Skip empty lines
+        if (len == 0) continue;
+
         // Check if we're in the installed array
         if (strstr(line, "\"installed\"")) {
             in_installed = true;
             continue;
         }
 
+        // Skip lines before installed array
         if (!in_installed) continue;
 
-        // Start of package object
-        if (strstr(line, "{") && !current_pkg) {
+        // Skip the opening bracket line
+        if (strchr(line, '[') && !strchr(line, '{')) {
+            continue;
+        }
+
+        // Start of package object - check for opening brace (may have whitespace)
+        char *brace_pos = strchr(line, '{');
+        if (brace_pos && !current_pkg) {
             db->packages = realloc(db->packages, sizeof(InstalledPackage) * (db->packages_count + 1));
             current_pkg = &db->packages[db->packages_count];
             current_pkg->name = NULL;
@@ -149,15 +175,29 @@ bool database_load(Database *db) {
             continue;
         }
 
-        // End of package object
-        if (strstr(line, "}") && current_pkg) {
-            db->packages_count++;
+        // End of package object - check for closing brace (may have whitespace)
+        char *close_brace = strchr(line, '}');
+        if (close_brace && current_pkg) {
+            // Only increment if we have at least a name
+            if (current_pkg->name) {
+                db->packages_count++;
+            } else {
+                // Free incomplete package
+                if (current_pkg->version) free(current_pkg->version);
+                if (current_pkg->install_path) free(current_pkg->install_path);
+                if (current_pkg->dependencies) {
+                    for (size_t i = 0; i < current_pkg->dependencies_count; i++) {
+                        if (current_pkg->dependencies[i]) free(current_pkg->dependencies[i]);
+                    }
+                    free(current_pkg->dependencies);
+                }
+            }
             current_pkg = NULL;
             continue;
         }
 
-        // End of installed array
-        if (strstr(line, "]")) {
+        // End of installed array - check for closing bracket
+        if (strchr(line, ']')) {
             break;
         }
 
@@ -186,7 +226,8 @@ bool database_load(Database *db) {
                     start++; // Skip '['
                     char *end = strstr(start, "]");
                     if (end) {
-                        *end = '\0'; // Terminate at ']'
+                        char saved = *end;
+                        *end = '\0'; // Temporarily terminate at ']'
 
                         // Count dependencies
                         size_t deps_capacity = 8;
@@ -206,11 +247,11 @@ bool database_load(Database *db) {
                                 char *dep_start = p;
                                 while (*p && *p != '"') p++;
                                 if (*p == '"') {
-                                    size_t len = p - dep_start;
-                                    char *dep = malloc(len + 1);
+                                    size_t dep_len = p - dep_start;
+                                    char *dep = malloc(dep_len + 1);
                                     if (dep) {
-                                        strncpy(dep, dep_start, len);
-                                        dep[len] = '\0';
+                                        strncpy(dep, dep_start, dep_len);
+                                        dep[dep_len] = '\0';
 
                                         if (current_pkg->dependencies_count >= deps_capacity) {
                                             deps_capacity *= 2;
@@ -224,6 +265,7 @@ bool database_load(Database *db) {
                                 break;
                             }
                         }
+                        *end = saved; // Restore character
                     }
                 }
             }
