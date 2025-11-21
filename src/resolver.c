@@ -409,12 +409,52 @@ void repository_free(Repository *repo) {
 }
 
 Package* repository_get_package(Repository *repo, const char *name) {
+    // Return the latest version (highest version string, or first found if no version specified)
+    Package *latest = NULL;
     for (size_t i = 0; i < repo->packages_count; i++) {
         if (strcmp(repo->packages[i]->name, name) == 0) {
-            return repo->packages[i];
+            if (!latest) {
+                latest = repo->packages[i];
+            } else if (repo->packages[i]->version && latest->version) {
+                // Simple version comparison (lexicographic, works for semantic versions)
+                if (strcmp(repo->packages[i]->version, latest->version) > 0) {
+                    latest = repo->packages[i];
+                }
+            }
+        }
+    }
+    return latest;
+}
+
+Package* repository_get_package_version(Repository *repo, const char *name, const char *version) {
+    if (!version || strcmp(version, "latest") == 0) {
+        return repository_get_package(repo, name);
+    }
+    
+    for (size_t i = 0; i < repo->packages_count; i++) {
+        if (strcmp(repo->packages[i]->name, name) == 0) {
+            if (repo->packages[i]->version && strcmp(repo->packages[i]->version, version) == 0) {
+                return repo->packages[i];
+            }
         }
     }
     return NULL;
+}
+
+char** repository_list_versions(Repository *repo, const char *name, size_t *count) {
+    *count = 0;
+    char **versions = NULL;
+    
+    for (size_t i = 0; i < repo->packages_count; i++) {
+        if (strcmp(repo->packages[i]->name, name) == 0) {
+            const char *version = repo->packages[i]->version ? repo->packages[i]->version : "latest";
+            versions = realloc(versions, sizeof(char*) * (*count + 1));
+            versions[*count] = strdup(version);
+            (*count)++;
+        }
+    }
+    
+    return versions;
 }
 
 bool repository_add_package(Repository *repo, Package *pkg) {

@@ -100,8 +100,13 @@ char* fetcher_fetch(SourceFetcher *fetcher, Package *pkg, bool force) {
         return NULL;
     }
 
+    // Use version-specific directory if version is specified
     char package_dir[512];
-    snprintf(package_dir, sizeof(package_dir), "%s/%s", fetcher->source_dir, pkg->name);
+    if (pkg->version && strcmp(pkg->version, "latest") != 0) {
+        snprintf(package_dir, sizeof(package_dir), "%s/%s-%s", fetcher->source_dir, pkg->name, pkg->version);
+    } else {
+        snprintf(package_dir, sizeof(package_dir), "%s/%s", fetcher->source_dir, pkg->name);
+    }
 
     // Check if already exists
     struct stat st;

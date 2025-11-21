@@ -28,6 +28,7 @@ static void print_usage(const char *prog_name) {
 static int cmd_install(int argc, char **argv) {
     bool force = false;
     const char *package_name = NULL;
+    const char *package_version = NULL;
     const char *prefix = NULL;
 
     // Parse arguments
@@ -37,13 +38,35 @@ static int cmd_install(int argc, char **argv) {
         } else if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
             prefix = argv[++i];
         } else if (!package_name) {
-            package_name = argv[i];
+            // Check for package@version syntax
+            char *at_pos = strchr(argv[i], '@');
+            if (at_pos) {
+                size_t name_len = at_pos - argv[i];
+                package_name = malloc(name_len + 1);
+                if (!package_name) {
+                    fprintf(stderr, "Error: Memory allocation failed\n");
+                    return 1;
+                }
+                strncpy((char*)package_name, argv[i], name_len);
+                ((char*)package_name)[name_len] = '\0';
+                package_version = strdup(at_pos + 1);
+                if (!package_version) {
+                    free((char*)package_name);
+                    fprintf(stderr, "Error: Memory allocation failed\n");
+                    return 1;
+                }
+            } else {
+                package_name = argv[i];
+            }
         }
     }
 
     if (!package_name) {
         fprintf(stderr, "Error: package name required\n");
-        fprintf(stderr, "Usage: tsi install [--force] [--prefix PATH] <package>\n");
+        fprintf(stderr, "Usage: tsi install [--force] [--prefix PATH] <package>[@version]\n");
+        if (package_version) {
+            free((char*)package_version);
+        }
         return 1;
     }
 
@@ -100,26 +123,54 @@ static int cmd_install(int argc, char **argv) {
 
     printf("Installing package: %s\n", package_name);
 
-    // Check if already installed
+    // Check if already installed (check specific version if specified)
     if (!force) {
         InstalledPackage *installed_pkg = database_get_package(db, package_name);
         if (installed_pkg) {
-            printf("Package %s is already installed:\n", package_name);
-            printf("  Version: %s\n", installed_pkg->version ? installed_pkg->version : "unknown");
-            printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
-            if (installed_pkg->dependencies_count > 0) {
-                printf("  Dependencies: ");
-                for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
-                    printf("%s", installed_pkg->dependencies[i]);
-                    if (i < installed_pkg->dependencies_count - 1) printf(", ");
+            // If version specified, check if that specific version is installed
+            if (package_version && installed_pkg->version && strcmp(installed_pkg->version, package_version) == 0) {
+                printf("Package %s@%s is already installed:\n", package_name, package_version);
+                printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+                if (installed_pkg->dependencies_count > 0) {
+                    printf("  Dependencies: ");
+                    for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
+                        printf("%s", installed_pkg->dependencies[i]);
+                        if (i < installed_pkg->dependencies_count - 1) printf(", ");
+                    }
+                    printf("\n");
                 }
-                printf("\n");
+                printf("\nUse --force to reinstall.\n");
+                resolver_free(resolver);
+                repository_free(repo);
+                database_free(db);
+                if (package_version) {
+                    free((char*)package_version);
+                    free((char*)package_name);
+                }
+                return 0;
+            } else if (!package_version) {
+                // No version specified, but package is installed
+                printf("Package %s is already installed:\n", package_name);
+                printf("  Version: %s\n", installed_pkg->version ? installed_pkg->version : "unknown");
+                printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+                if (installed_pkg->dependencies_count > 0) {
+                    printf("  Dependencies: ");
+                    for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
+                        printf("%s", installed_pkg->dependencies[i]);
+                        if (i < installed_pkg->dependencies_count - 1) printf(", ");
+                    }
+                    printf("\n");
+                }
+                printf("\nUse --force to reinstall, or specify version with %s@<version>\n", package_name);
+                resolver_free(resolver);
+                repository_free(repo);
+                database_free(db);
+                if (package_version) {
+                    free((char*)package_version);
+                    free((char*)package_name);
+                }
+                return 0;
             }
-            printf("\nUse --force to reinstall.\n");
-            resolver_free(resolver);
-            repository_free(repo);
-            database_free(db);
-            return 0;
         }
     }
 
@@ -136,9 +187,13 @@ static int cmd_install(int argc, char **argv) {
 
     if (!deps) {
         // Check if package exists in repository
-        Package *pkg = repository_get_package(repo, package_name);
+        Package *pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
         if (!pkg) {
-            fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
+            if (package_version) {
+                fprintf(stderr, "Error: Package '%s@%s' not found in repository\n", package_name, package_version);
+            } else {
+                fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
+            }
         } else {
             fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
         }
@@ -276,7 +331,11 @@ static int cmd_install(int argc, char **argv) {
 
         // Build
         char build_dir[1024];
-        snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
+        if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
+            snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, dep_pkg->name, dep_pkg->version);
+        } else {
+            snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
+        }
         if (!builder_build(builder_config, dep_pkg, dep_source_dir, build_dir)) {
             printf("Error: Failed to build %s\n", build_order[i]);
             free(dep_source_dir);
@@ -297,7 +356,7 @@ static int cmd_install(int argc, char **argv) {
 
     // Install main package
     printf("Installing %s...\n", package_name);
-    Package *main_pkg = repository_get_package(repo, package_name);
+    Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {
         char *main_source_dir = fetcher_fetch(fetcher, main_pkg, force);
         if (main_source_dir) {
@@ -405,16 +464,69 @@ static int cmd_info(int argc, char **argv) {
         return 1;
     }
 
-    Package *pkg = repository_get_package(repo, package_name);
+    // Check if version is specified in package_name
+    const char *version = NULL;
+    char *at_pos = strchr((char*)package_name, '@');
+    char *actual_name = (char*)package_name;
+    char *allocated_name = NULL;
+    if (at_pos) {
+        size_t name_len = at_pos - package_name;
+        allocated_name = malloc(name_len + 1);
+        if (!allocated_name) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            repository_free(repo);
+            return 1;
+        }
+        strncpy(allocated_name, package_name, name_len);
+        allocated_name[name_len] = '\0';
+        actual_name = allocated_name;
+        version = strdup(at_pos + 1);
+        if (!version) {
+            free(allocated_name);
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            repository_free(repo);
+            return 1;
+        }
+    }
+
+    Package *pkg = version ? repository_get_package_version(repo, actual_name, version) : repository_get_package(repo, actual_name);
 
     if (!pkg) {
-        fprintf(stderr, "Package not found: %s\n", package_name);
+        if (version) {
+            fprintf(stderr, "Package not found: %s@%s\n", actual_name, version);
+        } else {
+            fprintf(stderr, "Package not found: %s\n", actual_name);
+        }
+        if (at_pos) {
+            free(allocated_name);
+            free((char*)version);
+        }
         repository_free(repo);
         return 1;
     }
 
     printf("Package: %s\n", pkg->name ? pkg->name : "unknown");
     printf("Version: %s\n", pkg->version ? pkg->version : "unknown");
+    
+    // List all available versions
+    size_t versions_count = 0;
+    char **versions = repository_list_versions(repo, pkg->name, &versions_count);
+    if (versions && versions_count > 1) {
+        printf("Available versions: ");
+        for (size_t i = 0; i < versions_count; i++) {
+            if (pkg->version && strcmp(versions[i], pkg->version) == 0) {
+                printf("[%s]", versions[i]);
+            } else {
+                printf("%s", versions[i]);
+            }
+            if (i < versions_count - 1) printf(", ");
+        }
+        printf("\n");
+        for (size_t i = 0; i < versions_count; i++) {
+            free(versions[i]);
+        }
+        free(versions);
+    }
     printf("Description: %s\n", pkg->description ? pkg->description : "");
     printf("Build System: %s\n", pkg->build_system ? pkg->build_system : "unknown");
 

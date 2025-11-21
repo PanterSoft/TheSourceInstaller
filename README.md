@@ -150,8 +150,12 @@ echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
 ### Basic Commands
 
 ```bash
-# Install a package
+# Install a package (latest version)
 tsi install <package-name>
+
+# Install a specific version
+tsi install <package-name>@<version>
+# Example: tsi install curl@8.7.1
 
 # Install from a package manifest file
 tsi install ./packages/example.json
@@ -159,8 +163,11 @@ tsi install ./packages/example.json
 # List installed packages
 tsi list
 
-# Show package information
+# Show package information (shows all available versions)
 tsi info <package-name>
+
+# Show information for a specific version
+tsi info <package-name>@<version>
 
 # Remove a package
 tsi remove <package-name>
