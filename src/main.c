@@ -23,7 +23,7 @@ static void print_usage(const char *prog_name) {
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
     printf("  update [--repo URL] [--local PATH]           Update package repository and TSI\n");
-    printf("  uninstall [--all] [--prefix PATH]            Uninstall TSI\n");
+    printf("  uninstall [--prefix PATH]                    Uninstall TSI and all data\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
 }
@@ -1176,14 +1176,11 @@ static int cmd_update(int argc, char **argv) {
 }
 
 static int cmd_uninstall(int argc, char **argv) {
-    bool remove_all = false;
     const char *prefix = NULL;
 
     // Parse arguments
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--all") == 0) {
-            remove_all = true;
-        } else if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
             prefix = argv[++i];
         }
     }
@@ -1206,29 +1203,18 @@ static int cmd_uninstall(int argc, char **argv) {
 
     // Display warning and get confirmation FIRST, before any processing
     printf("═══════════════════════════════════════════════════════════\n");
-    printf("⚠️  WARNING: This will uninstall TSI!\n");
+    printf("⚠️  WARNING: This will uninstall TSI and ALL data!\n");
     printf("═══════════════════════════════════════════════════════════\n");
     printf("\n");
     printf("Uninstalling TSI from: %s\n", tsi_prefix);
     printf("\n");
-
-    if (remove_all) {
-        printf("This will PERMANENTLY remove:\n");
-        printf("  ✗ TSI binary\n");
-        printf("  ✗ Completion scripts\n");
-        printf("  ✗ Installed packages and binaries\n");
-        printf("  ✗ ALL TSI data (database, sources, builds, repository, etc.)\n");
-        printf("\n");
-        printf("⚠️  This action CANNOT be undone!\n");
-    } else {
-        printf("This will remove:\n");
-        printf("  ✗ TSI binary\n");
-        printf("  ✗ Completion scripts\n");
-        printf("  ✗ Installed packages and binaries\n");
-        printf("\n");
-        printf("TSI data (database, sources, builds, repository) will be preserved.\n");
-        printf("Use 'tsi uninstall --all' to remove ALL data including packages.\n");
-    }
+    printf("This will PERMANENTLY remove:\n");
+    printf("  ✗ TSI binary\n");
+    printf("  ✗ Completion scripts\n");
+    printf("  ✗ Installed packages and binaries\n");
+    printf("  ✗ ALL TSI data (database, sources, builds, repository, etc.)\n");
+    printf("\n");
+    printf("⚠️  This action CANNOT be undone!\n");
     printf("\n");
     printf("Are you sure you want to continue? (yes/no): ");
     fflush(stdout);
@@ -1254,106 +1240,17 @@ static int cmd_uninstall(int argc, char **argv) {
 
     printf("\n");
 
-    // Remove installed packages/binaries
-    char install_dir[1024];
-    len = snprintf(install_dir, sizeof(install_dir), "%s/install", tsi_prefix);
-    if (len >= 0 && (size_t)len < sizeof(install_dir)) {
-        // Check if install directory exists
-        struct stat st;
-        if (stat(install_dir, &st) == 0) {
-            // Load database to get package count for display
-            char db_dir[1024];
-            len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
-            size_t package_count = 0;
-            if (len >= 0 && (size_t)len < sizeof(db_dir)) {
-                Database *db = database_new(db_dir);
-                if (db) {
-                    package_count = db->packages_count;
-                    database_free(db);
-                }
-            }
+    // Remove all TSI data (everything)
+    printf("Removing all TSI data...\n");
 
-            if (package_count > 0) {
-                printf("Removing installed packages (%zu package(s))...\n", package_count);
-            } else {
-                printf("Removing installed packages and binaries...\n");
-            }
-
-            // Remove the entire install directory which contains all binaries, libraries, etc.
-            char cmd[2048];
-            int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", install_dir);
-            if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
-                if (system(cmd) == 0) {
-                    printf("✓ Removed installed packages and binaries from: %s\n", install_dir);
-                } else {
-                    printf("⚠ Warning: Failed to remove install directory\n");
-                }
-            }
-        }
-    }
-
-    // Remove binary
-    char bin_path[1024];
-    len = snprintf(bin_path, sizeof(bin_path), "%s/bin/tsi", tsi_prefix);
-    if (len >= 0 && (size_t)len < sizeof(bin_path)) {
-        if (unlink(bin_path) == 0) {
-            printf("✓ Removed binary: %s\n", bin_path);
-        } else {
-            printf("⚠ Binary not found: %s\n", bin_path);
-        }
-    }
-
-    // Remove completion scripts
-    char completions_dir[1024];
-    len = snprintf(completions_dir, sizeof(completions_dir), "%s/share/completions", tsi_prefix);
-    if (len >= 0 && (size_t)len < sizeof(completions_dir)) {
-        char cmd[2048];
-        int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", completions_dir);
-        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
-            if (system(cmd) == 0) {
-                printf("✓ Removed completion scripts\n");
-            }
-        }
-    }
-
-    // Remove share directory if empty
-    char share_dir[1024];
-    len = snprintf(share_dir, sizeof(share_dir), "%s/share", tsi_prefix);
-    if (len >= 0 && (size_t)len < sizeof(share_dir)) {
-        char cmd[2048];
-        int cmd_len = snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", share_dir);
-        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
-            system(cmd);
-        }
-    }
-
-    // Remove bin directory if empty
-    char bin_dir[1024];
-    len = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", tsi_prefix);
-    if (len >= 0 && (size_t)len < sizeof(bin_dir)) {
-        char cmd[2048];
-        int cmd_len = snprintf(cmd, sizeof(cmd), "rmdir '%s' 2>/dev/null", bin_dir);
-        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
-            system(cmd);
-        }
-    }
-
-    if (remove_all) {
-        printf("\nRemoving all TSI data...\n");
-
-        // Remove all TSI directories
-        char cmd[2048];
-        int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
-        if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd) && system(cmd) == 0) {
-            printf("✓ Removed all TSI data: %s\n", tsi_prefix);
-        } else {
-            fprintf(stderr, "Error: Failed to remove TSI data\n");
-            return 1;
-        }
+    // Remove all TSI directories
+    char cmd[2048];
+    int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
+    if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd) && system(cmd) == 0) {
+        printf("✓ Removed all TSI data: %s\n", tsi_prefix);
     } else {
-        printf("\nTSI binary and completion scripts removed.\n");
-        printf("TSI data (packages, database, etc.) preserved at: %s\n", tsi_prefix);
-        printf("\nTo remove ALL data including packages, use: tsi uninstall --all\n");
+        fprintf(stderr, "Error: Failed to remove TSI data\n");
+        return 1;
     }
 
     printf("\n✓ TSI uninstalled successfully!\n");

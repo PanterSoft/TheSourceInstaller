@@ -179,7 +179,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
 
         uninstall)
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--all --prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
             fi
             return 0
             ;;
@@ -253,7 +253,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 COMPREPLY=($(compgen -d -- ${cur}))
                 return 0
             elif [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--all --prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
                 return 0
             fi
         fi

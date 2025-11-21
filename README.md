@@ -139,7 +139,7 @@ echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
 - **Option completion**:
   - `tsi install --<TAB>` - Shows `--force`, `--prefix`
   - `tsi update --<TAB>` - Shows `--repo`, `--local`, `--prefix`
-  - `tsi uninstall --<TAB>` - Shows `--all`, `--prefix`
+  - `tsi uninstall --<TAB>` - Shows `--prefix`
 - **Directory completion**:
   - `tsi install --prefix <TAB>` - Completes directory paths
   - `tsi update --local <TAB>` - Completes directory paths
@@ -177,9 +177,8 @@ tsi update                                    # Update from default TSI reposito
 tsi update --repo https://github.com/user/repo.git  # Update from custom repository
 tsi update --local /path/to/packages          # Update from local directory
 
-# Uninstall TSI
-tsi uninstall                                 # Remove TSI binary and completion scripts
-tsi uninstall --all                           # Remove TSI and all data (packages, database, etc.)
+# Uninstall TSI (removes everything including all data)
+tsi uninstall                                 # Remove TSI and all data (packages, database, etc.)
 tsi uninstall --prefix /opt/tsi              # Uninstall from custom location
 
 # List installed packages

@@ -47,7 +47,6 @@ _tsi() {
                     ;;
                 uninstall)
                     _arguments \
-                        "--all[Remove all TSI data]" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
                 list)
