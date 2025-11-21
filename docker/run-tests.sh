@@ -137,9 +137,10 @@ for scenario in "${SCENARIOS[@]}"; do
 
     # Clean up containers and volumes
     echo "Cleaning up containers and volumes..."
-    (docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1) || true
-    # Also remove any orphaned containers
-    (docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1) || true
+    set +e  # Disable exit on error for cleanup
+    docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1 || true
+    docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1 || true
+    set -e  # Re-enable exit on error
 done
 
 # Summary
