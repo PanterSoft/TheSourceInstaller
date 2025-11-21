@@ -1,0 +1,19 @@
+{
+  "name": "cmake-example",
+  "version": "2.0.0",
+  "description": "Example CMake-based package",
+  "source": {
+    "type": "tarball",
+    "url": "https://example.com/releases/cmake-example-2.0.0.tar.gz"
+  },
+  "dependencies": ["zlib"],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=ON"
+  ],
+  "make_args": ["-j4"],
+  "env": {}
+}
+

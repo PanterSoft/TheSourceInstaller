@@ -1,0 +1,20 @@
+{
+  "name": "example-package",
+  "version": "1.0.0",
+  "description": "An example package definition for TSI",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/example/example-package.git",
+    "branch": "main"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": [
+    "--enable-shared",
+    "--disable-static"
+  ],
+  "make_args": ["-j4"],
+  "env": {}
+}
+
