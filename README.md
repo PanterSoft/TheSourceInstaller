@@ -200,9 +200,7 @@ Packages are defined using JSON manifests. Here's an example:
     "url": "https://github.com/user/repo.git",
     "branch": "main"
   },
-  "dependencies": ["libfoo", "libbar"],
-  "dependencies": ["libfoo@1.0.0", "libbar@2.1.0"],  // With version constraints
-  "build_dependencies": ["cmake", "pkg-config"],
+  "dependencies": ["libfoo@1.0.0", "libbar"],  // Version constraints supported
   "build_dependencies": ["cmake@3.20.0", "pkg-config"],  // Mix of versioned and unversioned
   "build_system": "cmake",
   "cmake_args": ["-DBUILD_SHARED_LIBS=ON"],
