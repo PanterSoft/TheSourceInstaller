@@ -1,0 +1,21 @@
+{
+  "name": "git",
+  "version": "2.45.0",
+  "description": "Distributed version control system",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/git/git/releases/download/v2.45.0/git-2.45.0.tar.gz"
+  },
+  "dependencies": ["zlib", "openssl", "curl", "pcre2"],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [
+    "--with-openssl",
+    "--with-curl",
+    "--with-libpcre",
+    "--without-tcltk",
+    "--with-zlib"
+  ],
+  "env": {}
+}
+
