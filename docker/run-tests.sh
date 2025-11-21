@@ -58,7 +58,7 @@ run_test() {
     # Clean up any existing containers and volumes for this service
     echo "Cleaning up any existing containers..."
     docker compose rm -f -v "$service" >/dev/null 2>&1 || docker-compose rm -f -v "$service" >/dev/null 2>&1 || true
-    
+
     # Build the container (use cache for base image, but TSI will be fresh due to test script cleanup)
     echo "Building container (using cache for base image)..."
     if (docker compose build "$service" >/dev/null 2>&1 || docker-compose build "$service" >/dev/null 2>&1); then
@@ -85,7 +85,7 @@ run_test() {
         set -e
         return 1
     fi
-    
+
     # Run the test
     $DOCKER_COMPOSE_CMD run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1
     TEST_EXIT_CODE=$?
