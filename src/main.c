@@ -623,8 +623,83 @@ static int cmd_uninstall(int argc, char **argv) {
         }
     }
 
-    printf("Uninstalling TSI from: %s\n", tsi_prefix);
+    // Display warning and get confirmation
+    printf("⚠️  WARNING: This will uninstall TSI!\n");
     printf("\n");
+    printf("Uninstalling TSI from: %s\n", tsi_prefix);
+    if (remove_all) {
+        printf("This will remove:\n");
+        printf("  - TSI binary\n");
+        printf("  - Completion scripts\n");
+        printf("  - Installed packages and binaries\n");
+        printf("  - ALL TSI data (database, sources, builds, etc.)\n");
+    } else {
+        printf("This will remove:\n");
+        printf("  - TSI binary\n");
+        printf("  - Completion scripts\n");
+        printf("  - Installed packages and binaries\n");
+        printf("  - TSI data (database, sources, builds, etc.) will be preserved\n");
+    }
+    printf("\n");
+    printf("Are you sure you want to continue? (yes/no): ");
+    fflush(stdout);
+
+    // Read user confirmation
+    char response[16];
+    if (fgets(response, sizeof(response), stdin) == NULL) {
+        fprintf(stderr, "\nError: Failed to read input\n");
+        return 1;
+    }
+
+    // Remove trailing newline
+    size_t response_len = strlen(response);
+    if (response_len > 0 && response[response_len - 1] == '\n') {
+        response[response_len - 1] = '\0';
+    }
+
+    // Check if user confirmed
+    if (strcmp(response, "yes") != 0 && strcmp(response, "y") != 0) {
+        printf("Uninstall cancelled.\n");
+        return 0;
+    }
+
+    printf("\n");
+
+    // Remove installed packages/binaries
+    char install_dir[1024];
+    len = snprintf(install_dir, sizeof(install_dir), "%s/install", tsi_prefix);
+    if (len >= 0 && (size_t)len < sizeof(install_dir)) {
+        // Check if install directory exists
+        struct stat st;
+        if (stat(install_dir, &st) == 0) {
+            // Load database to get package count for display
+            char db_dir[1024];
+            len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
+            size_t package_count = 0;
+            if (len >= 0 && (size_t)len < sizeof(db_dir)) {
+                Database *db = database_new(db_dir);
+                if (db) {
+                    package_count = db->packages_count;
+                    database_free(db);
+                }
+            }
+
+            if (package_count > 0) {
+                printf("Removing installed packages (%zu package(s))...\n", package_count);
+            } else {
+                printf("Removing installed packages and binaries...\n");
+            }
+
+            // Remove the entire install directory which contains all binaries, libraries, etc.
+            char cmd[1024];
+            snprintf(cmd, sizeof(cmd), "rm -rf '%s'", install_dir);
+            if (system(cmd) == 0) {
+                printf("✓ Removed installed packages and binaries from: %s\n", install_dir);
+            } else {
+                printf("⚠ Warning: Failed to remove install directory\n");
+            }
+        }
+    }
 
     // Remove binary
     char bin_path[1024];
