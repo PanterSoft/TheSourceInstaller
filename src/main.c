@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include "package.h"
 #include "database.h"
 #include "resolver.h"
@@ -18,6 +19,7 @@ static void print_usage(const char *prog_name) {
     printf("  remove <package>                             Remove a package\n");
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
+    printf("  update [--repo URL] [--local PATH]           Update package repository\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
 }
@@ -382,6 +384,169 @@ static int cmd_info(int argc, char **argv) {
     return 0;
 }
 
+static int cmd_update(int argc, char **argv) {
+    const char *repo_url = NULL;
+    const char *local_path = NULL;
+    const char *prefix = NULL;
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--repo") == 0 && i + 1 < argc) {
+            repo_url = argv[++i];
+        } else if (strcmp(argv[i], "--local") == 0 && i + 1 < argc) {
+            local_path = argv[++i];
+        } else if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
+            prefix = argv[++i];
+        }
+    }
+
+    const char *home = getenv("HOME");
+    if (!home) home = "/root";
+
+    char tsi_prefix[1024];
+    int len;
+    if (prefix) {
+        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
+        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
+    } else {
+        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
+        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
+            fprintf(stderr, "Error: Path too long\n");
+            return 1;
+        }
+    }
+
+    char repo_dir[1024];
+    len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    if (len < 0 || (size_t)len >= sizeof(repo_dir)) {
+        fprintf(stderr, "Error: Path too long\n");
+        return 1;
+    }
+
+    // Create repo directory if it doesn't exist
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", repo_dir);
+    system(cmd);
+
+    printf("Updating package repository...\n");
+    printf("Repository directory: %s\n", repo_dir);
+
+    bool success = false;
+
+    // Update from local path
+    if (local_path) {
+        printf("Updating from local path: %s\n", local_path);
+        char copy_cmd[1024];
+        snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
+        if (system(copy_cmd) == 0) {
+            printf("✓ Packages copied from local path\n");
+            success = true;
+        } else {
+            fprintf(stderr, "Error: Failed to copy packages from local path\n");
+        }
+    }
+    // Update from git repository
+    else if (repo_url) {
+        printf("Updating from repository: %s\n", repo_url);
+        char temp_dir[1024];
+        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+
+        // Clone or update repository
+        char git_cmd[1024];
+        struct stat st;
+        if (stat(temp_dir, &st) == 0) {
+            // Update existing clone
+            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+        } else {
+            // Clone repository
+            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", repo_url, temp_dir);
+        }
+
+        if (system(git_cmd) == 0) {
+            // Copy package files
+            char packages_dir[1024];
+            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+
+            // Check if packages directory exists, otherwise try root
+            if (stat(packages_dir, &st) != 0) {
+                strncpy(packages_dir, temp_dir, sizeof(packages_dir) - 1);
+                packages_dir[sizeof(packages_dir) - 1] = '\0';
+            }
+
+            char copy_cmd[1024];
+            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (system(copy_cmd) == 0) {
+                printf("✓ Packages updated from repository\n");
+                success = true;
+            } else {
+                fprintf(stderr, "Error: Failed to copy packages from repository\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Failed to clone/update repository\n");
+        }
+    }
+    // Default: Update from TSI source repository
+    else {
+        const char *default_repo = "https://github.com/PanterSoft/tsi.git";
+        printf("Updating from default repository: %s\n", default_repo);
+
+        char temp_dir[1024];
+        snprintf(temp_dir, sizeof(temp_dir), "%s/tmp-repo-update", tsi_prefix);
+
+        // Clone or update repository
+        char git_cmd[1024];
+        struct stat st;
+        if (stat(temp_dir, &st) == 0) {
+            // Update existing clone
+            snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+        } else {
+            // Clone repository
+            snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", default_repo, temp_dir);
+        }
+
+        if (system(git_cmd) == 0) {
+            // Copy package files
+            char packages_dir[1024];
+            snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
+
+            char copy_cmd[1024];
+            snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
+            if (system(copy_cmd) == 0) {
+                printf("✓ Packages updated from default repository\n");
+                success = true;
+            } else {
+                fprintf(stderr, "Error: Failed to copy packages from repository\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Failed to clone/update repository\n");
+            fprintf(stderr, "Hint: Make sure git is installed and you have internet access\n");
+        }
+    }
+
+    if (success) {
+        // Count updated packages
+        DIR *dir = opendir(repo_dir);
+        int count = 0;
+        if (dir) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] != '.' && strstr(entry->d_name, ".json")) {
+                    count++;
+                }
+            }
+            closedir(dir);
+        }
+        printf("\nRepository updated successfully!\n");
+        printf("Total packages available: %d\n", count);
+        printf("\nUse 'tsi info <package>' to see package details\n");
+    } else {
+        fprintf(stderr, "\nFailed to update repository\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -423,6 +588,8 @@ int main(int argc, char **argv) {
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {
         return cmd_info(argc - 1, argv + 1);
+    } else if (strcmp(argv[1], "update") == 0) {
+        return cmd_update(argc - 1, argv + 1);
     } else {
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
         print_usage(argv[0]);

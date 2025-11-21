@@ -139,17 +139,18 @@ tsi list
 # Show package information
 tsi info <package-name>
 
-# Search for packages
-tsi search <query>
-
 # Remove a package
 tsi remove <package-name>
 
-# Update a package
-tsi update <package-name>
+# Update package repository
+tsi update                                    # Update from default TSI repository
+tsi update --repo https://github.com/user/repo.git  # Update from custom repository
+tsi update --local /path/to/packages          # Update from local directory
+tsi update --repo https://github.com/user/repo.git
+tsi update --local /path/to/packages
 
-# Build without installing
-tsi build <package-name>
+# List available packages
+tsi list
 ```
 
 ## Package Manifest Format

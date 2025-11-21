@@ -1,0 +1,17 @@
+{
+  "name": "libffi",
+  "version": "3.4.6",
+  "description": "Foreign Function Interface library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": [
+    "--enable-static",
+    "--enable-shared"
+  ]
+}
+

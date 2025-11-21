@@ -1,0 +1,15 @@
+{
+  "name": "libtool",
+  "version": "2.4.7",
+  "description": "GNU Libtool - Generic library support script",
+  "source": {
+    "type": "tarball",
+    "url": "https://ftp.gnu.org/gnu/libtool/libtool-2.4.7.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": []
+  "env": {}
+}
+

@@ -17,6 +17,7 @@ _tsi() {
                 "uninstall:Remove a package (alias)"
                 "list:List installed packages"
                 "info:Show package information"
+                "update:Update package repository"
                 "--help:Show help"
                 "--version:Show version"
             )
@@ -37,6 +38,12 @@ _tsi() {
                 info)
                     _arguments \
                         "*:package:->packages"
+                    ;;
+                update)
+                    _arguments \
+                        "--repo[Repository URL]:url:_urls" \
+                        "--local[Local path]:directory:_files -/" \
+                        "--prefix[Installation prefix]:directory:_files -/"
                     ;;
             esac
             ;;
