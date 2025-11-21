@@ -44,6 +44,73 @@ void database_free(Database *db) {
     free(db);
 }
 
+// Simple helper to skip whitespace
+static void skip_whitespace(FILE *f) {
+    int c;
+    while ((c = fgetc(f)) != EOF && (c == ' ' || c == '\t' || c == '\n' || c == '\r')) {
+        // Skip
+    }
+    if (c != EOF) ungetc(c, f);
+}
+
+// Simple helper to read a quoted string
+static char* read_quoted_string(FILE *f) {
+    skip_whitespace(f);
+    if (fgetc(f) != '"') return NULL;
+
+    char *str = NULL;
+    size_t len = 0;
+    size_t capacity = 32;
+    str = malloc(capacity);
+    if (!str) return NULL;
+
+    int c;
+    while ((c = fgetc(f)) != EOF && c != '"') {
+        if (c == '\\') {
+            c = fgetc(f);
+            if (c == EOF) break;
+        }
+        if (len + 1 >= capacity) {
+            capacity *= 2;
+            str = realloc(str, capacity);
+            if (!str) return NULL;
+        }
+        str[len++] = c;
+    }
+    str[len] = '\0';
+    return str;
+}
+
+// Simple helper to extract quoted string value from a line
+static char* extract_string_value(const char *line, const char *key) {
+    char pattern[256];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    char *pos = strstr(line, pattern);
+    if (!pos) return NULL;
+
+    pos = strchr(pos, ':');
+    if (!pos) return NULL;
+    pos++; // Skip ':'
+
+    // Skip whitespace
+    while (*pos == ' ' || *pos == '\t') pos++;
+
+    // Find opening quote
+    if (*pos != '"') return NULL;
+    pos++;
+
+    // Find end of string
+    char *end = strchr(pos, '"');
+    if (!end) return NULL;
+
+    size_t len = end - pos;
+    char *result = malloc(len + 1);
+    if (!result) return NULL;
+    strncpy(result, pos, len);
+    result[len] = '\0';
+    return result;
+}
+
 bool database_load(Database *db) {
     FILE *f = fopen(db->db_path, "r");
     if (!f) {
@@ -52,21 +119,117 @@ bool database_load(Database *db) {
         return true; // No database yet is OK
     }
 
-    // Simple JSON parsing for installed packages
-    // For now, just check if file exists and is valid JSON
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    db->packages_count = 0;
+    db->packages = NULL;
 
-    if (size == 0) {
-        fclose(f);
-        db->packages_count = 0;
-        db->packages = NULL;
-        return true;
+    // Simple JSON parsing - read line by line
+    char line[2048];
+    bool in_installed = false;
+    InstalledPackage *current_pkg = NULL;
+
+    while (fgets(line, sizeof(line), f)) {
+        // Check if we're in the installed array
+        if (strstr(line, "\"installed\"")) {
+            in_installed = true;
+            continue;
+        }
+
+        if (!in_installed) continue;
+
+        // Start of package object
+        if (strstr(line, "{") && !current_pkg) {
+            db->packages = realloc(db->packages, sizeof(InstalledPackage) * (db->packages_count + 1));
+            current_pkg = &db->packages[db->packages_count];
+            current_pkg->name = NULL;
+            current_pkg->version = NULL;
+            current_pkg->install_path = NULL;
+            current_pkg->installed_at = 0;
+            current_pkg->dependencies = NULL;
+            current_pkg->dependencies_count = 0;
+            continue;
+        }
+
+        // End of package object
+        if (strstr(line, "}") && current_pkg) {
+            db->packages_count++;
+            current_pkg = NULL;
+            continue;
+        }
+
+        // End of installed array
+        if (strstr(line, "]")) {
+            break;
+        }
+
+        if (current_pkg) {
+            // Parse fields
+            char *value;
+            if ((value = extract_string_value(line, "name"))) {
+                current_pkg->name = value;
+            } else if ((value = extract_string_value(line, "version"))) {
+                current_pkg->version = value;
+            } else if ((value = extract_string_value(line, "install_path"))) {
+                current_pkg->install_path = value;
+            } else if (strstr(line, "\"installed_at\"")) {
+                // Parse timestamp
+                char *p = strstr(line, ":");
+                if (p) {
+                    // Skip whitespace after colon
+                    p++;
+                    while (*p == ' ' || *p == '\t') p++;
+                    current_pkg->installed_at = (time_t)strtol(p, NULL, 10);
+                }
+            } else if (strstr(line, "\"dependencies\"")) {
+                // Parse dependencies array - simple extraction
+                char *start = strstr(line, "[");
+                if (start) {
+                    start++; // Skip '['
+                    char *end = strstr(start, "]");
+                    if (end) {
+                        *end = '\0'; // Terminate at ']'
+
+                        // Count dependencies
+                        size_t deps_capacity = 8;
+                        current_pkg->dependencies = malloc(sizeof(char*) * deps_capacity);
+                        current_pkg->dependencies_count = 0;
+
+                        // Parse comma-separated quoted strings
+                        char *p = start;
+                        while (*p) {
+                            // Skip whitespace and commas
+                            while (*p == ' ' || *p == '\t' || *p == ',') p++;
+                            if (!*p) break;
+
+                            // Find quoted string
+                            if (*p == '"') {
+                                p++; // Skip opening quote
+                                char *dep_start = p;
+                                while (*p && *p != '"') p++;
+                                if (*p == '"') {
+                                    size_t len = p - dep_start;
+                                    char *dep = malloc(len + 1);
+                                    if (dep) {
+                                        strncpy(dep, dep_start, len);
+                                        dep[len] = '\0';
+
+                                        if (current_pkg->dependencies_count >= deps_capacity) {
+                                            deps_capacity *= 2;
+                                            current_pkg->dependencies = realloc(current_pkg->dependencies, sizeof(char*) * deps_capacity);
+                                        }
+                                        current_pkg->dependencies[current_pkg->dependencies_count++] = dep;
+                                    }
+                                    p++; // Skip closing quote
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    // TODO: Implement proper JSON parsing
-    // For now, just mark as loaded
     fclose(f);
     return true;
 }

@@ -35,6 +35,6 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Temporary files
-src/build/*
-src/bin/*
+# Build artifacts
+src/build/
+src/bin/

@@ -101,12 +101,26 @@ static int cmd_install(int argc, char **argv) {
     printf("Installing package: %s\n", package_name);
 
     // Check if already installed
-    if (!force && database_is_installed(db, package_name)) {
-        printf("Package %s is already installed. Use --force to reinstall.\n", package_name);
-        resolver_free(resolver);
-        repository_free(repo);
-        database_free(db);
-        return 0;
+    if (!force) {
+        InstalledPackage *installed_pkg = database_get_package(db, package_name);
+        if (installed_pkg) {
+            printf("Package %s is already installed:\n", package_name);
+            printf("  Version: %s\n", installed_pkg->version ? installed_pkg->version : "unknown");
+            printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+            if (installed_pkg->dependencies_count > 0) {
+                printf("  Dependencies: ");
+                for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
+                    printf("%s", installed_pkg->dependencies[i]);
+                    if (i < installed_pkg->dependencies_count - 1) printf(", ");
+                }
+                printf("\n");
+            }
+            printf("\nUse --force to reinstall.\n");
+            resolver_free(resolver);
+            repository_free(repo);
+            database_free(db);
+            return 0;
+        }
     }
 
     // Get installed packages list
