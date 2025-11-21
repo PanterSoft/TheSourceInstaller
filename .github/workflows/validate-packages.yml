@@ -286,19 +286,19 @@ jobs:
       - name: Test installing packages
         run: |
           cd docker
-          
+
           # Determine docker compose command
           DOCKER_COMPOSE_CMD="docker compose"
           if ! docker compose version >/dev/null 2>&1; then
             DOCKER_COMPOSE_CMD="docker-compose"
           fi
-          
+
           # Test installing a simple package (zlib - has no dependencies)
           echo "Testing installation of zlib (no dependencies)..."
           $DOCKER_COMPOSE_CMD run --rm --no-deps alpine-c-only sh -c "
             # Clean up any previous TSI installations
             rm -rf /root/.tsi /root/.tsi-test /tmp/tsi-build
-            
+
             # Build TSI
             BUILD_DIR=/tmp/tsi-build
             mkdir -p \$BUILD_DIR
@@ -306,28 +306,28 @@ jobs:
             cd \$BUILD_DIR
             make clean || true
             make
-            
+
             # Install TSI
             mkdir -p /root/.tsi/bin /root/.tsi/repos
             cp bin/tsi /root/.tsi/bin/
             cp -r /root/tsi-source/packages/*.json /root/.tsi/repos/
             export PATH=\"/root/.tsi/bin:\$PATH\"
-            
+
             # Test info command
             echo 'Testing tsi info zlib...'
             tsi info zlib || exit 1
-            
+
             # Test installation (this will actually build, so we'll just test the resolve step)
             echo 'Testing dependency resolution for zlib...'
             tsi install zlib --force 2>&1 | head -20 || echo 'Install test completed (may have build errors, but resolution worked)'
           "
-          
+
           # Test installing a package with dependencies (curl depends on openssl and zlib)
           echo "Testing installation of curl (has dependencies)..."
           $DOCKER_COMPOSE_CMD run --rm --no-deps alpine-c-only sh -c "
             # Clean up any previous TSI installations
             rm -rf /root/.tsi /root/.tsi-test /tmp/tsi-build
-            
+
             # Build TSI
             BUILD_DIR=/tmp/tsi-build
             mkdir -p \$BUILD_DIR
@@ -335,17 +335,17 @@ jobs:
             cd \$BUILD_DIR
             make clean || true
             make
-            
+
             # Install TSI
             mkdir -p /root/.tsi/bin /root/.tsi/repos
             cp bin/tsi /root/.tsi/bin/
             cp -r /root/tsi-source/packages/*.json /root/.tsi/repos/
             export PATH=\"/root/.tsi/bin:\$PATH\"
-            
+
             # Test info command
             echo 'Testing tsi info curl...'
             tsi info curl || exit 1
-            
+
             # Test dependency resolution (this should resolve openssl and zlib)
             echo 'Testing dependency resolution for curl...'
             tsi install curl --force 2>&1 | head -30 || echo 'Dependency resolution test completed'
