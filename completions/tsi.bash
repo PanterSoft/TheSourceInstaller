@@ -10,7 +10,7 @@ _tsi() {
     cword=$COMP_CWORD
 
     # Commands
-    local commands="install remove uninstall list info update --help --version -h -v"
+    local commands="install remove list info update uninstall --help --version -h -v"
 
     # Options for install command
     if [[ ${prev} == "install" ]]; then
@@ -52,6 +52,14 @@ _tsi() {
     if [[ ${prev} == "update" ]]; then
         if [[ ${cur} == -* ]]; then
             COMPREPLY=($(compgen -W "--repo --local --prefix" -- ${cur}))
+        fi
+        return 0
+    fi
+
+    # Options for uninstall command
+    if [[ ${prev} == "uninstall" ]]; then
+        if [[ ${cur} == -* ]]; then
+            COMPREPLY=($(compgen -W "--all --prefix" -- ${cur}))
         fi
         return 0
     fi

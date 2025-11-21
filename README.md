@@ -55,6 +55,16 @@ The installer will automatically:
 PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
+**Repair/Update existing installation:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+```
+
+This will rebuild and reinstall TSI, useful for:
+- Fixing broken installations
+- Updating to the latest version
+- Rebuilding after system changes
+
 After installation, add to your PATH:
 ```bash
 export PATH="$HOME/.tsi/bin:$PATH"
@@ -146,10 +156,13 @@ tsi remove <package-name>
 tsi update                                    # Update from default TSI repository
 tsi update --repo https://github.com/user/repo.git  # Update from custom repository
 tsi update --local /path/to/packages          # Update from local directory
-tsi update --repo https://github.com/user/repo.git
-tsi update --local /path/to/packages
 
-# List available packages
+# Uninstall TSI
+tsi uninstall                                 # Remove TSI binary and completion scripts
+tsi uninstall --all                           # Remove TSI and all data (packages, database, etc.)
+tsi uninstall --prefix /opt/tsi              # Uninstall from custom location
+
+# List installed packages
 tsi list
 ```
 

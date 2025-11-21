@@ -14,7 +14,7 @@ _tsi() {
             local commands=(
                 "install:Install a package"
                 "remove:Remove a package"
-                "uninstall:Remove a package (alias)"
+                "uninstall:Uninstall TSI"
                 "list:List installed packages"
                 "info:Show package information"
                 "update:Update package repository"
@@ -43,6 +43,11 @@ _tsi() {
                     _arguments \
                         "--repo[Repository URL]:url:_urls" \
                         "--local[Local path]:directory:_files -/" \
+                        "--prefix[Installation prefix]:directory:_files -/"
+                    ;;
+                uninstall)
+                    _arguments \
+                        "--all[Remove all TSI data]" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
             esac

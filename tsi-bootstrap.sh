@@ -9,6 +9,7 @@ PREFIX="${PREFIX:-$HOME/.tsi}"
 TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
+REPAIR_MODE=false
 
 log_info() {
     echo "[INFO] $*"
@@ -39,10 +40,92 @@ download_tarball() {
     fi
 }
 
+check_tsi_installed() {
+    local tsi_bin="$PREFIX/bin/tsi"
+    if [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ]; then
+        # Try to run tsi --version
+        if "$tsi_bin" --version >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+check_tsi_outdated() {
+    local tsi_bin="$PREFIX/bin/tsi"
+    if [ -f "$tsi_bin" ]; then
+        # Check if binary is older than 7 days (simple heuristic)
+        if [ -n "$(find "$tsi_bin" -mtime +7 2>/dev/null)" ]; then
+            return 0
+        fi
+        # Or check if source is newer
+        if [ -d "$INSTALL_DIR/tsi" ] && [ "$INSTALL_DIR/tsi/src/main.c" -nt "$tsi_bin" ] 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 main() {
-    log_info "TSI One-Line Bootstrap Installer"
-    log_info "=================================="
-    log_info ""
+    # Parse command line arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --repair)
+                REPAIR_MODE=true
+                shift
+                ;;
+            --prefix)
+                PREFIX="$2"
+                shift 2
+                ;;
+            --help|-h)
+                echo "TSI Bootstrap Installer"
+                echo ""
+                echo "Usage: $0 [options]"
+                echo ""
+                echo "Options:"
+                echo "  --repair          Repair/update existing TSI installation"
+                echo "  --prefix PATH     Installation prefix (default: \$HOME/.tsi)"
+                echo "  --help, -h        Show this help"
+                echo ""
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+    if [ "$REPAIR_MODE" = true ]; then
+        log_info "TSI Repair/Update Mode"
+        log_info "======================"
+        log_info ""
+
+        if check_tsi_installed; then
+            log_info "TSI is installed at: $PREFIX/bin/tsi"
+            if check_tsi_outdated; then
+                log_info "TSI appears to be outdated, will rebuild..."
+            else
+                log_info "TSI installation found, will rebuild to repair..."
+            fi
+        else
+            log_info "TSI binary not found or broken, will install..."
+        fi
+        log_info ""
+    else
+        log_info "TSI One-Line Bootstrap Installer"
+        log_info "=================================="
+        log_info ""
+
+        # Check if already installed
+        if check_tsi_installed; then
+            log_warn "TSI is already installed at: $PREFIX/bin/tsi"
+            log_warn "Use --repair to update or repair the installation"
+            log_warn "Continuing with fresh installation..."
+            log_info ""
+        fi
+    fi
 
     # Check for C compiler
     CC=""
