@@ -145,12 +145,37 @@ static int cmd_install(int argc, char **argv) {
     }
 
     // First verify package exists before proceeding
-    // Check if version string is incomplete (ends with dot or is empty after @)
+    // Check if version string is incomplete (ends with dot, is empty, or doesn't match any exact version)
     bool incomplete_version = false;
     if (package_version) {
         size_t version_len = strlen(package_version);
         if (version_len == 0 || package_version[version_len - 1] == '.') {
             incomplete_version = true;
+        } else {
+            // Check if it's a prefix (doesn't match any exact version but might match some)
+            Package *exact_match = repository_get_package_version(repo, package_name, package_version);
+            if (!exact_match) {
+                // Not an exact match - check if any versions start with this prefix
+                size_t versions_count = 0;
+                char **versions = repository_list_versions(repo, package_name, &versions_count);
+                if (versions && versions_count > 0) {
+                    bool has_prefix_match = false;
+                    for (size_t i = 0; i < versions_count; i++) {
+                        if (strncmp(versions[i], package_version, strlen(package_version)) == 0) {
+                            has_prefix_match = true;
+                            break;
+                        }
+                    }
+                    if (has_prefix_match) {
+                        incomplete_version = true;
+                    }
+                    // Free versions array
+                    for (size_t i = 0; i < versions_count; i++) {
+                        free(versions[i]);
+                    }
+                    free(versions);
+                }
+            }
         }
     }
 
@@ -174,13 +199,29 @@ static int cmd_install(int argc, char **argv) {
                 size_t versions_count = 0;
                 char **versions = repository_list_versions(repo, package_name, &versions_count);
                 if (versions && versions_count > 0) {
+                    // Remove duplicates from versions list
+                    size_t unique_count = 0;
+                    char **unique_versions = malloc(sizeof(char*) * versions_count);
+                    for (size_t i = 0; i < versions_count; i++) {
+                        bool is_duplicate = false;
+                        for (size_t j = 0; j < unique_count; j++) {
+                            if (strcmp(versions[i], unique_versions[j]) == 0) {
+                                is_duplicate = true;
+                                break;
+                            }
+                        }
+                        if (!is_duplicate) {
+                            unique_versions[unique_count++] = strdup(versions[i]);
+                        }
+                    }
+
                     if (incomplete_version) {
                         // Show versions that match the prefix first
                         bool found_match = false;
                         fprintf(stderr, "\nVersions matching '%s*':\n", package_version);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            if (strncmp(versions[i], package_version, strlen(package_version)) == 0) {
-                                fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            if (strncmp(unique_versions[i], package_version, strlen(package_version)) == 0) {
+                                fprintf(stderr, "  - %s@%s\n", package_name, unique_versions[i]);
                                 found_match = true;
                             }
                         }
@@ -188,19 +229,25 @@ static int cmd_install(int argc, char **argv) {
                             fprintf(stderr, "  (no versions match '%s*')\n", package_version);
                         }
                         fprintf(stderr, "\nAll available versions for '%s':\n", package_name);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
-                            free(versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", package_name, unique_versions[i]);
                         }
-                        free(versions);
                     } else {
                         fprintf(stderr, "\nAvailable versions for '%s':\n", package_name);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            fprintf(stderr, "  - %s@%s\n", package_name, versions[i]);
-                            free(versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", package_name, unique_versions[i]);
                         }
-                        free(versions);
                     }
+
+                    // Free both arrays
+                    for (size_t i = 0; i < unique_count; i++) {
+                        free(unique_versions[i]);
+                    }
+                    free(unique_versions);
+                    for (size_t i = 0; i < versions_count; i++) {
+                        free(versions[i]);
+                    }
+                    free(versions);
                 }
             } else {
                 // Package doesn't exist at all
@@ -630,12 +677,37 @@ static int cmd_info(int argc, char **argv) {
         }
     }
 
-    // Check if version string is incomplete (ends with dot or is empty after @)
+    // Check if version string is incomplete (ends with dot, is empty, or doesn't match any exact version)
     bool incomplete_version = false;
     if (version) {
         size_t version_len = strlen(version);
         if (version_len == 0 || version[version_len - 1] == '.') {
             incomplete_version = true;
+        } else {
+            // Check if it's a prefix (doesn't match any exact version but might match some)
+            Package *exact_match = repository_get_package_version(repo, actual_name, version);
+            if (!exact_match) {
+                // Not an exact match - check if any versions start with this prefix
+                size_t versions_count = 0;
+                char **versions = repository_list_versions(repo, actual_name, &versions_count);
+                if (versions && versions_count > 0) {
+                    bool has_prefix_match = false;
+                    for (size_t i = 0; i < versions_count; i++) {
+                        if (strncmp(versions[i], version, strlen(version)) == 0) {
+                            has_prefix_match = true;
+                            break;
+                        }
+                    }
+                    if (has_prefix_match) {
+                        incomplete_version = true;
+                    }
+                    // Free versions array
+                    for (size_t i = 0; i < versions_count; i++) {
+                        free(versions[i]);
+                    }
+                    free(versions);
+                }
+            }
         }
     }
 
@@ -659,13 +731,29 @@ static int cmd_info(int argc, char **argv) {
                 size_t versions_count = 0;
                 char **versions = repository_list_versions(repo, actual_name, &versions_count);
                 if (versions && versions_count > 0) {
+                    // Remove duplicates from versions list
+                    size_t unique_count = 0;
+                    char **unique_versions = malloc(sizeof(char*) * versions_count);
+                    for (size_t i = 0; i < versions_count; i++) {
+                        bool is_duplicate = false;
+                        for (size_t j = 0; j < unique_count; j++) {
+                            if (strcmp(versions[i], unique_versions[j]) == 0) {
+                                is_duplicate = true;
+                                break;
+                            }
+                        }
+                        if (!is_duplicate) {
+                            unique_versions[unique_count++] = strdup(versions[i]);
+                        }
+                    }
+
                     if (incomplete_version) {
                         // Show versions that match the prefix first
                         bool found_match = false;
                         fprintf(stderr, "\nVersions matching '%s*':\n", version);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            if (strncmp(versions[i], version, strlen(version)) == 0) {
-                                fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            if (strncmp(unique_versions[i], version, strlen(version)) == 0) {
+                                fprintf(stderr, "  - %s@%s\n", actual_name, unique_versions[i]);
                                 found_match = true;
                             }
                         }
@@ -673,19 +761,25 @@ static int cmd_info(int argc, char **argv) {
                             fprintf(stderr, "  (no versions match '%s*')\n", version);
                         }
                         fprintf(stderr, "\nAll available versions for '%s':\n", actual_name);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
-                            free(versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", actual_name, unique_versions[i]);
                         }
-                        free(versions);
                     } else {
                         fprintf(stderr, "\nAvailable versions for '%s':\n", actual_name);
-                        for (size_t i = 0; i < versions_count; i++) {
-                            fprintf(stderr, "  - %s@%s\n", actual_name, versions[i]);
-                            free(versions[i]);
+                        for (size_t i = 0; i < unique_count; i++) {
+                            fprintf(stderr, "  - %s@%s\n", actual_name, unique_versions[i]);
                         }
-                        free(versions);
                     }
+
+                    // Free both arrays
+                    for (size_t i = 0; i < unique_count; i++) {
+                        free(unique_versions[i]);
+                    }
+                    free(unique_versions);
+                    for (size_t i = 0; i < versions_count; i++) {
+                        free(versions[i]);
+                    }
+                    free(versions);
                 }
             } else {
                 fprintf(stderr, "Package '%s' not found in repository.\n", actual_name);
