@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #include "package.h"
 #include "database.h"
 #include "resolver.h"
@@ -19,7 +22,7 @@ static void print_usage(const char *prog_name) {
     printf("  remove <package>                             Remove an installed package\n");
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
-    printf("  update [--repo URL] [--local PATH]           Update package repository\n");
+    printf("  update [--repo URL] [--local PATH]           Update package repository and TSI\n");
     printf("  uninstall [--all] [--prefix PATH]            Uninstall TSI\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
@@ -933,6 +936,241 @@ static int cmd_update(int argc, char **argv) {
         fprintf(stderr, "\nFailed to update repository\n");
         return 1;
     }
+
+    // Check for TSI self-update
+    printf("\nChecking for TSI updates...\n");
+
+    // Check common TSI source locations (in order of preference)
+    char tsi_source_paths[][1024] = {
+        {0}, // $INSTALL_DIR/tsi (if set)
+        {0}, // $HOME/tsi-install/tsi (default bootstrap location)
+        {0}  // Development mode: find git repo from executable path
+    };
+
+    int path_count = 0;
+
+    // Check $INSTALL_DIR/tsi (from environment)
+    const char *install_dir = getenv("INSTALL_DIR");
+    if (install_dir && install_dir[0] != '\0') {
+        snprintf(tsi_source_paths[path_count], sizeof(tsi_source_paths[path_count]), "%s/tsi", install_dir);
+        path_count++;
+    }
+
+    // Check $HOME/tsi-install/tsi (default bootstrap location)
+    snprintf(tsi_source_paths[path_count], sizeof(tsi_source_paths[path_count]), "%s/tsi-install/tsi", home);
+    path_count++;
+
+    // Check if we're running from a git repo (development mode)
+    char current_exe[1024] = {0};
+    ssize_t exe_len = -1;
+#ifdef __linux__
+    exe_len = readlink("/proc/self/exe", current_exe, sizeof(current_exe) - 1);
+    if (exe_len > 0) {
+        current_exe[exe_len] = '\0';
+    }
+#elif defined(__APPLE__)
+    uint32_t size = sizeof(current_exe);
+    if (_NSGetExecutablePath(current_exe, &size) == 0) {
+        exe_len = strlen(current_exe);
+    }
+#endif
+    if (exe_len > 0) {
+        // Try to find git repo in parent directories
+        char check_path[1024];
+        strncpy(check_path, current_exe, sizeof(check_path) - 1);
+        check_path[sizeof(check_path) - 1] = '\0';
+        for (int i = 0; i < 5; i++) {
+            char *last_slash = strrchr(check_path, '/');
+            if (last_slash) {
+                *last_slash = '\0';
+                char git_path[1024];
+                snprintf(git_path, sizeof(git_path), "%s/.git", check_path);
+                struct stat st;
+                if (stat(git_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+                    // Verify it has src/Makefile (it's the TSI repo)
+                    char makefile_path[1024];
+                    snprintf(makefile_path, sizeof(makefile_path), "%s/src/Makefile", check_path);
+                    if (stat(makefile_path, &st) == 0) {
+                        strncpy(tsi_source_paths[path_count], check_path, sizeof(tsi_source_paths[path_count]) - 1);
+                        path_count++;
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Find TSI source directory
+    char *tsi_source_dir = NULL;
+    for (int i = 0; i < path_count; i++) {
+        if (tsi_source_paths[i][0] == '\0') continue;
+
+        char src_makefile[1024];
+        snprintf(src_makefile, sizeof(src_makefile), "%s/src/Makefile", tsi_source_paths[i]);
+        struct stat st;
+        if (stat(src_makefile, &st) == 0) {
+            tsi_source_dir = tsi_source_paths[i];
+            break;
+        }
+    }
+
+    if (!tsi_source_dir) {
+        printf("TSI source not found. Skipping self-update check.\n");
+        printf("(TSI was likely installed from a tarball or binary)\n");
+        return 0;
+    }
+
+    printf("Found TSI source at: %s\n", tsi_source_dir);
+
+    // Check if it's a git repository
+    char git_dir[1024];
+    snprintf(git_dir, sizeof(git_dir), "%s/.git", tsi_source_dir);
+    struct stat st;
+    bool is_git_repo = (stat(git_dir, &st) == 0 && S_ISDIR(st.st_mode));
+
+    if (!is_git_repo) {
+        printf("TSI source is not a git repository. Skipping update check.\n");
+        return 0;
+    }
+
+    // Check for updates
+    char fetch_cmd[2048];
+    snprintf(fetch_cmd, sizeof(fetch_cmd), "cd '%s' && git fetch origin main 2>&1", tsi_source_dir);
+    FILE *fetch_pipe = popen(fetch_cmd, "r");
+    if (!fetch_pipe) {
+        printf("Warning: Could not check for TSI updates (git fetch failed)\n");
+        return 0;
+    }
+
+    // Read output (discard it, we just need the exit code)
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), fetch_pipe) != NULL) {
+        // Discard output
+    }
+    int fetch_status = pclose(fetch_pipe);
+
+    if (fetch_status != 0) {
+        printf("Warning: Could not check for TSI updates (git not available or network error)\n");
+        return 0;
+    }
+
+    // Compare local and remote commits
+    char local_commit_cmd[2048];
+    snprintf(local_commit_cmd, sizeof(local_commit_cmd), "cd '%s' && git rev-parse HEAD 2>/dev/null", tsi_source_dir);
+    FILE *local_pipe = popen(local_commit_cmd, "r");
+    char local_commit[64] = {0};
+    if (local_pipe) {
+        if (fgets(local_commit, sizeof(local_commit), local_pipe)) {
+            // Remove newline
+            size_t len = strlen(local_commit);
+            if (len > 0 && local_commit[len - 1] == '\n') {
+                local_commit[len - 1] = '\0';
+            }
+        }
+        pclose(local_pipe);
+    }
+
+    char remote_commit_cmd[2048];
+    snprintf(remote_commit_cmd, sizeof(remote_commit_cmd), "cd '%s' && git rev-parse origin/main 2>/dev/null", tsi_source_dir);
+    FILE *remote_pipe = popen(remote_commit_cmd, "r");
+    char remote_commit[64] = {0};
+    if (remote_pipe) {
+        if (fgets(remote_commit, sizeof(remote_commit), remote_pipe)) {
+            // Remove newline
+            size_t len = strlen(remote_commit);
+            if (len > 0 && remote_commit[len - 1] == '\n') {
+                remote_commit[len - 1] = '\0';
+            }
+        }
+        pclose(remote_pipe);
+    }
+
+    if (local_commit[0] == '\0' || remote_commit[0] == '\0') {
+        printf("Could not determine TSI version. Skipping update check.\n");
+        return 0;
+    }
+
+    if (strcmp(local_commit, remote_commit) == 0) {
+        printf("TSI is up to date.\n");
+        return 0;
+    }
+
+    // Updates available!
+    printf("\n");
+    printf("═══════════════════════════════════════════════════════════\n");
+    printf("TSI update available!\n");
+    printf("═══════════════════════════════════════════════════════════\n");
+    printf("Current version: %s\n", local_commit);
+    printf("Latest version:  %s\n", remote_commit);
+    printf("\n");
+    printf("Would you like to update TSI now? (y/N): ");
+    fflush(stdout);
+
+    char response[16];
+    if (fgets(response, sizeof(response), stdin) == NULL) {
+        printf("\nUpdate cancelled.\n");
+        return 0;
+    }
+
+    // Remove newline
+    size_t response_len = strlen(response);
+    if (response_len > 0 && response[response_len - 1] == '\n') {
+        response[response_len - 1] = '\0';
+    }
+
+    if (response[0] != 'y' && response[0] != 'Y') {
+        printf("Update cancelled.\n");
+        return 0;
+    }
+
+    printf("\nUpdating TSI...\n");
+
+    // Pull latest changes
+    char pull_cmd[2048];
+    snprintf(pull_cmd, sizeof(pull_cmd), "cd '%s' && git pull origin main 2>&1", tsi_source_dir);
+    printf("Pulling latest changes...\n");
+    if (system(pull_cmd) != 0) {
+        fprintf(stderr, "Error: Failed to pull TSI updates\n");
+        return 1;
+    }
+
+    // Build TSI
+    printf("Building TSI...\n");
+    char build_cmd[2048];
+    snprintf(build_cmd, sizeof(build_cmd), "cd '%s/src' && make clean && make 2>&1", tsi_source_dir);
+    if (system(build_cmd) != 0) {
+        fprintf(stderr, "Error: Failed to build TSI\n");
+        return 1;
+    }
+
+    // Check if binary was created
+    char binary_path[1024];
+    snprintf(binary_path, sizeof(binary_path), "%s/src/bin/tsi", tsi_source_dir);
+    if (stat(binary_path, &st) != 0) {
+        fprintf(stderr, "Error: TSI binary not found after build\n");
+        return 1;
+    }
+
+    // Install TSI
+    printf("Installing TSI...\n");
+    char install_cmd[2048];
+    snprintf(install_cmd, sizeof(install_cmd), "mkdir -p '%s/bin' && cp '%s' '%s/bin/tsi' && chmod +x '%s/bin/tsi'",
+             tsi_prefix, binary_path, tsi_prefix, tsi_prefix);
+    if (system(install_cmd) != 0) {
+        fprintf(stderr, "Error: Failed to install TSI\n");
+        return 1;
+    }
+
+    printf("\n");
+    printf("═══════════════════════════════════════════════════════════\n");
+    printf("✓ TSI updated successfully!\n");
+    printf("═══════════════════════════════════════════════════════════\n");
+    printf("\n");
+    printf("New version: %s\n", remote_commit);
+    printf("TSI binary: %s/bin/tsi\n", tsi_prefix);
+    printf("\n");
 
     return 0;
 }
