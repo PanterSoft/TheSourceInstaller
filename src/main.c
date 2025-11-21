@@ -128,6 +128,22 @@ static int cmd_install(int argc, char **argv) {
         return 1;
     }
 
+    // Check if repository is empty and suggest update
+    if (repo->packages_count == 0) {
+        fprintf(stderr, "Error: No packages found in repository.\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "The package repository is empty. Run 'tsi update' to download packages.\n");
+        fprintf(stderr, "\n");
+        resolver_free(resolver);
+        repository_free(repo);
+        database_free(db);
+        if (package_version) {
+            free((char*)package_version);
+            free((char*)package_name);
+        }
+        return 1;
+    }
+
     // First verify package exists before proceeding
     // Check if version string is incomplete (ends with dot or is empty after @)
     bool incomplete_version = false;
@@ -189,11 +205,19 @@ static int cmd_install(int argc, char **argv) {
             } else {
                 // Package doesn't exist at all
                 fprintf(stderr, "\nPackage '%s' not found in repository.\n", package_name);
-                fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+                if (repo->packages_count == 0) {
+                    fprintf(stderr, "\nThe package repository is empty. Run 'tsi update' to download packages.\n");
+                } else {
+                    fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+                }
             }
         } else {
             fprintf(stderr, "Error: Package '%s' not found in repository\n", package_name);
-            fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+            if (repo->packages_count == 0) {
+                fprintf(stderr, "\nThe package repository is empty. Run 'tsi update' to download packages.\n");
+            } else {
+                fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+            }
         }
 
         // Clean up and return
