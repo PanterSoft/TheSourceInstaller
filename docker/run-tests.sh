@@ -61,7 +61,7 @@ run_test() {
     
     # Build the container (use cache for base image, but TSI will be fresh due to test script cleanup)
     echo "Building container (using cache for base image)..."
-    if docker compose build "$service" >/dev/null 2>&1 || docker-compose build "$service" >/dev/null 2>&1; then
+    if (docker compose build "$service" >/dev/null 2>&1 || docker-compose build "$service" >/dev/null 2>&1); then
         echo "✓ Container built"
     else
         echo "✗ Container build failed"
@@ -73,8 +73,19 @@ run_test() {
 
     # Run test script in a fresh container (--rm removes container after run)
     echo "Running installation test..."
-    TEST_OUTPUT=$(docker compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1 || docker-compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1)
-    TEST_EXIT_CODE=$?
+    set +e  # Temporarily disable exit on error for command substitution
+    if docker compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1; then
+        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
+        TEST_EXIT_CODE=0
+    elif docker-compose run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1; then
+        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
+        TEST_EXIT_CODE=0
+    else
+        TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
+        TEST_EXIT_CODE=$?
+    fi
+    set -e  # Re-enable exit on error
+    rm -f /tmp/test-output-$$.log
     echo "$TEST_OUTPUT" | tee "/tmp/tsi-test-${service}.log"
 
     # Check result based on expected outcome
@@ -120,9 +131,9 @@ for scenario in "${SCENARIOS[@]}"; do
 
     # Clean up containers and volumes
     echo "Cleaning up containers and volumes..."
-    docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1 || true
+    (docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1) || true
     # Also remove any orphaned containers
-    docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1 || true
+    (docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1) || true
 done
 
 # Summary
