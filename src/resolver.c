@@ -28,37 +28,37 @@ static int find_package_index(char **packages, size_t count, const char *name) {
     char *pkg_name = NULL;
     char *pkg_version = NULL;
     parse_package_version(name, &pkg_name, &pkg_version);
-    
+
     const char *search_name = pkg_name ? pkg_name : name;
-    
+
     for (size_t i = 0; i < count; i++) {
         if (!packages[i]) continue;
-        
+
         // Extract name from packages[i] if it's in package@version format
         char *cmp_name = NULL;
         char *cmp_version = NULL;
         parse_package_version(packages[i], &cmp_name, &cmp_version);
-        
+
         const char *cmp_search = cmp_name ? cmp_name : packages[i];
         bool matches = (strcmp(cmp_search, search_name) == 0);
-        
+
         // If version was specified, check it matches
         if (matches && pkg_version && cmp_version) {
             matches = (strcmp(pkg_version, cmp_version) == 0);
         } else if (matches && pkg_version && !cmp_version) {
             matches = false; // Required version not found
         }
-        
+
         if (cmp_name) free(cmp_name);
         if (cmp_version) free(cmp_version);
-        
+
         if (matches) {
             if (pkg_name) free(pkg_name);
             if (pkg_version) free(pkg_version);
             return (int)i;
         }
     }
-    
+
     if (pkg_name) free(pkg_name);
     if (pkg_version) free(pkg_version);
     return -1;
@@ -97,35 +97,35 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     // Resolve dependencies first
     for (size_t i = 0; i < pkg->dependencies_count; i++) {
         if (!pkg->dependencies[i]) continue; // Skip NULL dependencies
-        
+
         // Parse dependency spec (may be package@version)
         char *dep_name = NULL;
         char *dep_version = NULL;
         parse_package_version(pkg->dependencies[i], &dep_name, &dep_version);
         const char *dep_spec = pkg->dependencies[i];
-        
+
         // Check if already in result (compare by name, and version if specified)
         bool found = false;
         if (result) {
             for (size_t j = 0; j < *result_count; j++) {
                 if (!result[j]) continue;
-                
+
                 char *res_name = NULL;
                 char *res_version = NULL;
                 parse_package_version(result[j], &res_name, &res_version);
-                
+
                 bool name_match = (strcmp(res_name ? res_name : result[j], dep_name ? dep_name : dep_spec) == 0);
                 bool version_match = true;
-                
+
                 if (dep_version && res_version) {
                     version_match = (strcmp(dep_version, res_version) == 0);
                 } else if (dep_version && !res_version) {
                     version_match = false; // Required version not in result
                 }
-                
+
                 if (res_name) free(res_name);
                 if (res_version) free(res_version);
-                
+
                 if (name_match && version_match) {
                     found = true;
                     break;
@@ -137,7 +137,7 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             // Recursively resolve (pass the full dependency spec including version)
             size_t deps_count = 0;
             char **deps = resolver_resolve(resolver, dep_spec, installed, installed_count, &deps_count);
-            
+
             // Clean up parsed dependency
             if (dep_name) free(dep_name);
             if (dep_version) free(dep_version);
@@ -361,7 +361,7 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
         char *pkg_version = NULL;
         parse_package_version(packages[i], &pkg_name, &pkg_version);
         const char *actual_name = pkg_name ? pkg_name : packages[i];
-        
+
         Package *pkg = pkg_version ? repository_get_package_version(resolver->repository, actual_name, pkg_version) : repository_get_package(resolver->repository, actual_name);
         if (pkg) {
             for (size_t j = 0; j < pkg->dependencies_count; j++) {
@@ -382,7 +382,7 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
             // Package not found in repository - this is an error
             // But we'll continue and handle it later
         }
-        
+
         if (pkg_name) free(pkg_name);
         if (pkg_version) free(pkg_version);
     }

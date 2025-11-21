@@ -331,9 +331,9 @@ static int cmd_install(int argc, char **argv) {
         } else {
             dep_name = strdup(build_order[i]);
         }
-        
+
         Package *dep_pkg = dep_version ? repository_get_package_version(repo, dep_name ? dep_name : build_order[i], dep_version) : repository_get_package(repo, dep_name ? dep_name : build_order[i]);
-        
+
         if (dep_name) free(dep_name);
         if (dep_version) free(dep_version);
         if (!dep_pkg) {
