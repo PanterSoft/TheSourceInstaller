@@ -1204,22 +1204,30 @@ static int cmd_uninstall(int argc, char **argv) {
         }
     }
 
-    // Display warning and get confirmation
+    // Display warning and get confirmation FIRST, before any processing
+    printf("═══════════════════════════════════════════════════════════\n");
     printf("⚠️  WARNING: This will uninstall TSI!\n");
+    printf("═══════════════════════════════════════════════════════════\n");
     printf("\n");
     printf("Uninstalling TSI from: %s\n", tsi_prefix);
+    printf("\n");
+
     if (remove_all) {
-        printf("This will remove:\n");
-        printf("  - TSI binary\n");
-        printf("  - Completion scripts\n");
-        printf("  - Installed packages and binaries\n");
-        printf("  - ALL TSI data (database, sources, builds, etc.)\n");
+        printf("This will PERMANENTLY remove:\n");
+        printf("  ✗ TSI binary\n");
+        printf("  ✗ Completion scripts\n");
+        printf("  ✗ Installed packages and binaries\n");
+        printf("  ✗ ALL TSI data (database, sources, builds, repository, etc.)\n");
+        printf("\n");
+        printf("⚠️  This action CANNOT be undone!\n");
     } else {
         printf("This will remove:\n");
-        printf("  - TSI binary\n");
-        printf("  - Completion scripts\n");
-        printf("  - Installed packages and binaries\n");
-        printf("  - TSI data (database, sources, builds, etc.) will be preserved\n");
+        printf("  ✗ TSI binary\n");
+        printf("  ✗ Completion scripts\n");
+        printf("  ✗ Installed packages and binaries\n");
+        printf("\n");
+        printf("TSI data (database, sources, builds, repository) will be preserved.\n");
+        printf("Use 'tsi uninstall --all' to remove ALL data including packages.\n");
     }
     printf("\n");
     printf("Are you sure you want to continue? (yes/no): ");
@@ -1240,7 +1248,7 @@ static int cmd_uninstall(int argc, char **argv) {
 
     // Check if user confirmed
     if (strcmp(response, "yes") != 0 && strcmp(response, "y") != 0) {
-        printf("Uninstall cancelled.\n");
+        printf("\nUninstall cancelled.\n");
         return 0;
     }
 
@@ -1345,7 +1353,7 @@ static int cmd_uninstall(int argc, char **argv) {
     } else {
         printf("\nTSI binary and completion scripts removed.\n");
         printf("TSI data (packages, database, etc.) preserved at: %s\n", tsi_prefix);
-        printf("Use 'tsi uninstall --all' to remove all data.\n");
+        printf("\nTo remove ALL data including packages, use: tsi uninstall --all\n");
     }
 
     printf("\n✓ TSI uninstalled successfully!\n");
