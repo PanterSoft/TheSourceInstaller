@@ -1,0 +1,65 @@
+name: Cleanup Old Workflow Runs
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write  # Required to delete workflow runs
+    steps:
+      - name: Delete old workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const max_runs = 30;
+
+            // Get all workflows
+            const workflows = await github.rest.actions.listWorkflowRunsForRepo({
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            // Group runs by workflow
+            const runsByWorkflow = {};
+            for (const run of workflows.data.workflow_runs) {
+              const workflowId = run.workflow_id;
+              if (!runsByWorkflow[workflowId]) {
+                runsByWorkflow[workflowId] = [];
+              }
+              runsByWorkflow[workflowId].push(run);
+            }
+
+            // For each workflow, keep only the last max_runs
+            for (const [workflowId, runs] of Object.entries(runsByWorkflow)) {
+              // Sort by creation date (newest first)
+              runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              
+              // Get runs to delete (everything after the first max_runs)
+              const runsToDelete = runs.slice(max_runs);
+              
+              console.log(`Workflow ${workflowId}: Keeping ${Math.min(runs.length, max_runs)} runs, deleting ${runsToDelete.length} old runs`);
+              
+              // Delete old runs
+              for (const run of runsToDelete) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner,
+                    repo,
+                    run_id: run.id,
+                  });
+                  console.log(`  ✓ Deleted workflow run ${run.id} (${run.created_at})`);
+                } catch (error) {
+                  console.error(`  ✗ Failed to delete workflow run ${run.id}: ${error.message}`);
+                }
+              }
+            }
+
+            console.log('Cleanup completed!');
+
