@@ -129,11 +129,13 @@ FAILED=0
 for scenario in "${SCENARIOS[@]}"; do
     IFS=':' read -r service description expected <<< "$scenario"
 
+    set +e  # Disable exit on error for test execution
     if run_test "$service" "$description" "$expected"; then
-        ((PASSED++))
+        ((PASSED++)) || true
     else
-        ((FAILED++))
+        ((FAILED++)) || true
     fi
+    set -e  # Re-enable exit on error
 
     # Clean up containers and volumes
     echo "Cleaning up containers and volumes..."
