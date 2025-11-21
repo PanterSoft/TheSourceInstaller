@@ -93,11 +93,34 @@ After installation, add TSI to your PATH:
 
 ```bash
 # For bash/zsh
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.tsi/bin:$PATH"
 
 # Or add to your shell profile
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="$HOME/.tsi/bin:$PATH"' >> ~/.bashrc
 ```
+
+### Enable Autocomplete
+
+TSI includes shell completion for bash and zsh:
+
+**Bash:**
+```bash
+source ~/.tsi/share/completions/tsi.bash
+# Or add to ~/.bashrc:
+echo 'source ~/.tsi/share/completions/tsi.bash' >> ~/.bashrc
+```
+
+**Zsh:**
+```bash
+source ~/.tsi/share/completions/tsi.zsh
+# Or add to ~/.zshrc:
+echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
+```
+
+After enabling, you can use Tab completion for:
+- Commands: `tsi <TAB>` shows available commands
+- Packages: `tsi install <TAB>` shows available packages
+- Installed packages: `tsi remove <TAB>` shows installed packages
 
 ## Usage
 

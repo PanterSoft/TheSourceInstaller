@@ -163,6 +163,35 @@ main() {
     cp bin/tsi "$PREFIX/bin/tsi"
     chmod +x "$PREFIX/bin/tsi"
 
+    # Install completion scripts
+    log_info "Installing shell completion scripts..."
+    mkdir -p "$PREFIX/share/completions"
+
+    # Find completions directory (could be in tsi/ or parent)
+    COMPLETIONS_DIR=""
+    if [ -d "../completions" ]; then
+        COMPLETIONS_DIR="../completions"
+    elif [ -d "completions" ]; then
+        COMPLETIONS_DIR="completions"
+    elif [ -d "../../completions" ]; then
+        COMPLETIONS_DIR="../../completions"
+    fi
+
+    if [ -n "$COMPLETIONS_DIR" ]; then
+        if [ -f "$COMPLETIONS_DIR/tsi.bash" ]; then
+            cp "$COMPLETIONS_DIR/tsi.bash" "$PREFIX/share/completions/tsi.bash"
+            chmod 644 "$PREFIX/share/completions/tsi.bash"
+            log_info "  Installed bash completion"
+        fi
+        if [ -f "$COMPLETIONS_DIR/tsi.zsh" ]; then
+            cp "$COMPLETIONS_DIR/tsi.zsh" "$PREFIX/share/completions/tsi.zsh"
+            chmod 644 "$PREFIX/share/completions/tsi.zsh"
+            log_info "  Installed zsh completion"
+        fi
+    else
+        log_warn "  Completion scripts not found (optional)"
+    fi
+
     log_info ""
     log_info "========================================="
     log_info "TSI installed successfully!"
@@ -174,8 +203,14 @@ main() {
     log_info "Or add to your shell profile:"
     if [ -n "$ZSH_VERSION" ]; then
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
+        log_info ""
+        log_info "Enable autocomplete (zsh):"
+        log_info "  echo 'source $PREFIX/share/completions/tsi.zsh' >> ~/.zshrc"
     else
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.bashrc"
+        log_info ""
+        log_info "Enable autocomplete (bash):"
+        log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
     fi
     log_info ""
     log_info "Then run: tsi --help"
