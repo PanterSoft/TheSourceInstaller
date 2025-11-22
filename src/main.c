@@ -196,6 +196,74 @@ static int cmd_install(int argc, char **argv) {
             // Check if package exists (but version doesn't or is incomplete)
             Package *any_version = repository_get_package(repo, package_name);
             if (any_version) {
+                // Try to automatically discover and add the version
+                if (!incomplete_version && package_version) {
+                    fprintf(stderr, "\nVersion '%s' not found. Attempting to discover it...\n", package_version);
+
+                    // Build path to package file
+                    char package_file[2048];
+                    len = snprintf(package_file, sizeof(package_file), "%s/%s.json", repo_dir, package_name);
+                    if (len >= 0 && (size_t)len < sizeof(package_file)) {
+                        // Check if discover-versions.py script exists
+                        char script_path[2048];
+                        // Try to find script relative to repo (assuming we're in a TSI installation)
+                        // First try: scripts/discover-versions.py (if running from repo root)
+                        // Second try: ~/.tsi/scripts/discover-versions.py (if installed)
+                        const char *home = getenv("HOME");
+                        if (!home) home = "/root";
+
+                        // Try installed location first
+                        len = snprintf(script_path, sizeof(script_path), "%s/.tsi/scripts/discover-versions.py", home);
+                        if (len >= 0 && (size_t)len < sizeof(script_path)) {
+                            struct stat st;
+                            if (stat(script_path, &st) != 0) {
+                                // Try repo location
+                                len = snprintf(script_path, sizeof(script_path), "scripts/discover-versions.py");
+                            }
+                        }
+
+                        // Build command to check and add version
+                        char cmd[4096];
+                        len = snprintf(cmd, sizeof(cmd), "python3 \"%s\" \"%s\" --check-version \"%s\" --packages-dir \"%s\" 2>&1",
+                                      script_path, package_name, package_version, repo_dir);
+                        if (len >= 0 && (size_t)len < sizeof(cmd)) {
+                            FILE *fp = popen(cmd, "r");
+                            if (fp) {
+                                char line[512];
+                                bool version_found = false;
+                                while (fgets(line, sizeof(line), fp)) {
+                                    // Check for success message
+                                    if (strstr(line, "found and added") || strstr(line, "✓")) {
+                                        version_found = true;
+                                    }
+                                    // Show output to user
+                                    fprintf(stderr, "%s", line);
+                                }
+                                int exit_code = pclose(fp);
+
+                                if (version_found && exit_code == 0) {
+                                    // Reload repository to get the new version
+                                    repository_free(repo);
+                                    repo = repository_new(repo_dir);
+                                    if (repo) {
+                                        resolver_free(resolver);
+                                        resolver = resolver_new(repo);
+                                        if (resolver) {
+                                            // Try to get the package again
+                                            pkg = repository_get_package_version(repo, package_name, package_version);
+                                            if (pkg) {
+                                                fprintf(stderr, "✓ Version discovered and added. Proceeding with installation...\n\n");
+                                                // Continue with installation below
+                                                goto install_package;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Package exists, show available versions
                 size_t versions_count = 0;
                 char **versions = repository_list_versions(repo, package_name, &versions_count);
@@ -279,6 +347,7 @@ static int cmd_install(int argc, char **argv) {
         return 1;
     }
 
+install_package:
     printf("Installing package: %s", package_name);
     if (package_version) {
         printf("@%s", package_version);
