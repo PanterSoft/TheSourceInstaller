@@ -428,24 +428,24 @@ def add_versions_to_package(package_file: Path, new_versions: List[str], dry_run
 def check_and_add_version(package_file: Path, target_version: str, token: Optional[str] = None) -> bool:
     """
     Check if a specific version exists and add it to the package file if found.
-    
+
     This function searches for the target version and only adds that specific version,
     not all discovered versions. It respects the same filtering rules as regular discovery.
-    
+
     Args:
         package_file: Path to package JSON file
         target_version: Version string to check for
         token: Optional GitHub token for API access
-        
+
     Returns:
         True if version was found and added, False otherwise
     """
     if not package_file.exists():
         return False
-    
+
     # Load package to get source info
     pkg = load_json(package_file)
-    
+
     # Get the latest version as template
     if 'versions' in pkg and pkg['versions']:
         latest = pkg['versions'][0]
@@ -453,10 +453,10 @@ def check_and_add_version(package_file: Path, target_version: str, token: Option
         latest = pkg
     else:
         return False
-    
+
     source = latest.get('source', {})
     source_url = source.get('url', '')
-    
+
     # Check if target version matches filtering rules (same as discover_github_versions)
     parts = target_version.split('.')
     if len(parts) >= 3:
@@ -467,7 +467,7 @@ def check_and_add_version(package_file: Path, target_version: str, token: Option
                 return False
         except ValueError:
             pass
-    
+
     # For GitHub repos, check directly if the version exists
     if 'github.com' in source_url:
         repo_match = re.search(r'github\.com/([^/]+)/([^/]+)', source_url)
@@ -476,13 +476,13 @@ def check_and_add_version(package_file: Path, target_version: str, token: Option
             # Search for the specific version (with reasonable limit to avoid excessive API calls)
             # We'll search up to 200 versions to find the target, but only add the target
             discovered = discover_github_versions(repo, max_versions=200, token=token)
-            
+
             # Check if target version is in discovered versions
             if target_version in discovered:
                 # Add just this version (not all discovered versions)
                 added, skipped = add_versions_to_package(package_file, [target_version], dry_run=False)
                 return added > 0
-    
+
     return False
 
 
