@@ -19,7 +19,7 @@ To enable GitHub Pages for this repository:
 2. Under **Source**, select:
    - **Source**: `GitHub Actions`
 3. The documentation will be available at:
-   - `https://pantersoft.github.io/tsi/`
+   - `https://pantersoft.github.io/TheSourceInstaller/`
 
 ## Manual Deployment
 

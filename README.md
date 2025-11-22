@@ -72,12 +72,12 @@ That's it! No Python or other runtime dependencies.
 
 ## Documentation
 
-Complete documentation is available at [https://pantersoft.github.io/tsi/](https://pantersoft.github.io/tsi/).
+Complete documentation is available at [https://pantersoft.github.io/TheSourceInstaller/](https://pantersoft.github.io/TheSourceInstaller/).
 
-- [Installation Guide](https://pantersoft.github.io/tsi/getting-started/installation/)
-- [User Guide](https://pantersoft.github.io/tsi/user-guide/package-management/)
-- [Package Format](https://pantersoft.github.io/tsi/user-guide/package-format/)
-- [Developer Guide](https://pantersoft.github.io/tsi/developer-guide/architecture/)
+- [Installation Guide](https://pantersoft.github.io/TheSourceInstaller/getting-started/installation/)
+- [User Guide](https://pantersoft.github.io/TheSourceInstaller/user-guide/package-management/)
+- [Package Format](https://pantersoft.github.io/TheSourceInstaller/user-guide/package-format/)
+- [Developer Guide](https://pantersoft.github.io/TheSourceInstaller/developer-guide/architecture/)
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 site_name: TSI Documentation
 site_description: The Source Installer - Distribution-independent source-based package manager
-site_url: https://pantersoft.github.io/tsi/
+site_url: https://pantersoft.github.io/TheSourceInstaller/
 repo_url: https://github.com/PanterSoft/tsi
 repo_name: PanterSoft/tsi
 edit_uri: edit/main/docs/
