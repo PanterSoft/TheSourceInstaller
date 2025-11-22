@@ -188,6 +188,6 @@ When Git releases version 2.46.0, they would update the `.tsi.json` file, and th
 
 ## See Also
 
-- [Package Format Documentation](../packages/README.md)
-- [TSI Main Documentation](../README.md)
+- [Package Format Documentation](../reference/package-repository.md)
+- [TSI Main Documentation](../index.md)
 

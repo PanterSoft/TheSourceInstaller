@@ -213,7 +213,7 @@ def discover_custom_website_versions(url: str) -> List[str]:
 
 ## Integration with External Packages
 
-The version discovery system works alongside the [External Package Configuration](EXTERNAL-PACKAGES.md) system:
+The version discovery system works alongside the [External Package Configuration](external-packages.md) system:
 
 - **External packages**: Projects maintain their own `.tsi.json` files
 - **Version discovery**: Automatically finds and adds new versions
@@ -221,7 +221,7 @@ The version discovery system works alongside the [External Package Configuration
 
 ## See Also
 
-- [External Package Configuration](EXTERNAL-PACKAGES.md) - How projects can include their own package configs
-- [Package Repository](../packages/README.md) - Package format documentation
-- [Scripts README](../scripts/README.md) - Detailed script documentation
+- [External Package Configuration](external-packages.md) - How projects can include their own package configs
+- [Package Repository](../reference/package-repository.md) - Package format documentation
+- [Scripts Reference](../reference/scripts.md) - Detailed script documentation
 

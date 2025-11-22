@@ -109,6 +109,6 @@ After making these changes:
 ## See Also
 
 - [GitHub Actions Permissions](https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token)
-- [Workflow Automation](WORKFLOW-AUTOMATION.md)
-- [Trigger Workflow](TRIGGER-WORKFLOW.md)
+- [Workflow Automation](automation.md)
+- [Trigger Workflow](trigger-workflow.md)
 

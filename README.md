@@ -310,13 +310,13 @@ python3 scripts/discover-versions.py <package-name>
 # (runs every Monday, or trigger manually)
 ```
 
-See [Version Discovery](docs/VERSION-DISCOVERY.md) and [Workflow Automation](docs/WORKFLOW-AUTOMATION.md) for details.
+See the [documentation](https://pantersoft.github.io/tsi/) for details on [Version Discovery](https://pantersoft.github.io/tsi/user-guide/version-discovery/) and [Workflow Automation](https://pantersoft.github.io/tsi/workflows/automation/).
 
 ### External Package Configuration
 
 Projects can include their own `.tsi.json` file in their repository root, similar to how Homebrew handles casks. When projects update their package configuration, a GitHub Actions workflow automatically creates a pull request to update the TSI package repository.
 
-See [External Package Configuration](docs/EXTERNAL-PACKAGES.md) for complete documentation.
+See the [External Package Configuration documentation](https://pantersoft.github.io/tsi/user-guide/external-packages/) for complete details.
 
 ### Quick Start for Project Maintainers
 

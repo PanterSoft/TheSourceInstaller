@@ -244,7 +244,7 @@ See `example.json` for a basic package template.
 
 ### External Package Configuration
 
-Projects can include their own `.tsi.json` file in their repository, and a GitHub Actions workflow will automatically sync updates. See [External Package Configuration](../docs/EXTERNAL-PACKAGES.md) for details.
+Projects can include their own `.tsi.json` file in their repository, and a GitHub Actions workflow will automatically sync updates. See [External Package Configuration](../user-guide/external-packages.md) for details.
 
 This allows project maintainers to:
 - Include package configuration directly in their repository
@@ -253,7 +253,7 @@ This allows project maintainers to:
 
 ### Automatic Version Discovery
 
-TSI can automatically discover and add new package versions using the version discovery system. See [Version Discovery](../docs/VERSION-DISCOVERY.md) for details.
+TSI can automatically discover and add new package versions using the version discovery system. See [Version Discovery](../user-guide/version-discovery.md) for details.
 
 **Quick start:**
 ```bash

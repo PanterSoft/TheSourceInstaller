@@ -77,7 +77,7 @@ After installation, TSI creates the following structure:
 
 ## Next Steps
 
-- Learn about [Package Management](user-guide/package-management.md)
-- Understand the [Package Format](user-guide/package-format.md)
-- Explore [External Packages](user-guide/external-packages.md)
+- Learn about [Package Management](../user-guide/package-management.md)
+- Understand the [Package Format](../user-guide/package-format.md)
+- Explore [External Packages](../user-guide/external-packages.md)
 

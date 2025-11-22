@@ -41,3 +41,4 @@ src/bin/
 
 # MkDocs build output
 site/
+.venv/

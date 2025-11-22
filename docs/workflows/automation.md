@@ -87,7 +87,7 @@ The PR will include:
 
 Syncs package definitions from external repositories that include `.tsi.json` files.
 
-See [External Package Configuration](EXTERNAL-PACKAGES.md) for details.
+See [External Package Configuration](external-packages.md) for details.
 
 ## Workflow Configuration
 
@@ -231,7 +231,7 @@ The workflows integrate with your CI/CD pipeline:
 
 ## See Also
 
-- [Version Discovery](VERSION-DISCOVERY.md) - Detailed version discovery documentation
-- [External Package Configuration](EXTERNAL-PACKAGES.md) - External package sync workflow
-- [Package Repository](../packages/README.md) - Package format documentation
+- [Version Discovery](version-discovery.md) - Detailed version discovery documentation
+- [External Package Configuration](external-packages.md) - External package sync workflow
+- [Package Repository](../reference/package-repository.md) - Package format documentation
 

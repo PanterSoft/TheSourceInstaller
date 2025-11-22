@@ -144,7 +144,7 @@ This is useful for:
 
 ## See Also
 
-- [Workflow Automation](WORKFLOW-AUTOMATION.md)
-- [Version Discovery](VERSION-DISCOVERY.md)
-- [Trigger Workflow](TRIGGER-WORKFLOW.md)
+- [Workflow Automation](automation.md)
+- [Version Discovery](version-discovery.md)
+- [Trigger Workflow](trigger-workflow.md)
 

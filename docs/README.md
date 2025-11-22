@@ -16,9 +16,16 @@ The documentation is organized into the following sections:
 
 ### Prerequisites
 
-Install MkDocs and required plugins:
+Install MkDocs and required plugins. It's recommended to use a virtual environment:
 
 ```bash
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements-docs.txt
 ```
 
@@ -27,6 +34,8 @@ Or install manually:
 ```bash
 pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin pymdown-extensions
 ```
+
+**Note:** If you get an "externally managed environment" error, use a virtual environment as shown above.
 
 ### Build
 

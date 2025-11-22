@@ -145,7 +145,7 @@ You don't need to do anything - it runs automatically!
 
 ## See Also
 
-- [Version Discovery Documentation](VERSION-DISCOVERY.md)
-- [Workflow Automation](WORKFLOW-AUTOMATION.md)
-- [Scripts README](../scripts/README.md)
+- [Version Discovery Documentation](version-discovery.md)
+- [Workflow Automation](automation.md)
+- [Scripts Reference](../reference/scripts.md)
 
