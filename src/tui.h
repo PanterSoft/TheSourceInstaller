@@ -13,105 +13,102 @@ static inline bool is_tty(void) {
     return isatty(fileno(stdout));
 }
 
-// Colors (ANSI escape codes)
+// Colors (ANSI escape codes) - Homebrew style (subtle)
 #define COLOR_RESET   "\033[0m"
 #define COLOR_BOLD    "\033[1m"
 #define COLOR_RED     "\033[31m"
 #define COLOR_GREEN   "\033[32m"
 #define COLOR_YELLOW  "\033[33m"
 #define COLOR_BLUE    "\033[34m"
-#define COLOR_MAGENTA "\033[35m"
 #define COLOR_CYAN    "\033[36m"
 
-// Icons/Emojis
+// Icons - Homebrew style
 #define ICON_SUCCESS "✓"
 #define ICON_ERROR   "✗"
 #define ICON_WARNING "⚠"
-#define ICON_INFO    "ℹ"
+#define ICON_IN_PROGRESS "*"
 #define ICON_ARROW   "→"
-#define ICON_PACKAGE "📦"
-#define ICON_DOWNLOAD "⬇"
-#define ICON_BUILD   "🔨"
-#define ICON_INSTALL "📥"
 
-// Pretty print functions
+// Homebrew-style section header
+static inline void print_section(const char *title) {
+    printf("==> %s\n", title);
+}
+
+// Homebrew-style success message
 static inline void print_success(const char *msg) {
     if (is_tty()) {
-        printf("%s%s%s %s%s%s\n", COLOR_GREEN, ICON_SUCCESS, COLOR_RESET, COLOR_BOLD, msg, COLOR_RESET);
+        printf("%s%s%s %s\n", COLOR_GREEN, ICON_SUCCESS, COLOR_RESET, msg);
     } else {
-        printf("✓ %s\n", msg);
+        printf("%s %s\n", ICON_SUCCESS, msg);
     }
 }
 
+// Homebrew-style error message
 static inline void print_error(const char *msg) {
     if (is_tty()) {
-        fprintf(stderr, "%s%s%s %s%s%s\n", COLOR_RED, ICON_ERROR, COLOR_RESET, COLOR_BOLD, msg, COLOR_RESET);
+        fprintf(stderr, "%s%s%s %s\n", COLOR_RED, ICON_ERROR, COLOR_RESET, msg);
     } else {
-        fprintf(stderr, "✗ %s\n", msg);
+        fprintf(stderr, "%s %s\n", ICON_ERROR, msg);
     }
 }
 
+// Homebrew-style warning message
 static inline void print_warning(const char *msg) {
     if (is_tty()) {
-        printf("%s%s%s %s%s%s\n", COLOR_YELLOW, ICON_WARNING, COLOR_RESET, COLOR_BOLD, msg, COLOR_RESET);
+        printf("%s%s%s %s\n", COLOR_YELLOW, ICON_WARNING, COLOR_RESET, msg);
     } else {
-        printf("⚠ %s\n", msg);
+        printf("%s %s\n", ICON_WARNING, msg);
     }
 }
 
+// Homebrew-style info message
 static inline void print_info(const char *msg) {
-    if (is_tty()) {
-        printf("%s%s%s %s\n", COLOR_CYAN, ICON_INFO, COLOR_RESET, msg);
+    printf("%s\n", msg);
+}
+
+// Print package with version (Homebrew style: "package version")
+static inline void print_package(const char *name, const char *version) {
+    if (version) {
+        printf("  %s %s\n", name, version);
     } else {
-        printf("ℹ %s\n", msg);
+        printf("  %s\n", name);
     }
 }
 
-static inline void print_section(const char *title) {
-    if (is_tty()) {
-        printf("\n%s%s%s\n", COLOR_BOLD, title, COLOR_RESET);
+// Print package with version change (Homebrew style: "package old -> new")
+static inline void print_package_update(const char *name, const char *old_version, const char *new_version) {
+    if (old_version && new_version) {
+        printf("  %s %s -> %s\n", name, old_version, new_version);
+    } else if (new_version) {
+        printf("  %s -> %s\n", name, new_version);
     } else {
-        printf("\n%s\n", title);
+        printf("  %s\n", name);
     }
 }
 
-static inline void print_header(const char *title) {
-    if (is_tty()) {
-        printf("\n%s═══════════════════════════════════════════════════════════%s\n", COLOR_BOLD, COLOR_RESET);
-        printf("%s%s%s\n", COLOR_BOLD, title, COLOR_RESET);
-        printf("%s═══════════════════════════════════════════════════════════%s\n\n", COLOR_BOLD, COLOR_RESET);
+// Print download progress (Homebrew style: "✓ Package (version): [Downloaded X MB/Y MB]")
+static inline void print_download(const char *icon, const char *package, const char *version,
+                                  const char *size_info) {
+    (void)icon; // For future use
+    if (version) {
+        printf("%s %s (%s): %s\n", icon, package, version, size_info);
     } else {
-        printf("\n═══════════════════════════════════════════════════════════\n");
-        printf("%s\n", title);
-        printf("═══════════════════════════════════════════════════════════\n\n");
+        printf("%s %s: %s\n", icon, package, size_info);
     }
 }
 
-static inline void print_package_name(const char *name, const char *version) {
+// Print in-progress operation (Homebrew style: "* Operation: detail")
+static inline void print_progress(const char *operation, const char *detail) {
     if (is_tty()) {
-        printf("%s%s%s", COLOR_BOLD, name, COLOR_RESET);
-        if (version) {
-            printf("%s@%s%s%s", COLOR_CYAN, COLOR_BOLD, version, COLOR_RESET);
-        }
-    } else {
-        printf("%s", name);
-        if (version) {
-            printf("@%s", version);
-        }
-    }
-}
-
-static inline void print_step(const char *icon, const char *step, const char *detail) {
-    if (is_tty()) {
-        printf("  %s %s%s%s", icon, COLOR_BOLD, step, COLOR_RESET);
+        printf("%s%s%s %s", COLOR_BLUE, ICON_IN_PROGRESS, COLOR_RESET, operation);
         if (detail) {
-            printf(" %s%s%s", COLOR_CYAN, detail, COLOR_RESET);
+            printf(": %s", detail);
         }
         printf("\n");
     } else {
-        printf("  %s %s", icon, step);
+        printf("%s %s", ICON_IN_PROGRESS, operation);
         if (detail) {
-            printf(" %s", detail);
+            printf(": %s", detail);
         }
         printf("\n");
     }

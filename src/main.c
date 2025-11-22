@@ -349,10 +349,12 @@ static int cmd_install(int argc, char **argv) {
     }
 
 install_package:
-    print_header("Installing Package");
-    printf("  ");
-    print_package_name(package_name, package_version);
-    printf("\n\n");
+    print_section("Installing");
+    if (package_version) {
+        printf("  %s@%s\n", package_name, package_version);
+    } else {
+        printf("  %s\n", package_name);
+    }
 
     // Check if already installed (check specific version if specified)
     if (!force) {
@@ -360,11 +362,14 @@ install_package:
         if (installed_pkg) {
             // If version specified, check if that specific version is installed
             if (package_version && installed_pkg->version && strcmp(installed_pkg->version, package_version) == 0) {
-                print_warning("Package is already installed");
-                printf("  ");
-                print_package_name(package_name, package_version);
-                printf("\n");
-                printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+                if (package_version) {
+                    printf("Warning: %s@%s is already installed\n", package_name, package_version);
+                } else {
+                    printf("Warning: %s is already installed\n", package_name);
+                }
+                if (installed_pkg->install_path) {
+                    printf("  Install path: %s\n", installed_pkg->install_path);
+                }
                 if (installed_pkg->dependencies_count > 0) {
                     printf("  Dependencies: ");
                     for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
@@ -373,7 +378,7 @@ install_package:
                     }
                     printf("\n");
                 }
-                printf("\n  Use %s--force%s to reinstall.\n", is_tty() ? COLOR_BOLD : "", is_tty() ? COLOR_RESET : "");
+                printf("\nUse --force to reinstall.\n");
                 resolver_free(resolver);
                 repository_free(repo);
                 database_free(db);
@@ -384,12 +389,13 @@ install_package:
                 return 0;
             } else if (!package_version) {
                 // No version specified, but package is installed
-                print_warning("Package is already installed");
-                printf("  ");
-                print_package_name(package_name, NULL);
-                printf("\n");
-                printf("  Version: %s\n", installed_pkg->version ? installed_pkg->version : "unknown");
-                printf("  Install path: %s\n", installed_pkg->install_path ? installed_pkg->install_path : "unknown");
+                printf("Warning: %s is already installed\n", package_name);
+                if (installed_pkg->version) {
+                    printf("  Version: %s\n", installed_pkg->version);
+                }
+                if (installed_pkg->install_path) {
+                    printf("  Install path: %s\n", installed_pkg->install_path);
+                }
                 if (installed_pkg->dependencies_count > 0) {
                     printf("  Dependencies: ");
                     for (size_t i = 0; i < installed_pkg->dependencies_count; i++) {
@@ -398,9 +404,7 @@ install_package:
                     }
                     printf("\n");
                 }
-                printf("\n  Use %s--force%s to reinstall, or specify version with ", is_tty() ? COLOR_BOLD : "", is_tty() ? COLOR_RESET : "");
-                print_package_name(package_name, "<version>");
-                printf("\n");
+                printf("\nUse --force to reinstall, or specify version with %s@<version>\n", package_name);
                 resolver_free(resolver);
                 repository_free(repo);
                 database_free(db);
@@ -426,10 +430,7 @@ install_package:
 
     if (!deps) {
         // Package exists but dependency resolution failed
-        print_error("Failed to resolve dependencies");
-        fprintf(stderr, "  Package: ");
-        print_package_name(package_name, package_version);
-        fprintf(stderr, "\n");
+        fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
         if (installed) {
             for (size_t i = 0; i < installed_count; i++) free(installed[i]);
             free(installed);
@@ -445,16 +446,13 @@ install_package:
     }
 
     if (deps_count > 0) {
-        print_section("Dependencies");
-        printf("  Resolved %zu dependency%s\n", deps_count, deps_count == 1 ? "" : "s");
-        if (deps_count > 0) {
-            printf("  ");
-            for (size_t i = 0; i < deps_count; i++) {
-                if (i > 0) printf(", ");
-                printf("%s", deps[i]);
-            }
-            printf("\n");
+        print_section("Resolving dependencies");
+        printf("  Resolved %zu dependency%s: ", deps_count, deps_count == 1 ? "" : "s");
+        for (size_t i = 0; i < deps_count; i++) {
+            if (i > 0) printf(", ");
+            printf("%s", deps[i]);
         }
+        printf("\n");
     }
 
     // Get build order
@@ -462,7 +460,7 @@ install_package:
     char **build_order = resolver_get_build_order(resolver, deps, deps_count, &build_order_count);
 
     if (!build_order) {
-        print_error("Failed to determine build order");
+        fprintf(stderr, "Error: Failed to determine build order\n");
         if (deps_count > 0) {
             fprintf(stderr, "  Packages: ");
             for (size_t i = 0; i < deps_count; i++) {
@@ -473,8 +471,7 @@ install_package:
             for (size_t i = 0; i < deps_count; i++) {
                 Package *pkg = repository_get_package(repo, deps[i]);
                 if (!pkg) {
-                    print_warning("Package not found in repository");
-                    fprintf(stderr, "  %s\n", deps[i]);
+                    fprintf(stderr, "  Warning: Package '%s' not found in repository\n", deps[i]);
                 }
             }
         }
@@ -491,11 +488,10 @@ install_package:
     }
 
     if (build_order_count > 0) {
-        print_section("Build Order");
+        print_section("Build order");
         for (size_t i = 0; i < build_order_count; i++) {
             printf("  %zu. %s\n", i + 1, build_order[i]);
         }
-        printf("\n");
     }
 
     BuilderConfig *builder_config = builder_config_new(tsi_prefix);
@@ -557,7 +553,7 @@ install_package:
             continue; // Install main package last
         }
 
-        print_step(ICON_PACKAGE, "Installing dependency", build_order[i]);
+        print_progress("Installing dependency", build_order[i]);
 
         // Parse package@version from build_order if present
         char *dep_name = NULL;
@@ -580,16 +576,14 @@ install_package:
         if (dep_name) free(dep_name);
         if (dep_version) free(dep_version);
         if (!dep_pkg) {
-            print_warning("Dependency package not found");
-            printf("  %s\n", build_order[i]);
+            printf("Warning: Dependency package not found: %s\n", build_order[i]);
             continue;
         }
 
         // Fetch source
         char *dep_source_dir = fetcher_fetch(fetcher, dep_pkg, force);
         if (!dep_source_dir) {
-            print_error("Failed to fetch source");
-            printf("  %s\n", build_order[i]);
+            fprintf(stderr, "Error: Failed to fetch source for %s\n", build_order[i]);
             continue;
         }
 
@@ -604,16 +598,14 @@ install_package:
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
         }
         if (!builder_build(builder_config, dep_pkg, dep_source_dir, build_dir)) {
-            print_error("Failed to build");
-            printf("  %s\n", build_order[i]);
+            fprintf(stderr, "Error: Failed to build %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
 
         // Install
         if (!builder_install(builder_config, dep_pkg, dep_source_dir, build_dir)) {
-            print_error("Failed to install");
-            printf("  %s\n", build_order[i]);
+            fprintf(stderr, "Error: Failed to install %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
@@ -627,8 +619,7 @@ install_package:
     }
 
     // Install main package
-    print_section("Installing Package");
-    print_step(ICON_INSTALL, "Installing", package_name);
+    print_progress("Installing", package_name);
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {
         // Set package-specific install directory
@@ -646,25 +637,30 @@ install_package:
 
                     // Record in database with package-specific path
                     database_add_package(db, main_pkg->name, main_pkg->version, builder_config->install_dir, (const char **)main_pkg->dependencies, main_pkg->dependencies_count);
-                    printf("Successfully installed %s\n", package_name);
+                    char success_msg[256];
+                    snprintf(success_msg, sizeof(success_msg), "Installed %s", package_name);
+                    print_success(success_msg);
                 } else {
-                    print_error("Failed to install package");
-                    printf("  ");
-                    print_package_name(package_name, package_version);
-                    printf("\n");
+                    if (package_version) {
+                        fprintf(stderr, "Error: Failed to install %s@%s\n", package_name, package_version);
+                    } else {
+                        fprintf(stderr, "Error: Failed to install %s\n", package_name);
+                    }
                 }
             } else {
-                print_error("Failed to build package");
-                printf("  ");
-                print_package_name(package_name, package_version);
-                printf("\n");
+                if (package_version) {
+                    fprintf(stderr, "Error: Failed to build %s@%s\n", package_name, package_version);
+                } else {
+                    fprintf(stderr, "Error: Failed to build %s\n", package_name);
+                }
             }
             free(main_source_dir);
         } else {
-            print_error("Failed to fetch source");
-            printf("  ");
-            print_package_name(package_name, package_version);
-            printf("\n");
+            if (package_version) {
+                fprintf(stderr, "Error: Failed to fetch source for %s@%s\n", package_name, package_version);
+            } else {
+                fprintf(stderr, "Error: Failed to fetch source for %s\n", package_name);
+            }
         }
     } else {
         fprintf(stderr, "Error: Package not found: %s\n", package_name);
@@ -799,10 +795,8 @@ static int cmd_versions(int argc, char **argv) {
         }
     }
 
-    print_section("Available Versions");
-    printf("  ");
-    print_package_name(package_name, NULL);
-    printf("\n\n");
+    print_section("Available versions");
+    printf("  %s\n", package_name);
     for (size_t i = 0; i < unique_count; i++) {
         printf("  %s\n", unique_versions[i]);
         free(unique_versions[i]);
@@ -984,9 +978,13 @@ static int cmd_info(int argc, char **argv) {
     }
 
     print_section("Package Information");
-    printf("  ");
-    print_package_name(pkg->name ? pkg->name : "unknown", pkg->version);
-    printf("\n\n");
+    if (pkg->name) {
+        if (pkg->version) {
+            printf("  %s %s\n", pkg->name, pkg->version);
+        } else {
+            printf("  %s\n", pkg->name);
+        }
+    }
     printf("Version: %s\n", pkg->version ? pkg->version : "unknown");
 
     // List all available versions
@@ -1098,14 +1096,14 @@ static int cmd_update(int argc, char **argv) {
         system(cmd);
     }
 
-    print_header("Updating Package Repository");
+    print_section("Updating package repository");
     printf("  Repository directory: %s\n", repo_dir);
 
     bool success = false;
 
     // Update from local path
     if (local_path) {
-        print_info("Updating from local path");
+        print_section("Updating from local path");
         printf("  %s\n", local_path);
         char copy_cmd[2048];
         int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
@@ -1510,7 +1508,7 @@ static int cmd_uninstall(int argc, char **argv) {
     }
 
     // Display warning and get confirmation FIRST, before any processing
-    print_header("Uninstalling TSI");
+    print_section("Uninstalling TSI");
     printf("  Installation path: %s\n", tsi_prefix);
     printf("\n");
     printf("  This will PERMANENTLY remove:\n");
@@ -1612,13 +1610,13 @@ int main(int argc, char **argv) {
         }
         Database *db = database_new(db_dir);
         if (database_remove_package(db, argv[2])) {
-            print_success("Package removed");
-            printf("  %s\n", argv[2]);
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Removed %s", argv[2]);
+            print_success(msg);
             database_free(db);
             return 0;
         } else {
-            print_warning("Package is not installed");
-            printf("  %s\n", argv[2]);
+            printf("Warning: Package %s is not installed\n", argv[2]);
             database_free(db);
             return 1;
         }
