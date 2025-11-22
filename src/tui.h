@@ -259,43 +259,61 @@ static inline void output_buffer_add(OutputBuffer *buf, const char *line) {
 static inline void output_buffer_display(OutputBuffer *buf) {
     if (!buf || !is_tty()) return;
 
-    // Only display if we have lines
-    if (buf->line_count == 0) return;
+    // Always display exactly OUTPUT_BUFFER_LINES lines (reserved space)
+    // If we have fewer lines, show empty lines for the rest
 
-    // If we've already started displaying, move cursor up to overwrite previous output
-    if (buf->display_started) {
-        printf("\033[%dA", buf->line_count);  // Move up N lines
-    } else {
-        buf->display_started = true;
-    }
+    // Move cursor up to the start of the output area
+    printf("\033[%dA", OUTPUT_BUFFER_LINES);
 
-    // Display each line, clearing it first and truncating long lines
-    for (int i = 0; i < buf->line_count; i++) {
-        int idx = (buf->current_index - buf->line_count + i + OUTPUT_BUFFER_LINES) % OUTPUT_BUFFER_LINES;
-        // Truncate line to reasonable width (120 chars)
-        char display_line[130];
-        size_t len = strlen(buf->lines[idx]);
-        if (len > 120) {
-            strncpy(display_line, buf->lines[idx], 117);
-            display_line[117] = '.';
-            display_line[118] = '.';
-            display_line[119] = '.';
-            display_line[120] = '\0';
+    // Display exactly OUTPUT_BUFFER_LINES lines
+    for (int i = 0; i < OUTPUT_BUFFER_LINES; i++) {
+        // Calculate which line to show (most recent at bottom)
+        int idx;
+        if (i < buf->line_count) {
+            // We have a line to show
+            if (buf->line_count <= OUTPUT_BUFFER_LINES) {
+                // Buffer not full yet, show from start
+                idx = i;
+            } else {
+                // Buffer is full, show the last OUTPUT_BUFFER_LINES lines
+                // Show oldest first (at top), newest last (at bottom)
+                idx = (buf->current_index - OUTPUT_BUFFER_LINES + i + OUTPUT_BUFFER_LINES) % OUTPUT_BUFFER_LINES;
+            }
+
+            // Truncate line to reasonable width (120 chars)
+            char display_line[130];
+            size_t len = strlen(buf->lines[idx]);
+            if (len > 120) {
+                strncpy(display_line, buf->lines[idx], 117);
+                display_line[117] = '.';
+                display_line[118] = '.';
+                display_line[119] = '.';
+                display_line[120] = '\0';
+            } else {
+                strncpy(display_line, buf->lines[idx], sizeof(display_line) - 1);
+                display_line[sizeof(display_line) - 1] = '\0';
+            }
+            // Clear line and print with newline
+            printf("\r\033[2K  %s\n", display_line);
         } else {
-            strncpy(display_line, buf->lines[idx], sizeof(display_line) - 1);
-            display_line[sizeof(display_line) - 1] = '\0';
+            // No line to show yet, print empty line
+            printf("\r\033[2K\n");
         }
-        // Clear line and print with newline
-        printf("\r\033[2K  %s\n", display_line);
     }
     // After displaying all lines, cursor is positioned correctly for next update
     fflush(stdout);
 }
 
 // Start output capture area (after status line)
+// Reserve space for OUTPUT_BUFFER_LINES to prevent jumping
 static inline void output_capture_start(void) {
     if (is_tty()) {
-        printf("\n");  // Start on new line after status
+        // Reserve space by printing empty lines
+        for (int i = 0; i < OUTPUT_BUFFER_LINES; i++) {
+            printf("\n");
+        }
+        // Move cursor back up to the first output line
+        printf("\033[%dA", OUTPUT_BUFFER_LINES);
     }
 }
 
@@ -305,10 +323,11 @@ static inline void output_capture_end(OutputBuffer *buf) {
 
     // Clear the output area but preserve status line
     if (buf->display_started && buf->line_count > 0) {
+        int lines_to_clear = buf->line_count < OUTPUT_BUFFER_LINES ? buf->line_count : OUTPUT_BUFFER_LINES;
         // Move up to the output area
-        printf("\033[%dA", buf->line_count);  // Move up
+        printf("\033[%dA", lines_to_clear);  // Move up
         // Clear each output line
-        for (int i = 0; i < buf->line_count; i++) {
+        for (int i = 0; i < lines_to_clear; i++) {
             printf("\r\033[2K\n");  // Clear each line
         }
         // Reset display state
