@@ -20,6 +20,7 @@ import os
 import re
 import argparse
 import urllib.request
+import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -39,18 +40,33 @@ def save_json(filepath, data):
         f.write('\n')
 
 
-def fetch_url(url: str, headers: Optional[Dict] = None) -> Optional[str]:
+def fetch_url(url: str, headers: Optional[Dict] = None, token: Optional[str] = None) -> Optional[str]:
     """Fetch content from a URL."""
     try:
-        req = urllib.request.Request(url, headers=headers or {})
-        with urllib.request.urlopen(req, timeout=10) as response:
+        req_headers = headers.copy() if headers else {}
+        if token:
+            req_headers['Authorization'] = f'token {token}'
+
+        req = urllib.request.Request(url, headers=req_headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
             return response.read().decode('utf-8')
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            # Rate limit or forbidden - try to get rate limit info
+            rate_limit = e.headers.get('X-RateLimit-Remaining', 'unknown')
+            if rate_limit == '0':
+                print(f"Warning: GitHub API rate limit exceeded for {url}", file=sys.stderr)
+            else:
+                print(f"Warning: HTTP 403 for {url} (rate limit remaining: {rate_limit})", file=sys.stderr)
+        else:
+            print(f"Warning: HTTP {e.code} for {url}: {e}", file=sys.stderr)
+        return None
     except Exception as e:
         print(f"Warning: Failed to fetch {url}: {e}", file=sys.stderr)
         return None
 
 
-def discover_github_versions(repo: str, max_versions: Optional[int] = None) -> List[str]:
+def discover_github_versions(repo: str, max_versions: Optional[int] = None, token: Optional[str] = None) -> List[str]:
     """
     Discover versions from GitHub releases and tags.
 
@@ -77,7 +93,7 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None) -> L
 
     while True:
         releases_url = f"https://api.github.com/repos/{repo}/releases?page={page}&per_page={per_page}"
-        content = fetch_url(releases_url, headers={"Accept": "application/vnd.github.v3+json"})
+        content = fetch_url(releases_url, headers={"Accept": "application/vnd.github.v3+json"}, token=token)
 
         if not content:
             break
@@ -107,7 +123,7 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None) -> L
         page = 1
         while True:
             tags_url = f"https://api.github.com/repos/{repo}/tags?page={page}&per_page={per_page}"
-            content = fetch_url(tags_url, headers={"Accept": "application/vnd.github.v3+json"})
+            content = fetch_url(tags_url, headers={"Accept": "application/vnd.github.v3+json"}, token=token)
 
             if not content:
                 break
@@ -251,7 +267,7 @@ def generate_version_definition(base_version: Dict, new_version: str) -> Dict:
     return new_def
 
 
-def discover_package_versions(package_file: Path, max_versions: Optional[int] = None) -> List[str]:
+def discover_package_versions(package_file: Path, max_versions: Optional[int] = None, token: Optional[str] = None) -> List[str]:
     """
     Discover available versions for a package.
 
@@ -286,14 +302,14 @@ def discover_package_versions(package_file: Path, max_versions: Optional[int] = 
         repo_match = re.search(r'github\.com/([^/]+)/([^/]+)', source_url)
         if repo_match:
             repo = f"{repo_match.group(1)}/{repo_match.group(2)}"
-            discovered = discover_github_versions(repo, max_versions)
+            discovered = discover_github_versions(repo, max_versions, token)
 
     # Git repository discovery
     elif source_type == 'git' and 'github.com' in source_url:
         repo_match = re.search(r'github\.com/([^/]+)/([^/]+)', source_url)
         if repo_match:
             repo = f"{repo_match.group(1)}/{repo_match.group(2)}"
-            discovered = discover_github_versions(repo, max_versions)
+            discovered = discover_github_versions(repo, max_versions, token)
 
     # Special cases for specific websites
     elif 'curl.se' in source_url:
@@ -403,8 +419,16 @@ def main():
         default='packages',
         help='Path to packages directory (default: packages)'
     )
+    parser.add_argument(
+        '--github-token',
+        default=None,
+        help='GitHub token for API authentication (default: from GITHUB_TOKEN env var)'
+    )
 
     args = parser.parse_args()
+
+    # Get GitHub token from argument or environment variable
+    github_token = args.github_token or os.getenv('GITHUB_TOKEN')
 
     packages_dir = Path(args.packages_dir)
     if not packages_dir.exists():
@@ -423,7 +447,7 @@ def main():
                 continue
 
             print(f"\nProcessing {pkg_file.name}...")
-            versions = discover_package_versions(pkg_file, args.max_versions)
+            versions = discover_package_versions(pkg_file, args.max_versions, github_token)
 
             if versions:
                 added, skipped = add_versions_to_package(pkg_file, versions, args.dry_run)
@@ -442,7 +466,7 @@ def main():
             sys.exit(1)
 
         print(f"Discovering versions for {args.package}...")
-        versions = discover_package_versions(pkg_file, args.max_versions)
+        versions = discover_package_versions(pkg_file, args.max_versions, github_token)
 
         if versions:
             print(f"Discovered {len(versions)} version(s): {', '.join(versions[:5])}{'...' if len(versions) > 5 else ''}")

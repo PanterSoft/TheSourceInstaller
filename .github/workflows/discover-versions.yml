@@ -36,6 +36,8 @@ jobs:
 
       - name: Discover and update versions
         id: discover
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -44,24 +46,27 @@ jobs:
 
           echo "Starting version discovery..."
           echo "Package: ${PACKAGE:-all packages}"
-          if [ -n "${MAX_VERSIONS}" ]; then
-            echo "Max versions per package: ${MAX_VERSIONS}"
-            MAX_VERSIONS_ARG="--max-versions ${MAX_VERSIONS}"
-          else
-            echo "Discovering ALL available versions for each package"
-            MAX_VERSIONS_ARG=""
-          fi
+
+          # Build command arguments
+          CMD_ARGS=()
 
           if [ -n "${PACKAGE}" ]; then
-            python3 scripts/discover-versions.py "${PACKAGE}" \
-              ${MAX_VERSIONS_ARG} \
-              --packages-dir packages
+            CMD_ARGS+=("${PACKAGE}")
           else
-            # Always check all packages
-            python3 scripts/discover-versions.py --all \
-              ${MAX_VERSIONS_ARG} \
-              --packages-dir packages
+            CMD_ARGS+=("--all")
           fi
+
+          if [ -n "${MAX_VERSIONS}" ]; then
+            echo "Max versions per package: ${MAX_VERSIONS}"
+            CMD_ARGS+=("--max-versions" "${MAX_VERSIONS}")
+          else
+            echo "Discovering ALL available versions for each package"
+          fi
+
+          CMD_ARGS+=("--packages-dir" "packages")
+
+          # Run the discovery script with GitHub token
+          python3 scripts/discover-versions.py "${CMD_ARGS[@]}"
 
           # Count changed files
           CHANGED_FILES=$(git diff --name-only packages/ 2>/dev/null | wc -l || echo "0")
