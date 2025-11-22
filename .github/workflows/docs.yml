@@ -76,7 +76,6 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     defaults:
       run:
         shell: bash
