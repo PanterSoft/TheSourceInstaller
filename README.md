@@ -55,6 +55,9 @@ tsi list
 # Show package information
 tsi info curl
 
+# List all available versions
+tsi versions git
+
 # Remove a package
 tsi remove curl
 ```

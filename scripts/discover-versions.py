@@ -150,6 +150,17 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None, toke
                         if parts and re.match(r'^\d+\.\d+', parts[-1]):
                             version = parts[-1]
                     if version and re.match(r'^\d+', version):  # Must start with digit
+                        # Filter out development versions with very high patch numbers
+                        # (e.g., 9.1.1924 is likely a development version, not a release)
+                        parts = version.split('.')
+                        if len(parts) >= 3:
+                            try:
+                                patch = int(parts[2])
+                                # Skip versions with patch number >= 1000 (likely development versions)
+                                if patch >= 1000:
+                                    continue
+                            except ValueError:
+                                pass
                         versions.append(version)
 
                     # Check if we've reached max_versions limit

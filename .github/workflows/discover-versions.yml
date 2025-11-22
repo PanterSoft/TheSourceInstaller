@@ -64,7 +64,9 @@ jobs:
             echo "Max versions per package: ${MAX_VERSIONS}"
             CMD_ARGS+=("--max-versions" "${MAX_VERSIONS}")
           else
-            echo "Discovering ALL available versions for each package"
+            # Default to 50 versions per package to avoid excessive files
+            echo "Using default max versions: 50 per package"
+            CMD_ARGS+=("--max-versions" "50")
           fi
 
           CMD_ARGS+=("--packages-dir" "packages")

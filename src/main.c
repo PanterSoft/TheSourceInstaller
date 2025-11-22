@@ -22,6 +22,7 @@ static void print_usage(const char *prog_name) {
     printf("  remove <package>                             Remove an installed package\n");
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
+    printf("  versions <package>                           List all available versions\n");
     printf("  update [--repo URL] [--local PATH]           Update package repository and TSI\n");
     printf("  uninstall [--prefix PATH]                    Uninstall TSI and all data\n");
     printf("  --help                                       Show this help\n");
@@ -630,6 +631,88 @@ static int cmd_list(int argc, char **argv) {
 
     if (packages) free(packages);
     database_free(db);
+    return 0;
+}
+
+static int cmd_versions(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Error: package name required\n");
+        fprintf(stderr, "Usage: tsi versions <package>\n");
+        return 1;
+    }
+
+    const char *package_name = argv[1];
+    const char *home = getenv("HOME");
+    if (!home) home = "/root";
+
+    char repo_dir[1024];
+    snprintf(repo_dir, sizeof(repo_dir), "%s/.tsi/repos", home);
+
+    Repository *repo = repository_new(repo_dir);
+    if (!repo) {
+        fprintf(stderr, "Failed to initialize repository\n");
+        return 1;
+    }
+
+    // Check if package exists
+    Package *pkg = repository_get_package(repo, package_name);
+    if (!pkg) {
+        fprintf(stderr, "Package '%s' not found in repository.\n", package_name);
+        fprintf(stderr, "Use 'tsi list' to see available packages.\n");
+        repository_free(repo);
+        return 1;
+    }
+
+    // List all available versions
+    size_t versions_count = 0;
+    char **versions = repository_list_versions(repo, package_name, &versions_count);
+
+    if (!versions || versions_count == 0) {
+        fprintf(stderr, "No versions found for package '%s'\n", package_name);
+        repository_free(repo);
+        return 1;
+    }
+
+    // Remove duplicates
+    size_t unique_count = 0;
+    char **unique_versions = malloc(sizeof(char*) * versions_count);
+    if (!unique_versions) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        for (size_t i = 0; i < versions_count; i++) {
+            free(versions[i]);
+        }
+        free(versions);
+        repository_free(repo);
+        return 1;
+    }
+
+    for (size_t i = 0; i < versions_count; i++) {
+        bool is_duplicate = false;
+        for (size_t j = 0; j < unique_count; j++) {
+            if (strcmp(versions[i], unique_versions[j]) == 0) {
+                is_duplicate = true;
+                break;
+            }
+        }
+        if (!is_duplicate) {
+            unique_versions[unique_count++] = strdup(versions[i]);
+        }
+    }
+
+    printf("Available versions for '%s':\n", package_name);
+    for (size_t i = 0; i < unique_count; i++) {
+        printf("  %s\n", unique_versions[i]);
+        free(unique_versions[i]);
+    }
+    free(unique_versions);
+
+    // Free versions array
+    for (size_t i = 0; i < versions_count; i++) {
+        free(versions[i]);
+    }
+    free(versions);
+
+    repository_free(repo);
     return 0;
 }
 
@@ -1428,6 +1511,8 @@ int main(int argc, char **argv) {
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {
         return cmd_info(argc - 1, argv + 1);
+    } else if (strcmp(argv[1], "versions") == 0) {
+        return cmd_versions(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "update") == 0) {
         return cmd_update(argc - 1, argv + 1);
     } else {
