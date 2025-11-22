@@ -6,7 +6,7 @@
     "type": "tarball",
     "url": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz"
   },
-  "dependencies": ["openssl", "zlib", "readline", "yaml"],
+  "dependencies": ["openssl", "zlib", "readline", "libyaml"],
   "build_dependencies": [],
   "build_system": "autotools",
   "configure_args": [
