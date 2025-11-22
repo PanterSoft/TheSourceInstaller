@@ -11,9 +11,8 @@ on:
         required: false
         type: string
       max_versions:
-        description: 'Maximum versions per package'
+        description: 'Maximum versions per package (leave empty to discover all versions)'
         required: false
-        default: '10'
         type: string
 
 jobs:
@@ -41,19 +40,26 @@ jobs:
           set -e
 
           PACKAGE="${{ github.event.inputs.package }}"
-          MAX_VERSIONS="${{ github.event.inputs.max_versions || '10' }}"
+          MAX_VERSIONS="${{ github.event.inputs.max_versions }}"
 
           echo "Starting version discovery..."
-          echo "Package: ${PACKAGE:-all}"
-          echo "Max versions per package: ${MAX_VERSIONS}"
+          echo "Package: ${PACKAGE:-all packages}"
+          if [ -n "${MAX_VERSIONS}" ]; then
+            echo "Max versions per package: ${MAX_VERSIONS}"
+            MAX_VERSIONS_ARG="--max-versions ${MAX_VERSIONS}"
+          else
+            echo "Discovering ALL available versions for each package"
+            MAX_VERSIONS_ARG=""
+          fi
 
           if [ -n "${PACKAGE}" ]; then
             python3 scripts/discover-versions.py "${PACKAGE}" \
-              --max-versions "${MAX_VERSIONS}" \
+              ${MAX_VERSIONS_ARG} \
               --packages-dir packages
           else
+            # Always check all packages
             python3 scripts/discover-versions.py --all \
-              --max-versions "${MAX_VERSIONS}" \
+              ${MAX_VERSIONS_ARG} \
               --packages-dir packages
           fi
 

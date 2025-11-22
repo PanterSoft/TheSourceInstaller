@@ -13,11 +13,14 @@ Automatically discovers new package versions and updates package configuration f
 #### Features
 
 - ✅ **Automatic Discovery**: Finds new versions from GitHub, git repos, and other sources
+- ✅ **All Packages**: Automatically checks ALL packages in the repository
+- ✅ **All Versions**: Discovers ALL available versions for each package (not limited)
 - ✅ **File Updates**: Automatically updates package JSON files with new versions
 - ✅ **Multi-Version Support**: Adds versions to the `versions` array while preserving existing ones
 - ✅ **Pull Request Creation**: Creates PRs when new versions are found
 - ✅ **Scheduled Runs**: Runs weekly on Mondays at 00:00 UTC
 - ✅ **Manual Trigger**: Can be triggered manually for specific packages
+- ✅ **Pagination Support**: Handles GitHub API pagination to fetch all versions
 
 #### How It Works
 
@@ -51,8 +54,10 @@ The workflow runs automatically every Monday at 00:00 UTC. No action required.
 2. Click **Run workflow**
 3. Configure options:
    - **Package**: Leave empty for all packages, or specify a package name
-   - **Max versions**: Maximum versions to discover per package (default: 10)
+   - **Max versions**: (Optional) Maximum versions to discover per package. Leave empty to discover ALL versions
 4. Click **Run workflow**
+
+**Note:** By default, the workflow discovers **ALL available versions** for each package. The scheduled run always checks all packages and discovers all versions.
 
 #### Example Output
 

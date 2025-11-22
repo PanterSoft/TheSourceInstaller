@@ -50,13 +50,13 @@ def fetch_url(url: str, headers: Optional[Dict] = None) -> Optional[str]:
         return None
 
 
-def discover_github_versions(repo: str, max_versions: int = 10) -> List[str]:
+def discover_github_versions(repo: str, max_versions: Optional[int] = None) -> List[str]:
     """
     Discover versions from GitHub releases and tags.
 
     Args:
         repo: Repository in format 'owner/repo' or full URL
-        max_versions: Maximum number of versions to return
+        max_versions: Maximum number of versions to return (None = all versions)
 
     Returns:
         List of version strings (sorted, newest first)
@@ -69,37 +69,67 @@ def discover_github_versions(repo: str, max_versions: int = 10) -> List[str]:
         else:
             return []
 
-    # Try GitHub API for releases
-    releases_url = f"https://api.github.com/repos/{repo}/releases"
-    content = fetch_url(releases_url, headers={"Accept": "application/vnd.github.v3+json"})
-
     versions = []
-    if content:
+
+    # Try GitHub API for releases (with pagination)
+    page = 1
+    per_page = 100  # GitHub API max per page
+
+    while True:
+        releases_url = f"https://api.github.com/repos/{repo}/releases?page={page}&per_page={per_page}"
+        content = fetch_url(releases_url, headers={"Accept": "application/vnd.github.v3+json"})
+
+        if not content:
+            break
+
         try:
             releases = json.loads(content)
-            for release in releases[:max_versions]:
+            if not releases:  # No more pages
+                break
+
+            for release in releases:
                 tag = release.get('tag_name', '')
                 # Remove 'v' prefix if present
                 version = tag.lstrip('v') if tag.startswith('v') else tag
                 if version:
                     versions.append(version)
-        except json.JSONDecodeError:
-            pass
 
-    # If no releases, try tags
+                # Check if we've reached max_versions limit
+                if max_versions and len(versions) >= max_versions:
+                    return versions[:max_versions]
+
+            page += 1
+        except json.JSONDecodeError:
+            break
+
+    # If no releases, try tags (with pagination)
     if not versions:
-        tags_url = f"https://api.github.com/repos/{repo}/tags"
-        content = fetch_url(tags_url, headers={"Accept": "application/vnd.github.v3+json"})
-        if content:
+        page = 1
+        while True:
+            tags_url = f"https://api.github.com/repos/{repo}/tags?page={page}&per_page={per_page}"
+            content = fetch_url(tags_url, headers={"Accept": "application/vnd.github.v3+json"})
+
+            if not content:
+                break
+
             try:
                 tags = json.loads(content)
-                for tag in tags[:max_versions]:
+                if not tags:  # No more pages
+                    break
+
+                for tag in tags:
                     name = tag.get('name', '')
                     version = name.lstrip('v') if name.startswith('v') else name
                     if version:
                         versions.append(version)
+
+                    # Check if we've reached max_versions limit
+                    if max_versions and len(versions) >= max_versions:
+                        return versions[:max_versions]
+
+                page += 1
             except json.JSONDecodeError:
-                pass
+                break
 
     return versions
 
@@ -126,7 +156,7 @@ def discover_url_pattern_versions(base_url: str, version_pattern: str, max_versi
     return []
 
 
-def discover_curl_versions() -> List[str]:
+def discover_curl_versions(max_versions: Optional[int] = None) -> List[str]:
     """Discover curl versions from curl.se."""
     # curl.se has a releases page
     content = fetch_url("https://curl.se/download/")
@@ -138,7 +168,10 @@ def discover_curl_versions() -> List[str]:
     pattern = r'curl-(\d+\.\d+\.\d+)\.tar\.gz'
     matches = re.findall(pattern, content)
     versions = sorted(set(matches), reverse=True)
-    return versions[:10]
+
+    if max_versions:
+        return versions[:max_versions]
+    return versions
 
 
 def extract_version_from_url(url: str) -> Optional[str]:
@@ -218,7 +251,7 @@ def generate_version_definition(base_version: Dict, new_version: str) -> Dict:
     return new_def
 
 
-def discover_package_versions(package_file: Path, max_versions: int = 10) -> List[str]:
+def discover_package_versions(package_file: Path, max_versions: Optional[int] = None) -> List[str]:
     """
     Discover available versions for a package.
 
@@ -264,7 +297,7 @@ def discover_package_versions(package_file: Path, max_versions: int = 10) -> Lis
 
     # Special cases for specific websites
     elif 'curl.se' in source_url:
-        discovered = discover_curl_versions()
+        discovered = discover_curl_versions(max_versions)
 
     # URL pattern discovery (simplified - would need website-specific logic)
     # For now, we'll focus on GitHub which covers most packages
@@ -357,8 +390,8 @@ def main():
     parser.add_argument(
         '--max-versions',
         type=int,
-        default=10,
-        help='Maximum number of versions to discover per package (default: 10)'
+        default=None,
+        help='Maximum number of versions to discover per package (default: all versions)'
     )
     parser.add_argument(
         '--dry-run',

@@ -108,17 +108,22 @@ python3 scripts/discover-versions.py --all
 
 #### Options:
 
-- `--max-versions N`: Limit the number of versions discovered per package (default: 10)
+- `--max-versions N`: Limit the number of versions discovered per package (default: all versions)
 - `--dry-run`: Show what would be added without modifying files
 - `--packages-dir PATH`: Specify custom packages directory
 
+**Note:** By default, the script discovers **ALL available versions** for each package. Use `--max-versions` only if you want to limit the number of versions discovered.
+
 **Examples:**
 ```bash
-# Dry run to see what would be added
+# Dry run to see what would be added (discovers ALL versions)
 python3 scripts/discover-versions.py curl --dry-run
 
-# Discover only 5 versions per package
+# Discover only 5 versions per package (limit)
 python3 scripts/discover-versions.py --all --max-versions 5
+
+# Discover ALL versions for all packages (default behavior)
+python3 scripts/discover-versions.py --all
 
 # Custom packages directory
 python3 scripts/discover-versions.py git --packages-dir /path/to/packages
