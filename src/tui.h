@@ -255,11 +255,11 @@ static inline void output_buffer_add(OutputBuffer *buf, const char *line) {
     }
 }
 
-// Display the output buffer (moves cursor up and redraws)
+// Display the output buffer (moves cursor up and redraws, preserves status line above)
 static inline void output_buffer_display(OutputBuffer *buf) {
     if (!buf || !is_tty()) return;
 
-    // Move cursor up to overwrite previous output
+    // Move cursor up to overwrite previous output (but not the status line)
     if (buf->line_count > 0) {
         printf("\033[%dA", buf->line_count);  // Move up N lines
     }
@@ -267,30 +267,33 @@ static inline void output_buffer_display(OutputBuffer *buf) {
     // Display each line, clearing it first
     for (int i = 0; i < buf->line_count; i++) {
         int idx = (buf->current_index - buf->line_count + i + OUTPUT_BUFFER_LINES) % OUTPUT_BUFFER_LINES;
-        printf("\r\033[2K%s\n", buf->lines[idx]);
+        printf("\r\033[2K  %s\n", buf->lines[idx]);  // Add indentation to distinguish from status
     }
 
     fflush(stdout);
 }
 
-// Start output capture area
+// Start output capture area (after status line)
 static inline void output_capture_start(void) {
     if (is_tty()) {
-        printf("\n");  // Start on new line
+        printf("\n");  // Start on new line after status
     }
 }
 
-// End output capture area (move cursor back)
+// End output capture area (clear output lines, keep status line)
 static inline void output_capture_end(OutputBuffer *buf) {
     if (!buf || !is_tty()) return;
 
-    // Clear the output area
+    // Clear the output area but preserve status line
     if (buf->line_count > 0) {
+        // Move up to the output area
         printf("\033[%dA", buf->line_count);  // Move up
+        // Clear each output line
         for (int i = 0; i < buf->line_count; i++) {
             printf("\r\033[2K\n");  // Clear each line
         }
-        printf("\033[%dA", buf->line_count);  // Move back up
+        // Move back to after status line
+        printf("\033[%dA", buf->line_count);  // Move back up to where we started
     }
 }
 

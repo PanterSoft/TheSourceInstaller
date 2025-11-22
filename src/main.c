@@ -602,6 +602,9 @@ install_package:
 
         // Build
         print_building_compact(dep_pkg->name, dep_pkg->version);
+        if (is_tty()) {
+            printf("\n");  // New line for output area
+        }
         char build_dir[1024];
         if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
             snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, dep_pkg->name, dep_pkg->version);
@@ -612,7 +615,6 @@ install_package:
         // Setup output buffer for showing last 5 lines
         OutputBuffer output_buf;
         output_buffer_init(&output_buf);
-        output_capture_start();
 
         if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
@@ -625,8 +627,10 @@ install_package:
 
         // Install
         print_installing_compact(dep_pkg->name, dep_pkg->version);
+        if (is_tty()) {
+            printf("\n");  // New line for output area
+        }
         output_buffer_init(&output_buf);
-        output_capture_start();
 
         if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
@@ -667,17 +671,21 @@ install_package:
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
 
             print_building_compact(main_pkg->name, main_pkg->version);
+            if (is_tty()) {
+                printf("\n");  // New line for output area
+            }
 
             // Setup output buffer for showing last 5 lines
             OutputBuffer output_buf;
             output_buffer_init(&output_buf);
-            output_capture_start();
 
             if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
                 output_capture_end(&output_buf);
                 print_installing_compact(main_pkg->name, main_pkg->version);
+                if (is_tty()) {
+                    printf("\n");  // New line for output area
+                }
                 output_buffer_init(&output_buf);
-                output_capture_start();
 
                 if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
                     output_capture_end(&output_buf);
