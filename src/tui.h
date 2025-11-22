@@ -217,12 +217,14 @@ typedef struct {
     char lines[OUTPUT_BUFFER_LINES][OUTPUT_LINE_LENGTH];
     int line_count;
     int current_index;
+    bool display_started;  // Track if we've started displaying
 } OutputBuffer;
 
 // Initialize output buffer
 static inline void output_buffer_init(OutputBuffer *buf) {
     buf->line_count = 0;
     buf->current_index = 0;
+    buf->display_started = false;
     for (int i = 0; i < OUTPUT_BUFFER_LINES; i++) {
         buf->lines[i][0] = '\0';
     }
@@ -257,9 +259,14 @@ static inline void output_buffer_add(OutputBuffer *buf, const char *line) {
 static inline void output_buffer_display(OutputBuffer *buf) {
     if (!buf || !is_tty()) return;
 
-    // Move cursor up to overwrite previous output (but not the status line)
-    if (buf->line_count > 0) {
+    // Only display if we have lines
+    if (buf->line_count == 0) return;
+
+    // If we've already started displaying, move cursor up to overwrite previous output
+    if (buf->display_started) {
         printf("\033[%dA", buf->line_count);  // Move up N lines
+    } else {
+        buf->display_started = true;
     }
 
     // Display each line, clearing it first and truncating long lines
@@ -278,9 +285,10 @@ static inline void output_buffer_display(OutputBuffer *buf) {
             strncpy(display_line, buf->lines[idx], sizeof(display_line) - 1);
             display_line[sizeof(display_line) - 1] = '\0';
         }
-        printf("\r\033[2K  %s\n", display_line);  // Add indentation to distinguish from status
+        // Clear line and print with newline
+        printf("\r\033[2K  %s\n", display_line);
     }
-
+    // After displaying all lines, cursor is positioned correctly for next update
     fflush(stdout);
 }
 
@@ -296,15 +304,15 @@ static inline void output_capture_end(OutputBuffer *buf) {
     if (!buf || !is_tty()) return;
 
     // Clear the output area but preserve status line
-    if (buf->line_count > 0) {
+    if (buf->display_started && buf->line_count > 0) {
         // Move up to the output area
         printf("\033[%dA", buf->line_count);  // Move up
         // Clear each output line
         for (int i = 0; i < buf->line_count; i++) {
             printf("\r\033[2K\n");  // Clear each line
         }
-        // Move back to after status line
-        printf("\033[%dA", buf->line_count);  // Move back up to where we started
+        // Reset display state
+        buf->display_started = false;
     }
 }
 

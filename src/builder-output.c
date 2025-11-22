@@ -18,13 +18,17 @@ static bool execute_with_output(const char *cmd, void (*output_callback)(const c
     char line[1024];
     size_t line_pos = 0;
 
+    // Set line buffering for immediate output
+    setvbuf(pipe, NULL, _IOLBF, 0);
+
     while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
         // Process buffer character by character to handle partial lines
         for (size_t i = 0; buffer[i] != '\0'; i++) {
             if (buffer[i] == '\n' || buffer[i] == '\r') {
                 if (line_pos > 0) {
                     line[line_pos] = '\0';
-                    if (output_callback) {
+                    // Only call callback for non-empty lines
+                    if (line_pos > 0 && output_callback) {
                         output_callback(line, userdata);
                     }
                     line_pos = 0;

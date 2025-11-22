@@ -461,7 +461,7 @@ install_package:
             if (i > 0) printf(", ");
             printf("%s", deps[i]);
         }
-        printf("\n");
+        printf("\n\n");
     }
 
     // Get build order
