@@ -20,7 +20,9 @@ BuilderConfig* builder_config_new(const char *prefix);
 void builder_config_free(BuilderConfig *config);
 void builder_config_set_package_dir(BuilderConfig *config, const char *package_name, const char *package_version);
 bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir);
+bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir, void (*output_callback)(const char *line, void *userdata), void *userdata);
 bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir);
+bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir, void (*output_callback)(const char *line, void *userdata), void *userdata);
 bool builder_create_symlinks(const BuilderConfig *config, const char *package_name, const char *package_version);
 bool builder_apply_patches(const char *source_dir, char **patches, size_t patches_count);
 

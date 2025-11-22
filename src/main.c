@@ -15,6 +15,15 @@
 #include "builder.h"
 #include "tui.h"
 
+// Output callback for build/install progress
+static void output_callback(const char *line, void *userdata) {
+    OutputBuffer *buf = (OutputBuffer *)userdata;
+    if (buf) {
+        output_buffer_add(buf, line);
+        output_buffer_display(buf);
+    }
+}
+
 static void print_usage(const char *prog_name) {
     printf("TSI - TheSourceInstaller\n");
     printf("Usage: %s <command> [options]\n\n", prog_name);
@@ -599,21 +608,34 @@ install_package:
         } else {
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
         }
-        if (!builder_build(builder_config, dep_pkg, dep_source_dir, build_dir)) {
+
+        // Setup output buffer for showing last 5 lines
+        OutputBuffer output_buf;
+        output_buffer_init(&output_buf);
+        output_capture_start();
+
+        if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
+            output_capture_end(&output_buf);
             print_status_done("Error: Failed to build");
             fprintf(stderr, "  %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
+        output_capture_end(&output_buf);
 
         // Install
         print_installing_compact(dep_pkg->name, dep_pkg->version);
-        if (!builder_install(builder_config, dep_pkg, dep_source_dir, build_dir)) {
+        output_buffer_init(&output_buf);
+        output_capture_start();
+
+        if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
+            output_capture_end(&output_buf);
             print_status_done("Error: Failed to install");
             fprintf(stderr, "  %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
+        output_capture_end(&output_buf);
 
         // Show completion
         char done_msg[256];
@@ -645,9 +667,20 @@ install_package:
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
 
             print_building_compact(main_pkg->name, main_pkg->version);
-            if (builder_build(builder_config, main_pkg, main_source_dir, build_dir)) {
+
+            // Setup output buffer for showing last 5 lines
+            OutputBuffer output_buf;
+            output_buffer_init(&output_buf);
+            output_capture_start();
+
+            if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+                output_capture_end(&output_buf);
                 print_installing_compact(main_pkg->name, main_pkg->version);
-                if (builder_install(builder_config, main_pkg, main_source_dir, build_dir)) {
+                output_buffer_init(&output_buf);
+                output_capture_start();
+
+                if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+                    output_capture_end(&output_buf);
                     // Create symlinks to main install directory
                     builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
 

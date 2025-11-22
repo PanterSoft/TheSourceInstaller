@@ -211,6 +211,89 @@ static inline void print_status_done(const char *status) {
     }
 }
 
+// Rolling output buffer for showing last N lines
+#define OUTPUT_BUFFER_LINES 5
+#define OUTPUT_LINE_LENGTH 256
+
+typedef struct {
+    char lines[OUTPUT_BUFFER_LINES][OUTPUT_LINE_LENGTH];
+    int line_count;
+    int current_index;
+} OutputBuffer;
+
+// Initialize output buffer
+static inline void output_buffer_init(OutputBuffer *buf) {
+    buf->line_count = 0;
+    buf->current_index = 0;
+    for (int i = 0; i < OUTPUT_BUFFER_LINES; i++) {
+        buf->lines[i][0] = '\0';
+    }
+}
+
+// Add a line to the buffer (rolling)
+static inline void output_buffer_add(OutputBuffer *buf, const char *line) {
+    if (!buf || !line) return;
+
+    // Truncate line if too long
+    size_t len = strlen(line);
+    if (len > OUTPUT_LINE_LENGTH - 1) {
+        len = OUTPUT_LINE_LENGTH - 1;
+    }
+
+    // Copy line (handle newline)
+    strncpy(buf->lines[buf->current_index], line, len);
+    // Remove trailing newline if present
+    if (buf->lines[buf->current_index][len - 1] == '\n') {
+        buf->lines[buf->current_index][len - 1] = '\0';
+    } else {
+        buf->lines[buf->current_index][len] = '\0';
+    }
+
+    buf->current_index = (buf->current_index + 1) % OUTPUT_BUFFER_LINES;
+    if (buf->line_count < OUTPUT_BUFFER_LINES) {
+        buf->line_count++;
+    }
+}
+
+// Display the output buffer (moves cursor up and redraws)
+static inline void output_buffer_display(OutputBuffer *buf) {
+    if (!buf || !is_tty()) return;
+
+    // Move cursor up to overwrite previous output
+    if (buf->line_count > 0) {
+        printf("\033[%dA", buf->line_count);  // Move up N lines
+    }
+
+    // Display each line, clearing it first
+    for (int i = 0; i < buf->line_count; i++) {
+        int idx = (buf->current_index - buf->line_count + i + OUTPUT_BUFFER_LINES) % OUTPUT_BUFFER_LINES;
+        printf("\r\033[2K%s\n", buf->lines[idx]);
+    }
+
+    fflush(stdout);
+}
+
+// Start output capture area
+static inline void output_capture_start(void) {
+    if (is_tty()) {
+        printf("\n");  // Start on new line
+    }
+}
+
+// End output capture area (move cursor back)
+static inline void output_capture_end(OutputBuffer *buf) {
+    if (!buf || !is_tty()) return;
+
+    // Clear the output area
+    if (buf->line_count > 0) {
+        printf("\033[%dA", buf->line_count);  // Move up
+        for (int i = 0; i < buf->line_count; i++) {
+            printf("\r\033[2K\n");  // Clear each line
+        }
+        printf("\033[%dA", buf->line_count);  // Move back up
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif
