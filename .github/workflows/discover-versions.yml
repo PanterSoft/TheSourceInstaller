@@ -45,6 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e  # Don't fail on individual package errors
+          set +o pipefail  # Don't fail on pipe errors (SIGPIPE)
 
           PACKAGE="${{ github.event.inputs.package }}"
           MAX_VERSIONS="${{ github.event.inputs.max_versions }}"
@@ -76,7 +77,10 @@ jobs:
           SCRIPT_EXIT=${SCRIPT_EXIT:-0}
 
           # Count changed files (even if script had some errors)
+          # Use set +o pipefail to avoid SIGPIPE errors with wc
+          set +o pipefail
           CHANGED_FILES=$(git diff --name-only packages/ 2>/dev/null | wc -l || echo "0")
+          set -o pipefail
           echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
           # Log summary
@@ -103,6 +107,7 @@ jobs:
           fi
 
           set -e  # Re-enable strict error checking for rest of workflow
+          set -o pipefail  # Re-enable pipefail for rest of workflow
 
       - name: Check for changes
         id: changes
@@ -121,22 +126,25 @@ jobs:
             git diff --stat packages/
             echo ""
             echo "Sample changes (first 100 lines):"
-            git diff packages/ | head -100
+            git diff packages/ | head -100 || true
           fi
 
       - name: Create summary
         if: steps.changes.outputs.changed == 'true'
         id: summary
         run: |
-          CHANGED_FILES=$(git diff --name-only packages/ | wc -l)
+          # Disable pipefail to avoid SIGPIPE errors
+          set +o pipefail
+          CHANGED_FILES=$(git diff --name-only packages/ | wc -l || echo "0")
           echo "changed_files_count=${CHANGED_FILES}" >> $GITHUB_OUTPUT
 
           # Create a summary of updated packages
-          UPDATED_PACKAGES=$(git diff --name-only packages/ | sed 's|packages/||' | sed 's|\.json||' | tr '\n' ',' | sed 's/,$//')
+          UPDATED_PACKAGES=$(git diff --name-only packages/ | sed 's|packages/||' | sed 's|\.json||' | tr '\n' ',' | sed 's/,$//' || echo "")
           echo "updated_packages=${UPDATED_PACKAGES}" >> $GITHUB_OUTPUT
 
           # Count total versions added (approximate)
           VERSIONS_ADDED=$(git diff packages/ | grep -c '^+.*"version"' || echo "0")
+          set -o pipefail
           echo "versions_added=${VERSIONS_ADDED}" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request

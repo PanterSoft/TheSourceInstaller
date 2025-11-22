@@ -38,3 +38,6 @@ Thumbs.db
 # Build artifacts
 src/build/
 src/bin/
+
+# MkDocs build output
+site/
