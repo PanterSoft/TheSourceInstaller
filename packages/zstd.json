@@ -1,0 +1,17 @@
+{
+  "name": "zstd",
+  "version": "1.5.6",
+  "description": "Fast real-time compression algorithm",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "make",
+  "make_args": [
+    "PREFIX=$TSI_INSTALL_DIR"
+  ],
+  "env": {}
+}
+

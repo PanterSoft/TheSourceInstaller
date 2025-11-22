@@ -1,0 +1,19 @@
+{
+  "name": "rocksdb",
+  "version": "8.11.3",
+  "description": "Persistent key-value store",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/facebook/rocksdb/archive/v8.11.3.tar.gz"
+  },
+  "dependencies": ["snappy", "zlib", "lz4", "zstd", "bzip2"],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DWITH_TESTS=OFF",
+    "-DWITH_TOOLS=OFF"
+  ],
+  "env": {}
+}
+

@@ -1,0 +1,17 @@
+{
+  "name": "libevent",
+  "version": "2.1.12",
+  "description": "Event notification library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz"
+  },
+  "dependencies": ["openssl"],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [
+    "--enable-openssl"
+  ],
+  "env": {}
+}
+

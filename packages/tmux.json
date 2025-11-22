@@ -1,0 +1,15 @@
+{
+  "name": "tmux",
+  "version": "3.4",
+  "description": "Terminal multiplexer",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz"
+  },
+  "dependencies": ["ncurses", "libevent"],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}
+

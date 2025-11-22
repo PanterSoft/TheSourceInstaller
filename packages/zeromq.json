@@ -1,0 +1,15 @@
+{
+  "name": "zeromq",
+  "version": "4.3.5",
+  "description": "High-performance messaging library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/zeromq/libzmq/releases/download/v4.3.5/zeromq-4.3.5.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}
+

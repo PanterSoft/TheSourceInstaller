@@ -288,6 +288,57 @@ Tests run automatically on:
 
 See [tests/README.md](tests/README.md) and [docker/README.md](docker/README.md) for detailed testing documentation.
 
+## Automated Package Management
+
+TSI includes automated workflows that keep packages up-to-date:
+
+### Automatic Version Discovery
+
+The system automatically discovers new package versions and updates package configuration files:
+
+- **Runs weekly** to discover new versions
+- **Updates package files** with new versions automatically
+- **Creates pull requests** when new versions are found
+- **Preserves all existing versions** in multi-version format
+
+**Quick start:**
+```bash
+# Discover versions for a package locally
+python3 scripts/discover-versions.py <package-name>
+
+# Or let GitHub Actions do it automatically
+# (runs every Monday, or trigger manually)
+```
+
+See [Version Discovery](docs/VERSION-DISCOVERY.md) and [Workflow Automation](docs/WORKFLOW-AUTOMATION.md) for details.
+
+### External Package Configuration
+
+Projects can include their own `.tsi.json` file in their repository root, similar to how Homebrew handles casks. When projects update their package configuration, a GitHub Actions workflow automatically creates a pull request to update the TSI package repository.
+
+See [External Package Configuration](docs/EXTERNAL-PACKAGES.md) for complete documentation.
+
+### Quick Start for Project Maintainers
+
+1. Add a `.tsi.json` file to your repository root:
+   ```json
+   {
+     "name": "my-package",
+     "version": "1.0.0",
+     "description": "My awesome package",
+     "source": {
+       "type": "tarball",
+       "url": "https://example.com/releases/my-package-1.0.0.tar.gz"
+     },
+     "dependencies": ["zlib"],
+     "build_system": "cmake"
+   }
+   ```
+
+2. When you release a new version, update the `version` and `source.url` fields
+
+3. The TSI workflow will automatically sync the update (or trigger manually via GitHub Actions)
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.

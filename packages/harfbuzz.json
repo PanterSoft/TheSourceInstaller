@@ -1,0 +1,15 @@
+{
+  "name": "harfbuzz",
+  "version": "8.3.0",
+  "description": "Text shaping library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/harfbuzz/harfbuzz/releases/download/8.3.0/harfbuzz-8.3.0.tar.xz"
+  },
+  "dependencies": ["freetype", "glib"],
+  "build_dependencies": ["pkg-config", "meson"],
+  "build_system": "meson",
+  "configure_args": [],
+  "env": {}
+}
+

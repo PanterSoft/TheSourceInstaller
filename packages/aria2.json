@@ -1,0 +1,18 @@
+{
+  "name": "aria2",
+  "version": "1.37.0",
+  "description": "Lightweight multi-protocol download utility",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz"
+  },
+  "dependencies": ["openssl", "zlib", "libxml2"],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [
+    "--with-openssl",
+    "--with-libxml2"
+  ],
+  "env": {}
+}
+

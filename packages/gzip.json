@@ -1,10 +1,10 @@
 {
-  "name": "libtool",
-  "version": "2.4.7",
-  "description": "Generic library support script",
+  "name": "gzip",
+  "version": "1.13",
+  "description": "GNU compression utility",
   "source": {
     "type": "tarball",
-    "url": "https://ftp.gnu.org/gnu/libtool/libtool-2.4.7.tar.gz"
+    "url": "https://ftp.gnu.org/gnu/gzip/gzip-1.13.tar.gz"
   },
   "dependencies": [],
   "build_dependencies": [],
@@ -12,3 +12,4 @@
   "configure_args": [],
   "env": {}
 }
+

@@ -1,0 +1,17 @@
+{
+  "name": "lmdb",
+  "version": "0.9.31",
+  "description": "Lightning Memory-Mapped Database",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/LMDB/lmdb/archive/LMDB_0.9.31.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "make",
+  "make_args": [
+    "prefix=$TSI_INSTALL_DIR"
+  ],
+  "env": {}
+}
+

@@ -1,0 +1,22 @@
+{
+  "name": "libarchive",
+  "version": "3.7.4",
+  "description": "Multi-format archive and compression library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/libarchive/libarchive/releases/download/v3.7.4/libarchive-3.7.4.tar.gz"
+  },
+  "dependencies": ["zlib", "bzip2", "xz", "zstd", "lz4", "openssl"],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [
+    "--with-zlib",
+    "--with-bz2lib",
+    "--with-lzma",
+    "--with-zstd",
+    "--with-lz4",
+    "--with-openssl"
+  ],
+  "env": {}
+}
+

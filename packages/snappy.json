@@ -1,0 +1,18 @@
+{
+  "name": "snappy",
+  "version": "1.2.0",
+  "description": "Fast compression/decompression library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/google/snappy/releases/download/1.2.0/snappy-1.2.0.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=ON"
+  ],
+  "env": {}
+}
+

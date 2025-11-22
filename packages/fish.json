@@ -1,0 +1,17 @@
+{
+  "name": "fish",
+  "version": "3.7.0",
+  "description": "Friendly interactive shell",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/fish-shell/fish-shell/releases/download/3.7.0/fish-3.7.0.tar.xz"
+  },
+  "dependencies": ["ncurses", "pcre2"],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DCMAKE_BUILD_TYPE=Release"
+  ],
+  "env": {}
+}
+

@@ -1,0 +1,15 @@
+{
+  "name": "libuv",
+  "version": "1.48.0",
+  "description": "Cross-platform asynchronous I/O library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/libuv/libuv/archive/v1.48.0.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["autotools"],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}
+

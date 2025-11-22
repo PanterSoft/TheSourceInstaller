@@ -1,0 +1,19 @@
+{
+  "name": "cjson",
+  "version": "1.7.18",
+  "description": "Ultralightweight JSON parser in ANSI C",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/DaveGamble/cJSON/archive/v1.7.18.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DENABLE_CJSON_UTILS=On",
+    "-DENABLE_CJSON_TEST=Off",
+    "-DCMAKE_BUILD_TYPE=Release"
+  ],
+  "env": {}
+}
+

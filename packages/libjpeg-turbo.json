@@ -1,0 +1,19 @@
+{
+  "name": "libjpeg-turbo",
+  "version": "3.0.2",
+  "description": "JPEG image codec library",
+  "source": {
+    "type": "tarball",
+    "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.2/libjpeg-turbo-3.0.2.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DENABLE_STATIC=ON",
+    "-DENABLE_SHARED=ON"
+  ],
+  "env": {}
+}
+
