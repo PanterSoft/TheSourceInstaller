@@ -114,6 +114,57 @@ static inline void print_progress(const char *operation, const char *detail) {
     }
 }
 
+// Print "Building" message (Homebrew style: "==> Building package")
+static inline void print_building(const char *package, const char *version) {
+    if (version) {
+        printf("==> Building %s %s\n", package, version);
+    } else {
+        printf("==> Building %s\n", package);
+    }
+}
+
+// Print "Installing" message (Homebrew style: "==> Installing package")
+static inline void print_installing(const char *package, const char *version) {
+    if (version) {
+        printf("==> Installing %s %s\n", package, version);
+    } else {
+        printf("==> Installing %s\n", package);
+    }
+}
+
+// Print installation summary (Homebrew style: "/path/to/package/version (X files, Y MB)")
+static inline void print_summary(const char *install_path, int file_count, const char *size) {
+    if (file_count > 0 && size) {
+        printf("==> Summary\n");
+        printf("  %s (%d files, %s)\n", install_path, file_count, size);
+    } else if (install_path) {
+        printf("==> Summary\n");
+        printf("  %s\n", install_path);
+    }
+}
+
+// Print caveats section (Homebrew style: "==> Caveats")
+static inline void print_caveats_start(void) {
+    printf("==> Caveats\n");
+}
+
+// Print a caveat line
+static inline void print_caveat(const char *caveat) {
+    printf("  %s\n", caveat);
+}
+
+// Print cleanup message (Homebrew style: "==> Cleaning up")
+static inline void print_cleanup(const char *package, const char *old_version, int file_count, const char *size) {
+    printf("==> Cleaning up %s\n", package);
+    if (old_version) {
+        if (file_count > 0 && size) {
+            printf("  Removed %s (%d files, %s)\n", old_version, file_count, size);
+        } else {
+            printf("  Removed %s\n", old_version);
+        }
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif
