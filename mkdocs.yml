@@ -59,6 +59,7 @@ nav:
     - Architecture: developer-guide/architecture.md
     - Repository: developer-guide/repository.md
     - Maintenance: developer-guide/maintenance.md
+    - Documentation Deployment: DEPLOYMENT.md
   - Workflows:
     - Automation: workflows/automation.md
     - Version Discovery: workflows/version-discovery.md
@@ -75,6 +76,10 @@ plugins:
   - search
   - git-revision-date-localized:
       enable_creation_date: true
+
+# Exclude README.md from build (conflicts with index.md)
+exclude_docs: |
+  README.md
 
 extra:
   version:
