@@ -362,8 +362,7 @@ install_package:
         print_section("Upgrading");
         printf("  %s %s -> %s\n", package_name, "?", package_version);
     } else {
-        print_section("Installing");
-        printf("  %s\n", package_name);
+        // Don't print section header here - will be printed by print_building_compact
     }
 
     // Check if already installed (check specific version if specified)

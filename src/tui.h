@@ -180,26 +180,24 @@ static inline void print_status_inline(const char *status) {
     }
 }
 
-// Print compact building status (updates in place)
+// Print compact building status (prints on new line)
 static inline void print_building_compact(const char *package, const char *version) {
-    char status[256];
     if (version) {
-        snprintf(status, sizeof(status), "==> Building %s %s", package, version);
+        printf("==> Building %s %s\n", package, version);
     } else {
-        snprintf(status, sizeof(status), "==> Building %s", package);
+        printf("==> Building %s\n", package);
     }
-    print_status_inline(status);
+    fflush(stdout);
 }
 
-// Print compact installing status (updates in place)
+// Print compact installing status (prints on new line)
 static inline void print_installing_compact(const char *package, const char *version) {
-    char status[256];
     if (version) {
-        snprintf(status, sizeof(status), "==> Installing %s %s", package, version);
+        printf("==> Installing %s %s\n", package, version);
     } else {
-        snprintf(status, sizeof(status), "==> Installing %s", package);
+        printf("==> Installing %s\n", package);
     }
-    print_status_inline(status);
+    fflush(stdout);
 }
 
 // Print final status (new line after inline update)
@@ -264,10 +262,23 @@ static inline void output_buffer_display(OutputBuffer *buf) {
         printf("\033[%dA", buf->line_count);  // Move up N lines
     }
 
-    // Display each line, clearing it first
+    // Display each line, clearing it first and truncating long lines
     for (int i = 0; i < buf->line_count; i++) {
         int idx = (buf->current_index - buf->line_count + i + OUTPUT_BUFFER_LINES) % OUTPUT_BUFFER_LINES;
-        printf("\r\033[2K  %s\n", buf->lines[idx]);  // Add indentation to distinguish from status
+        // Truncate line to reasonable width (120 chars)
+        char display_line[130];
+        size_t len = strlen(buf->lines[idx]);
+        if (len > 120) {
+            strncpy(display_line, buf->lines[idx], 117);
+            display_line[117] = '.';
+            display_line[118] = '.';
+            display_line[119] = '.';
+            display_line[120] = '\0';
+        } else {
+            strncpy(display_line, buf->lines[idx], sizeof(display_line) - 1);
+            display_line[sizeof(display_line) - 1] = '\0';
+        }
+        printf("\r\033[2K  %s\n", display_line);  // Add indentation to distinguish from status
     }
 
     fflush(stdout);
