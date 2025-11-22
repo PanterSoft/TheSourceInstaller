@@ -3,8 +3,24 @@ name: TSI Tests
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'docker/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'tsi-bootstrap.sh'
+      - '.github/workflows/test.yml'
+      - 'completions/**'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'docker/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'tsi-bootstrap.sh'
+      - '.github/workflows/test.yml'
+      - 'completions/**'
   workflow_dispatch:  # Manual trigger
 
 jobs:
