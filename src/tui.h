@@ -165,6 +165,52 @@ static inline void print_cleanup(const char *package, const char *old_version, i
     }
 }
 
+// Terminal control sequences
+#define CLEAR_LINE "\033[2K"  // Clear entire line
+#define HIDE_CURSOR "\033[?25l"  // Hide cursor
+#define SHOW_CURSOR "\033[?25h"  // Show cursor
+
+// Print status that updates in place (single line)
+static inline void print_status_inline(const char *status) {
+    if (is_tty()) {
+        printf("\r\033[2K%s", status);
+        fflush(stdout);
+    } else {
+        printf("%s\n", status);
+    }
+}
+
+// Print compact building status (updates in place)
+static inline void print_building_compact(const char *package, const char *version) {
+    char status[256];
+    if (version) {
+        snprintf(status, sizeof(status), "==> Building %s %s", package, version);
+    } else {
+        snprintf(status, sizeof(status), "==> Building %s", package);
+    }
+    print_status_inline(status);
+}
+
+// Print compact installing status (updates in place)
+static inline void print_installing_compact(const char *package, const char *version) {
+    char status[256];
+    if (version) {
+        snprintf(status, sizeof(status), "==> Installing %s %s", package, version);
+    } else {
+        snprintf(status, sizeof(status), "==> Installing %s", package);
+    }
+    print_status_inline(status);
+}
+
+// Print final status (new line after inline update)
+static inline void print_status_done(const char *status) {
+    if (is_tty()) {
+        printf("\r%s%s%s\n", CLEAR_LINE, status, COLOR_RESET);
+    } else {
+        printf("%s\n", status);
+    }
+}
+
 #ifdef __cplusplus
 }
 #endif

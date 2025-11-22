@@ -592,7 +592,7 @@ install_package:
         builder_config_set_package_dir(builder_config, dep_pkg->name, dep_pkg->version);
 
         // Build
-        print_building(dep_pkg->name, dep_pkg->version);
+        print_building_compact(dep_pkg->name, dep_pkg->version);
         char build_dir[1024];
         if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
             snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, dep_pkg->name, dep_pkg->version);
@@ -600,21 +600,29 @@ install_package:
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
         }
         if (!builder_build(builder_config, dep_pkg, dep_source_dir, build_dir)) {
-            fprintf(stderr, "Error: Failed to build %s\n", build_order[i]);
+            print_status_done("Error: Failed to build");
+            fprintf(stderr, "  %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
 
         // Install
-        print_installing(dep_pkg->name, dep_pkg->version);
+        print_installing_compact(dep_pkg->name, dep_pkg->version);
         if (!builder_install(builder_config, dep_pkg, dep_source_dir, build_dir)) {
-            fprintf(stderr, "Error: Failed to install %s\n", build_order[i]);
+            print_status_done("Error: Failed to install");
+            fprintf(stderr, "  %s\n", build_order[i]);
             free(dep_source_dir);
             continue;
         }
 
-        // Show summary
-        print_summary(builder_config->install_dir, 0, NULL);
+        // Show completion
+        char done_msg[256];
+        if (dep_pkg->version) {
+            snprintf(done_msg, sizeof(done_msg), "%s Installed %s %s", ICON_SUCCESS, dep_pkg->name, dep_pkg->version);
+        } else {
+            snprintf(done_msg, sizeof(done_msg), "%s Installed %s", ICON_SUCCESS, dep_pkg->name);
+        }
+        print_status_done(done_msg);
 
         // Create symlinks to main install directory
         builder_create_symlinks(builder_config, dep_pkg->name, dep_pkg->version);
@@ -636,15 +644,24 @@ install_package:
             char build_dir[1024];
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
 
-            print_building(main_pkg->name, main_pkg->version);
+            print_building_compact(main_pkg->name, main_pkg->version);
             if (builder_build(builder_config, main_pkg, main_source_dir, build_dir)) {
-                print_installing(main_pkg->name, main_pkg->version);
+                print_installing_compact(main_pkg->name, main_pkg->version);
                 if (builder_install(builder_config, main_pkg, main_source_dir, build_dir)) {
                     // Create symlinks to main install directory
                     builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
 
                     // Record in database with package-specific path
                     database_add_package(db, main_pkg->name, main_pkg->version, builder_config->install_dir, (const char **)main_pkg->dependencies, main_pkg->dependencies_count);
+
+                    // Show completion
+                    char done_msg[256];
+                    if (main_pkg->version) {
+                        snprintf(done_msg, sizeof(done_msg), "%s Installed %s %s", ICON_SUCCESS, main_pkg->name, main_pkg->version);
+                    } else {
+                        snprintf(done_msg, sizeof(done_msg), "%s Installed %s", ICON_SUCCESS, main_pkg->name);
+                    }
+                    print_status_done(done_msg);
 
                     // Show summary
                     print_summary(builder_config->install_dir, 0, NULL);
@@ -654,10 +671,6 @@ install_package:
                         print_caveats_start();
                         print_caveat(main_pkg->description);
                     }
-
-                    char success_msg[256];
-                    snprintf(success_msg, sizeof(success_msg), "Installed %s", package_name);
-                    print_success(success_msg);
                 } else {
                     if (package_version) {
                         fprintf(stderr, "Error: Failed to install %s@%s\n", package_name, package_version);

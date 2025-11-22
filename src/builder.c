@@ -115,7 +115,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
 
         // Configure
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s' >/dev/null 2>&1", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->configure_args[i]);
@@ -125,7 +125,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
 
         // Make
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make", source_dir, env);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make >/dev/null 2>&1", source_dir, env);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->make_args[i]);
@@ -138,7 +138,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         // CMake configure
         size_t cmd_len = 1024;
         char *cmd = malloc(cmd_len);
-        snprintf(cmd, cmd_len, "cd '%s' && %s cmake -S '%s' -B '%s' -DCMAKE_INSTALL_PREFIX='%s'",
+        snprintf(cmd, cmd_len, "cd '%s' && %s cmake -S '%s' -B '%s' -DCMAKE_INSTALL_PREFIX='%s' >/dev/null 2>&1",
                  build_dir, env, source_dir, build_dir, config->install_dir);
         for (size_t i = 0; i < pkg->cmake_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->cmake_args[i]) + 2;
@@ -158,7 +158,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         // CMake build
         cmd_len = 1024;
         cmd = malloc(cmd_len);
-        snprintf(cmd, cmd_len, "cd '%s' && %s cmake --build '%s'", build_dir, env, build_dir);
+        snprintf(cmd, cmd_len, "cd '%s' && %s cmake --build '%s' >/dev/null 2>&1", build_dir, env, build_dir);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->make_args[i]) + 2;
             if (needed > cmd_len) {
@@ -178,7 +178,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         // Plain Makefile
         size_t cmd_len = 1024;
         char *cmd = malloc(cmd_len);
-        snprintf(cmd, cmd_len, "cd '%s' && %s make", source_dir, env);
+        snprintf(cmd, cmd_len, "cd '%s' && %s make >/dev/null 2>&1", source_dir, env);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->make_args[i]) + 2;
             if (needed > cmd_len) {
@@ -196,14 +196,14 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
     } else if (strcmp(build_system, "meson") == 0) {
         // Meson setup
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson setup '%s' '%s' --prefix='%s'",
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson setup '%s' '%s' --prefix='%s' >/dev/null 2>&1",
                  build_dir, env, build_dir, source_dir, config->install_dir);
         if (system(cmd) != 0) {
             return false;
         }
 
         // Meson compile
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson compile -C '%s'", build_dir, env, build_dir);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson compile -C '%s' >/dev/null 2>&1", build_dir, env, build_dir);
         if (system(cmd) != 0) {
             return false;
         }
@@ -240,13 +240,13 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     char cmd[1024];
 
     if (strcmp(build_system, "autotools") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install", source_dir, env);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install >/dev/null 2>&1", source_dir, env);
     } else if (strcmp(build_system, "cmake") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s' >/dev/null 2>&1", build_dir, env, build_dir);
     } else if (strcmp(build_system, "meson") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s'", build_dir, env, build_dir);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s' >/dev/null 2>&1", build_dir, env, build_dir);
     } else if (strcmp(build_system, "make") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s'", source_dir, env, config->install_dir);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s' >/dev/null 2>&1", source_dir, env, config->install_dir);
     } else {
         return false;
     }
