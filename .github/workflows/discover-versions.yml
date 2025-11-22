@@ -21,6 +21,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout repository
@@ -28,6 +32,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -112,6 +117,8 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          author: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
           commit-message: |
             chore: update package versions (auto-discovered)
 
