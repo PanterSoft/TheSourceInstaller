@@ -10,6 +10,9 @@ on:
       - 'packages/**/*.json'
   workflow_dispatch:  # Manual trigger
 
+permissions:
+  contents: read
+
 jobs:
   validate-format:
     name: Validate Package Format
@@ -57,55 +60,106 @@ jobs:
             if [ -f "$pkg" ]; then
               echo "Validating structure: $pkg"
 
-              # Check required fields
-              REQUIRED_FIELDS=("name" "source")
-              for field in "${REQUIRED_FIELDS[@]}"; do
-                if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if '$field' in data else 1)" 2>/dev/null; then
-                  echo "❌ Missing required field '$field' in $pkg"
+              # Check if this is a multi-version package (has "versions" array) or single-version
+              HAS_VERSIONS=$(python3 -c "import json; data = json.load(open('$pkg')); print('yes' if 'versions' in data and isinstance(data.get('versions'), list) else 'no')" 2>/dev/null || echo "no")
+
+              if [ "$HAS_VERSIONS" = "yes" ]; then
+                # Multi-version package: validate versions array
+                VERSION_COUNT=$(python3 -c "import json; data = json.load(open('$pkg')); print(len(data.get('versions', [])))" 2>/dev/null || echo "0")
+                if [ "$VERSION_COUNT" -eq 0 ]; then
+                  echo "❌ Package has 'versions' array but it is empty in $pkg"
+                  FAILED=1
+                else
+                  # Validate each version in the array using Python
+                  python3 << 'PYEOF' || FAILED=1
+                  import json
+                  import sys
+                  pkg_file = '$pkg'
+                  with open(pkg_file, 'r') as f:
+                      data = json.load(f)
+                  versions = data.get('versions', [])
+                  valid_types = ['git', 'tarball', 'zip', 'local']
+                  valid_build_systems = ['autotools', 'cmake', 'meson', 'make', 'cargo', 'custom']
+                  array_fields = ['dependencies', 'build_dependencies', 'configure_args', 'cmake_args', 'make_args', 'patches']
+                  for i, version in enumerate(versions):
+                      if 'version' not in version:
+                          print(f'❌ Version {i+1} missing version field in {pkg_file}')
+                          sys.exit(1)
+                      if 'source' not in version:
+                          print(f'❌ Version {i+1} missing source field in {pkg_file}')
+                          sys.exit(1)
+                      source = version.get('source', {})
+                      if not isinstance(source, dict) or 'type' not in source or 'url' not in source:
+                          print(f'❌ Version {i+1} has invalid or missing source object in {pkg_file}')
+                          sys.exit(1)
+                      source_type = source.get('type', '')
+                      if source_type not in valid_types:
+                          print(f'❌ Version {i+1} has invalid source type {source_type} in {pkg_file}')
+                          sys.exit(1)
+                      build_system = version.get('build_system', '')
+                      if build_system and build_system not in valid_build_systems:
+                          print(f'❌ Version {i+1} has invalid build_system {build_system} in {pkg_file}')
+                          sys.exit(1)
+                      for field in array_fields:
+                          if field in version and not isinstance(version[field], list):
+                              print(f'❌ Version {i+1} field {field} must be an array in {pkg_file}')
+                              sys.exit(1)
+                      if 'env' in version and not isinstance(version.get('env'), dict):
+                          print(f'❌ Version {i+1} field env must be an object in {pkg_file}')
+                          sys.exit(1)
+                  PYEOF
+                fi
+              else
+                # Single-version package: validate top-level fields
+                REQUIRED_FIELDS=("name" "source")
+                for field in "${REQUIRED_FIELDS[@]}"; do
+                  if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if '$field' in data else 1)" 2>/dev/null; then
+                    echo "❌ Missing required field '$field' in $pkg"
+                    FAILED=1
+                  fi
+                done
+
+                # Validate source object
+                if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if isinstance(data.get('source'), dict) and 'type' in data.get('source', {}) and 'url' in data.get('source', {}) else 1)" 2>/dev/null; then
+                  echo "❌ Invalid or missing 'source' object in $pkg"
+                  echo "  Source must be an object with 'type' and 'url' fields"
                   FAILED=1
                 fi
-              done
 
-              # Validate source object
-              if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if isinstance(data.get('source'), dict) and 'type' in data.get('source', {}) and 'url' in data.get('source', {}) else 1)" 2>/dev/null; then
-                echo "❌ Invalid or missing 'source' object in $pkg"
-                echo "  Source must be an object with 'type' and 'url' fields"
-                FAILED=1
-              fi
-
-              # Validate source type
-              SOURCE_TYPE=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('source', {}).get('type', ''))" 2>/dev/null)
-              VALID_TYPES=("git" "tarball" "zip" "local")
-              if [ -n "$SOURCE_TYPE" ] && [[ ! " ${VALID_TYPES[@]} " =~ " ${SOURCE_TYPE} " ]]; then
-                echo "❌ Invalid source type '$SOURCE_TYPE' in $pkg"
-                echo "  Valid types: ${VALID_TYPES[*]}"
-                FAILED=1
-              fi
-
-              # Validate build_system if present
-              BUILD_SYSTEM=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('build_system', ''))" 2>/dev/null)
-              if [ -n "$BUILD_SYSTEM" ]; then
-                VALID_BUILD_SYSTEMS=("autotools" "cmake" "meson" "make" "cargo" "custom")
-                if [[ ! " ${VALID_BUILD_SYSTEMS[@]} " =~ " ${BUILD_SYSTEM} " ]]; then
-                  echo "❌ Invalid build_system '$BUILD_SYSTEM' in $pkg"
-                  echo "  Valid build systems: ${VALID_BUILD_SYSTEMS[*]}"
+                # Validate source type
+                SOURCE_TYPE=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('source', {}).get('type', ''))" 2>/dev/null)
+                VALID_TYPES=("git" "tarball" "zip" "local")
+                if [ -n "$SOURCE_TYPE" ] && [[ ! " ${VALID_TYPES[@]} " =~ " ${SOURCE_TYPE} " ]]; then
+                  echo "❌ Invalid source type '$SOURCE_TYPE' in $pkg"
+                  echo "  Valid types: ${VALID_TYPES[*]}"
                   FAILED=1
                 fi
-              fi
 
-              # Validate arrays are actually arrays
-              ARRAY_FIELDS=("dependencies" "build_dependencies" "configure_args" "cmake_args" "make_args" "patches")
-              for field in "${ARRAY_FIELDS[@]}"; do
-                if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if '$field' not in data or isinstance(data.get('$field'), list) else 1)" 2>/dev/null; then
-                  echo "❌ Field '$field' must be an array in $pkg"
+                # Validate build_system if present
+                BUILD_SYSTEM=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('build_system', ''))" 2>/dev/null)
+                if [ -n "$BUILD_SYSTEM" ]; then
+                  VALID_BUILD_SYSTEMS=("autotools" "cmake" "meson" "make" "cargo" "custom")
+                  if [[ ! " ${VALID_BUILD_SYSTEMS[@]} " =~ " ${BUILD_SYSTEM} " ]]; then
+                    echo "❌ Invalid build_system '$BUILD_SYSTEM' in $pkg"
+                    echo "  Valid build systems: ${VALID_BUILD_SYSTEMS[*]}"
+                    FAILED=1
+                  fi
+                fi
+
+                # Validate arrays are actually arrays
+                ARRAY_FIELDS=("dependencies" "build_dependencies" "configure_args" "cmake_args" "make_args" "patches")
+                for field in "${ARRAY_FIELDS[@]}"; do
+                  if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if '$field' not in data or isinstance(data.get('$field'), list) else 1)" 2>/dev/null; then
+                    echo "❌ Field '$field' must be an array in $pkg"
+                    FAILED=1
+                  fi
+                done
+
+                # Validate env is an object if present
+                if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if 'env' not in data or isinstance(data.get('env'), dict) else 1)" 2>/dev/null; then
+                  echo "❌ Field 'env' must be an object in $pkg"
                   FAILED=1
                 fi
-              done
-
-              # Validate env is an object if present
-              if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if 'env' not in data or isinstance(data.get('env'), dict) else 1)" 2>/dev/null; then
-                echo "❌ Field 'env' must be an object in $pkg"
-                FAILED=1
               fi
 
               if [ $FAILED -eq 0 ]; then

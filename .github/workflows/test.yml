@@ -13,6 +13,9 @@ on:
       - '.github/workflows/test.yml'
   workflow_dispatch:  # Manual trigger
 
+permissions:
+  contents: read
+
 jobs:
   test-c:
     name: Test C/C++ Version
