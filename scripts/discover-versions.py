@@ -107,7 +107,15 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None, toke
                 tag = release.get('tag_name', '')
                 # Remove 'v' prefix if present
                 version = tag.lstrip('v') if tag.startswith('v') else tag
-                if version:
+                # Remove package name prefix if present (e.g., "pcre2-10.43" -> "10.43")
+                # Common patterns: package-name-version, package_version
+                if '-' in version or '_' in version:
+                    # Try to extract just the version part (assume version is at the end)
+                    parts = version.replace('_', '-').split('-')
+                    # Check if last part looks like a version (contains digits and dots)
+                    if parts and re.match(r'^\d+\.\d+', parts[-1]):
+                        version = parts[-1]
+                if version and re.match(r'^\d+', version):  # Must start with digit
                     versions.append(version)
 
                 # Check if we've reached max_versions limit
@@ -136,7 +144,12 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None, toke
                 for tag in tags:
                     name = tag.get('name', '')
                     version = name.lstrip('v') if name.startswith('v') else name
-                    if version:
+                    # Remove package name prefix if present
+                    if '-' in version or '_' in version:
+                        parts = version.replace('_', '-').split('-')
+                        if parts and re.match(r'^\d+\.\d+', parts[-1]):
+                            version = parts[-1]
+                    if version and re.match(r'^\d+', version):  # Must start with digit
                         versions.append(version)
 
                     # Check if we've reached max_versions limit
@@ -235,21 +248,33 @@ def generate_version_definition(base_version: Dict, new_version: str) -> Dict:
             new_def['source']['url'] = url.replace(f"v{old_version}", f"v{new_version}")
         else:
             # Try to find and replace version pattern in URL
-            # Match version patterns like: 1.2.3, v1.2.3, 1.2.3.4, etc.
-            version_patterns = [
-                r'\d+\.\d+\.\d+\.\d+',  # 1.2.3.4
-                r'v\d+\.\d+\.\d+\.\d+',  # v1.2.3.4
-                r'\d+\.\d+\.\d+',  # 1.2.3
-                r'v\d+\.\d+\.\d+',  # v1.2.3
-                r'\d+\.\d+',  # 1.2
-                r'v\d+\.\d+',  # v1.2
-            ]
+            # Handle cases like: package-1.2.3, package_1.2.3, pcre2-10.43, etc.
+            # First try to find package-name-version pattern (replace all occurrences)
+            package_version_pattern = r'([a-zA-Z0-9_-]+-)(\d+\.\d+(?:\.\d+)?)'
+            if re.search(package_version_pattern, url):
+                # Replace all occurrences of package-version pattern
+                new_def['source']['url'] = re.sub(
+                    package_version_pattern,
+                    lambda m: f"{m.group(1)}{new_version}",
+                    url
+                )
+            else:
+                # Match version patterns like: 1.2.3, v1.2.3, 1.2.3.4, etc.
+                # Try to replace all occurrences of the version
+                version_patterns = [
+                    (r'\d+\.\d+\.\d+\.\d+', new_version),  # 1.2.3.4
+                    (r'v\d+\.\d+\.\d+\.\d+', f"v{new_version}"),  # v1.2.3.4
+                    (r'\d+\.\d+\.\d+', new_version),  # 1.2.3
+                    (r'v\d+\.\d+\.\d+', f"v{new_version}"),  # v1.2.3
+                    (r'\d+\.\d+', new_version),  # 1.2
+                    (r'v\d+\.\d+', f"v{new_version}"),  # v1.2
+                ]
 
-            for pattern in version_patterns:
-                if re.search(pattern, url):
-                    # Replace the first match
-                    new_def['source']['url'] = re.sub(pattern, new_version, url, count=1)
-                    break
+                for pattern, replacement in version_patterns:
+                    if re.search(pattern, url):
+                        # Replace all occurrences
+                        new_def['source']['url'] = re.sub(pattern, replacement, url)
+                        break
 
     # Update git tag if present
     if 'source' in new_def and new_def['source'].get('type') == 'git':
@@ -440,23 +465,39 @@ def main():
         package_files = list(packages_dir.glob('*.json'))
         total_added = 0
         total_skipped = 0
+        failed_packages = []
 
         for pkg_file in package_files:
             # Skip README if it exists as JSON
             if pkg_file.name == 'README.json':
                 continue
 
-            print(f"\nProcessing {pkg_file.name}...")
-            versions = discover_package_versions(pkg_file, args.max_versions, github_token)
+            try:
+                print(f"\nProcessing {pkg_file.name}...")
+                versions = discover_package_versions(pkg_file, args.max_versions, github_token)
 
-            if versions:
-                added, skipped = add_versions_to_package(pkg_file, versions, args.dry_run)
-                total_added += added
-                total_skipped += skipped
-            else:
-                print(f"  No new versions discovered")
+                if versions:
+                    added, skipped = add_versions_to_package(pkg_file, versions, args.dry_run)
+                    total_added += added
+                    total_skipped += skipped
+                else:
+                    print(f"  No new versions discovered")
+            except Exception as e:
+                print(f"  ⚠️  Error processing {pkg_file.name}: {e}", file=sys.stderr)
+                failed_packages.append(pkg_file.name)
+                # Continue with other packages instead of failing completely
+                continue
 
         print(f"\nSummary: Added {total_added} version(s), skipped {total_skipped} version(s)")
+        if failed_packages:
+            print(f"⚠️  Failed to process {len(failed_packages)} package(s): {', '.join(failed_packages)}", file=sys.stderr)
+            # Exit with error code if all packages failed, but continue if some succeeded
+            if total_added == 0 and total_skipped == 0:
+                print("❌ All packages failed to process", file=sys.stderr)
+                sys.exit(1)
+            else:
+                print("⚠️  Some packages failed, but others succeeded - continuing", file=sys.stderr)
+                sys.exit(0)  # Success because some packages worked
 
     elif args.package:
         # Process single package

@@ -44,7 +44,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
+          set +e  # Don't fail on individual package errors
 
           PACKAGE="${{ github.event.inputs.package }}"
           MAX_VERSIONS="${{ github.event.inputs.max_versions }}"
@@ -71,11 +71,38 @@ jobs:
           CMD_ARGS+=("--packages-dir" "packages")
 
           # Run the discovery script with GitHub token
-          python3 scripts/discover-versions.py "${CMD_ARGS[@]}"
+          # Allow script to continue even if some packages fail
+          python3 scripts/discover-versions.py "${CMD_ARGS[@]}" || SCRIPT_EXIT=$?
+          SCRIPT_EXIT=${SCRIPT_EXIT:-0}
 
-          # Count changed files
+          # Count changed files (even if script had some errors)
           CHANGED_FILES=$(git diff --name-only packages/ 2>/dev/null | wc -l || echo "0")
           echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+
+          # Log summary
+          if [ $SCRIPT_EXIT -ne 0 ]; then
+            echo "⚠️  Script completed with some errors (exit code: $SCRIPT_EXIT)"
+            echo "   This is normal when processing many packages - some may fail"
+          fi
+
+          if [ "${CHANGED_FILES}" -gt 0 ]; then
+            echo "✅ Successfully updated ${CHANGED_FILES} package file(s)"
+          else
+            echo "ℹ️  No package files were updated"
+            # For single package mode, exit with error if nothing changed and script failed
+            if [ -n "${PACKAGE}" ] && [ $SCRIPT_EXIT -ne 0 ]; then
+              echo "❌ Failed to discover versions for ${PACKAGE}"
+              exit $SCRIPT_EXIT
+            fi
+          fi
+
+          # Always succeed if we're processing all packages (some failures are expected)
+          # Only fail for single package mode if there was an actual error
+          if [ -z "${PACKAGE}" ]; then
+            echo "✅ Completed processing all packages (some may have failed, but workflow continues)"
+          fi
+
+          set -e  # Re-enable strict error checking for rest of workflow
 
       - name: Check for changes
         id: changes
