@@ -102,6 +102,32 @@ sudo make install
 make install DESTDIR=/opt/tsi
 ```
 
+## Development
+
+For rapid development and testing, use the local install script:
+
+```bash
+# From the repository root
+./local-install.sh
+```
+
+This script will:
+- Build TSI from source
+- Install it to `~/.tsi/bin/tsi` (or `$TSI_PREFIX/bin/tsi`)
+- Update completion scripts
+- Allow you to test changes immediately without pushing to git
+
+**Custom installation prefix:**
+```bash
+TSI_PREFIX=/opt/tsi ./dev-install.sh
+```
+
+After running `./dev-install.sh`, you can immediately test your changes:
+```bash
+tsi --version
+tsi install <package>
+```
+
 ## Directory Structure
 
 After installation, TSI creates:

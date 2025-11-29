@@ -21,8 +21,8 @@
       ],
       "build_system": "custom",
       "build_commands": [
-        "mkdir -p ros2_ws/src",
-        "cp -r ros2 ros2_ws/src/",
+        "mkdir -p ros2_ws/src/ros2",
+        "tar -c --exclude=ros2_ws . | tar -x -C ros2_ws/src/ros2/",
         "cd ros2_ws/src/ros2",
         "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
         "vcs import < ros2.repos",
@@ -57,8 +57,8 @@
       ],
       "build_system": "custom",
       "build_commands": [
-        "mkdir -p ros2_ws/src",
-        "cp -r ros2 ros2_ws/src/",
+        "mkdir -p ros2_ws/src/ros2",
+        "tar -c --exclude=ros2_ws . | tar -x -C ros2_ws/src/ros2/",
         "cd ros2_ws/src/ros2",
         "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
         "vcs import < ros2.repos",
@@ -93,8 +93,8 @@
       ],
       "build_system": "custom",
       "build_commands": [
-        "mkdir -p ros2_ws/src",
-        "cp -r ros2 ros2_ws/src/",
+        "mkdir -p ros2_ws/src/ros2",
+        "tar -c --exclude=ros2_ws . | tar -x -C ros2_ws/src/ros2/",
         "cd ros2_ws/src/ros2",
         "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
         "vcs import < ros2.repos",
