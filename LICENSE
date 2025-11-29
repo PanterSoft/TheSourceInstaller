@@ -1,21 +1,138 @@
-MIT License
+Polyform Noncommercial License 1.0.0
 
-Copyright (c) 2024 Nico 
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Copyright (c) 2024 PanterSoft
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This software and associated documentation files (the "Software") are licensed
+under the Polyform Noncommercial License 1.0.0 (the "License"); you may not use
+this Software except in compliance with the License.
+
+You may obtain a copy of the License at:
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+================================================================================
+POLYFORM NONCOMMERCIAL LICENSE 1.0.0
+================================================================================
+
+This license gives everyone permission to use the software for noncommercial
+purposes, but commercial use requires you to obtain a separate license from the
+Licensor.
+
+================================================================================
+1. Definitions
+================================================================================
+
+"License" means this document.
+
+"Licensor" means the individual or entity offering the Software under this
+License.
+
+"Legal Entity" means the union of the acting entity and all other entities that
+control, are controlled by, or are under common control with that entity. For
+the purposes of this definition, "control" means (i) the power, direct or
+indirect, to cause the direction or management of such entity, whether by
+contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the
+outstanding shares, or (iii) beneficial ownership of such entity.
+
+"You" (or "Your") means an individual or Legal Entity exercising permissions
+granted by this License.
+
+"Use" means any use of the Software, including making the Software available to
+others for their use.
+
+"Noncommercial" means not primarily intended for or directed towards commercial
+advantage or monetary compensation. For purposes of this definition,
+"commercial advantage or monetary compensation" means any payment, consideration
+or compensation of any kind, whether monetary or otherwise, received by You or
+any third party in exchange for Use of the Software.
+
+================================================================================
+2. Scope of License Grant
+================================================================================
+
+Subject to the terms of this License, the Licensor hereby grants You a
+worldwide, royalty-free, non-exclusive, non-transferable, non-sublicensable
+license to Use the Software for Noncommercial purposes only.
+
+================================================================================
+3. Restrictions
+================================================================================
+
+The license granted in Section 2 is expressly made subject to and limited by the
+following restrictions:
+
+3.1. You may Use the Software only for Noncommercial purposes.
+
+3.2. You may not Use the Software in any manner that is primarily intended for
+or directed towards commercial advantage or private monetary compensation.
+
+3.3. If You are an individual, You may not Use the Software in connection with
+any work, task, or activity performed for hire.
+
+3.4. If You are a Legal Entity, You may not Use the Software in connection with
+any services or products that You provide to third parties for a fee, or permit
+any of Your users or customers to Use the Software in connection with any
+services or products that such users or customers provide to third parties for
+a fee.
+
+3.5. Notwithstanding the foregoing, You may contact the Licensor to obtain
+additional licenses if You wish to Use the Software for commercial purposes.
+Such additional licenses may be granted at the sole discretion of the Licensor
+and may be subject to additional fees or terms.
+
+================================================================================
+4. Termination
+================================================================================
+
+If You violate any term of this License, then Your rights under this License
+will terminate automatically.
+
+================================================================================
+5. Disclaimer
+================================================================================
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+================================================================================
+6. Limitation of Liability
+================================================================================
+
+IN NO EVENT AND UNDER NO LEGAL THEORY, WHETHER IN TORT (INCLUDING NEGLIGENCE),
+CONTRACT, OR OTHERWISE, UNLESS REQUIRED BY APPLICABLE LAW (SUCH AS DELIBERATE
+AND GROSSLY NEGLIGENT ACTS) OR AGREED TO IN WRITING, SHALL THE LICENSOR BE
+LIABLE TO YOU FOR DAMAGES, INCLUDING ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL,
+OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER ARISING AS A RESULT OF THIS LICENSE
+OR OUT OF THE USE OR INABILITY TO USE THE SOFTWARE (INCLUDING BUT NOT LIMITED
+TO DAMAGES FOR LOSS OF GOODWILL, WORK STOPPAGE, COMPUTER FAILURE OR
+MALFUNCTION, OR ANY AND ALL OTHER COMMERCIAL DAMAGES OR LOSSES), EVEN IF THE
+LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+================================================================================
+7. Export Compliance
+================================================================================
+
+You are responsible for complying with all trade regulations and laws both local
+and international. You represent that You are not on any restricted persons
+list and will not export, re-export, or provide the Software to any restricted
+person or entity.
+
+================================================================================
+8. Miscellaneous
+================================================================================
+
+This License is the entire agreement between You and the Licensor relating to
+the Software. This License may not be modified except by a written agreement
+signed by You and the Licensor. If any provision of this License is held to be
+unenforceable, such provision shall be reformed only to the extent necessary to
+make it enforceable.
