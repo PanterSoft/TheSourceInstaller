@@ -1,0 +1,205 @@
+name: Discover Package Versions
+
+on:
+  schedule:
+    # Run weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package name to update (leave empty for all)'
+        required: false
+        type: string
+      max_versions:
+        description: 'Maximum versions per package (leave empty to discover all versions)'
+        required: false
+        type: string
+
+jobs:
+  discover-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Discover and update versions
+        id: discover
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e  # Don't fail on individual package errors
+          set +o pipefail  # Don't fail on pipe errors (SIGPIPE)
+
+          PACKAGE="${{ github.event.inputs.package }}"
+          MAX_VERSIONS="${{ github.event.inputs.max_versions }}"
+
+          echo "Starting version discovery..."
+          echo "Package: ${PACKAGE:-all packages}"
+
+          # Build command arguments
+          CMD_ARGS=()
+
+          if [ -n "${PACKAGE}" ]; then
+            CMD_ARGS+=("${PACKAGE}")
+          else
+            CMD_ARGS+=("--all")
+          fi
+
+          if [ -n "${MAX_VERSIONS}" ]; then
+            echo "Max versions per package: ${MAX_VERSIONS}"
+            CMD_ARGS+=("--max-versions" "${MAX_VERSIONS}")
+          else
+            # Default to 50 versions per package to avoid excessive files
+            echo "Using default max versions: 50 per package"
+            CMD_ARGS+=("--max-versions" "50")
+          fi
+
+          CMD_ARGS+=("--packages-dir" "packages")
+
+          # Run the discovery script with GitHub token
+          # Allow script to continue even if some packages fail
+          python3 scripts/discover-versions.py "${CMD_ARGS[@]}" || SCRIPT_EXIT=$?
+          SCRIPT_EXIT=${SCRIPT_EXIT:-0}
+
+          # Count changed files (even if script had some errors)
+          # Use set +o pipefail to avoid SIGPIPE errors with wc
+          set +o pipefail
+          CHANGED_FILES=$(git diff --name-only packages/ 2>/dev/null | wc -l || echo "0")
+          set -o pipefail
+          echo "changed_files=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+
+          # Log summary
+          if [ $SCRIPT_EXIT -ne 0 ]; then
+            echo "⚠️  Script completed with some errors (exit code: $SCRIPT_EXIT)"
+            echo "   This is normal when processing many packages - some may fail"
+          fi
+
+          if [ "${CHANGED_FILES}" -gt 0 ]; then
+            echo "✅ Successfully updated ${CHANGED_FILES} package file(s)"
+          else
+            echo "ℹ️  No package files were updated"
+            # For single package mode, exit with error if nothing changed and script failed
+            if [ -n "${PACKAGE}" ] && [ $SCRIPT_EXIT -ne 0 ]; then
+              echo "❌ Failed to discover versions for ${PACKAGE}"
+              exit $SCRIPT_EXIT
+            fi
+          fi
+
+          # Always succeed if we're processing all packages (some failures are expected)
+          # Only fail for single package mode if there was an actual error
+          if [ -z "${PACKAGE}" ]; then
+            echo "✅ Completed processing all packages (some may have failed, but workflow continues)"
+          fi
+
+          set -e  # Re-enable strict error checking for rest of workflow
+          set -o pipefail  # Re-enable pipefail for rest of workflow
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet packages/; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✅ No new versions discovered - all packages are up to date"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "📦 New versions discovered and package files updated!"
+            echo ""
+            echo "Changed files:"
+            git diff --name-only packages/
+            echo ""
+            echo "Summary of changes:"
+            git diff --stat packages/
+            echo ""
+            echo "Sample changes (first 100 lines):"
+            git diff packages/ | head -100 || true
+          fi
+
+      - name: Create summary
+        if: steps.changes.outputs.changed == 'true'
+        id: summary
+        run: |
+          # Disable pipefail to avoid SIGPIPE errors
+          set +o pipefail
+          CHANGED_FILES=$(git diff --name-only packages/ | wc -l || echo "0")
+          echo "changed_files_count=${CHANGED_FILES}" >> $GITHUB_OUTPUT
+
+          # Create a summary of updated packages
+          UPDATED_PACKAGES=$(git diff --name-only packages/ | sed 's|packages/||' | sed 's|\.json||' | tr '\n' ',' | sed 's/,$//' || echo "")
+          echo "updated_packages=${UPDATED_PACKAGES}" >> $GITHUB_OUTPUT
+
+          # Count total versions added (approximate)
+          VERSIONS_ADDED=$(git diff packages/ | grep -c '^+.*"version"' || echo "0")
+          set -o pipefail
+          echo "versions_added=${VERSIONS_ADDED}" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          author: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          commit-message: |
+            chore: update package versions (auto-discovered)
+
+            Discovered and added new versions to ${{ steps.summary.outputs.changed_files_count }} package(s).
+
+            Updated packages: ${{ steps.summary.outputs.updated_packages }}
+            Versions added: ~${{ steps.summary.outputs.versions_added }}
+          title: "📦 Update package versions (auto-discovered)"
+          body: |
+            ## 🔄 Automatic Version Update
+
+            This PR updates package versions that were automatically discovered and added to package configuration files.
+
+            ### Summary
+
+            - **Updated packages:** ${{ steps.summary.outputs.changed_files_count }}
+            - **Versions added:** ~${{ steps.summary.outputs.versions_added }}
+            - **Triggered by:** `${{ github.event_name }}`
+            - **Workflow run:** [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ### Updated Packages
+
+            ${{ steps.summary.outputs.updated_packages }}
+
+            ### What Changed
+
+            The version discovery system:
+            1. ✅ Discovered new versions from package sources (GitHub, git repos, etc.)
+            2. ✅ Generated version definitions based on existing templates
+            3. ✅ Updated package configuration files with new versions
+            4. ✅ Preserved all existing versions
+
+            ### Review Checklist
+
+            - [ ] Verify new versions are correct
+            - [ ] Check that source URLs are valid
+            - [ ] Ensure dependencies are still accurate
+            - [ ] Test that packages can be built with new versions
+
+            ---
+
+            *This PR was automatically created by the [Discover Package Versions](../.github/workflows/discover-versions.yml) workflow.*
+          branch: auto-update-versions-${{ github.run_id }}
+          delete-branch: true
+          labels: |
+            automated
+            version-update
+            dependencies
+

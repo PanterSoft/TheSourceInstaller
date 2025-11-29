@@ -30,6 +30,8 @@ bool resolver_has_circular_dependency(DependencyResolver *resolver, const char *
 Repository* repository_new(const char *repo_dir);
 void repository_free(Repository *repo);
 Package* repository_get_package(Repository *repo, const char *name);
+Package* repository_get_package_version(Repository *repo, const char *name, const char *version);
+char** repository_list_versions(Repository *repo, const char *name, size_t *count);
 bool repository_add_package(Repository *repo, Package *pkg);
 char** repository_list_packages(Repository *repo, size_t *count);
 

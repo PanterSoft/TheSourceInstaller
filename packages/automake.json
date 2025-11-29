@@ -1,7 +1,7 @@
 {
   "name": "automake",
   "version": "1.17",
-  "description": "GNU Automake - Build system generator",
+  "description": "Tool for generating Makefile.in files",
   "source": {
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/automake/automake-1.17.tar.gz"
@@ -9,7 +9,6 @@
   "dependencies": ["autoconf"],
   "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": []
+  "configure_args": [],
   "env": {}
 }
-

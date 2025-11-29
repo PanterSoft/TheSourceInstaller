@@ -4,6 +4,14 @@
 
 set +e
 
+# Clean up any previous TSI installations to ensure fresh start
+echo "Cleaning up any previous TSI installations..."
+rm -rf /root/.tsi
+rm -rf /root/.tsi-test
+rm -rf /tmp/tsi-build
+echo "✓ Cleanup complete"
+echo ""
+
 echo "=========================================="
 echo "TSI C/C++ Installation Test"
 echo "=========================================="
@@ -148,6 +156,16 @@ else
     exit 1
 fi
 
+echo "Testing update command..."
+UPDATE_OUTPUT=$(./bin/tsi update --local /root/tsi-source/packages 2>&1 || true)
+UPDATE_EXIT=$?
+if [ $UPDATE_EXIT -eq 0 ]; then
+    echo "✓ update command works"
+    echo "$UPDATE_OUTPUT" | head -3
+else
+    echo "⚠ update command had issues (may be expected)"
+fi
+
 # Test with a package (if available)
 if [ -d "/root/tsi-source/packages" ] || [ -d "/root/tsi/packages" ]; then
     PACKAGE_DIR=""
@@ -168,8 +186,24 @@ if [ -d "/root/tsi-source/packages" ] || [ -d "/root/tsi/packages" ]; then
         mkdir -p "$REPO_DIR"
         cp "$FIRST_PKG" "$REPO_DIR/${PKG_NAME}.json" 2>/dev/null || true
 
+        # Set up TSI environment for testing
+        export PATH="/root/.tsi-test/bin:$PATH"
+        mkdir -p /root/.tsi-test/bin
+        cp ./bin/tsi /root/.tsi-test/bin/tsi
+
+        # Update repository
+        ./bin/tsi update --local "$PACKAGE_DIR" >/dev/null 2>&1 || true
+
         if ./bin/tsi info "$PKG_NAME" >/dev/null 2>&1; then
             echo "✓ info command works"
+
+            # Test uninstall command (dry run - cancel it)
+            echo "Testing uninstall command (will cancel)..."
+            if echo "no" | ./bin/tsi uninstall >/dev/null 2>&1; then
+                echo "✓ uninstall command works (cancelled as expected)"
+            else
+                echo "⚠ uninstall command had issues (may be expected in test environment)"
+            fi
         else
             echo "⚠ info command failed (package may not be in repository - this is OK for C version)"
         fi

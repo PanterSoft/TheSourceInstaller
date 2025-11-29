@@ -151,6 +151,11 @@ void package_free(Package *pkg) {
     }
     free(pkg->patches);
 
+    for (size_t i = 0; i < pkg->build_commands_count; i++) {
+        free(pkg->build_commands[i]);
+    }
+    free(pkg->build_commands);
+
     free(pkg);
 }
 
@@ -212,6 +217,9 @@ bool package_load_from_json(Package *pkg, const char *json_string) {
 
     // Patches
     pkg->patches = json_get_array(json_string, "patches", &pkg->patches_count);
+
+    // Build commands (for custom build system)
+    pkg->build_commands = json_get_array(json_string, "build_commands", &pkg->build_commands_count);
 
     return pkg->name != NULL;
 }

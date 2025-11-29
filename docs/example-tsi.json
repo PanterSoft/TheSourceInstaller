@@ -1,0 +1,21 @@
+{
+  "name": "example-package",
+  "version": "1.0.0",
+  "description": "An example package configuration for TSI",
+  "source": {
+    "type": "tarball",
+    "url": "https://example.com/releases/example-package-1.0.0.tar.gz"
+  },
+  "dependencies": ["zlib", "openssl"],
+  "build_dependencies": ["pkg-config", "cmake"],
+  "build_system": "cmake",
+  "cmake_args": [
+    "-DBUILD_SHARED_LIBS=ON",
+    "-DCMAKE_BUILD_TYPE=Release"
+  ],
+  "env": {
+    "CFLAGS": "-O2",
+    "CXXFLAGS": "-O2"
+  }
+}
+

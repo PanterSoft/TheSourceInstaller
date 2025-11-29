@@ -44,6 +44,10 @@ typedef struct {
     // Patches
     char **patches;
     size_t patches_count;
+
+    // Custom build commands
+    char **build_commands;
+    size_t build_commands_count;
 } Package;
 
 // Package functions

@@ -1,5 +1,5 @@
 {
-  "name": "autoconf",
+  "name": "autotools",
   "version": "2.72",
   "description": "GNU Autoconf - Build system generator",
   "source": {
@@ -9,7 +9,7 @@
   "dependencies": [],
   "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": []
+  "configure_args": [],
   "env": {}
 }
 

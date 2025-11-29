@@ -95,4 +95,4 @@ Comprehensive Docker-based testing:
 - Systems with C compiler only
 - Various Linux distributions (Alpine, Ubuntu)
 
-See [docker/README.md](../docker/README.md) for testing details.
+See the docker directory in the repository root for testing details.

@@ -35,6 +35,10 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Temporary files
+# Build artifacts
 src/build/
 src/bin/
+
+# MkDocs build output
+site/
+.venv/

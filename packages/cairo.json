@@ -1,0 +1,18 @@
+{
+  "name": "cairo",
+  "version": "1.18.0",
+  "description": "2D graphics library",
+  "source": {
+    "type": "tarball",
+    "url": "https://cairographics.org/releases/cairo-1.18.0.tar.xz"
+  },
+  "dependencies": ["libpng", "freetype", "pixman"],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [
+    "--enable-png",
+    "--enable-ft"
+  ],
+  "env": {}
+}
+

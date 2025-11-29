@@ -1,0 +1,15 @@
+{
+  "name": "pixman",
+  "version": "0.43.4",
+  "description": "Pixel manipulation library",
+  "source": {
+    "type": "tarball",
+    "url": "https://cairographics.org/releases/pixman-0.43.4.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": ["pkg-config"],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}
+

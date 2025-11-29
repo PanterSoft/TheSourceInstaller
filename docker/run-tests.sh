@@ -12,11 +12,27 @@ echo "TSI Docker Test Suite"
 echo "=========================================="
 echo ""
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# Colors - check if terminal supports colors
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    GREEN=$(tput setaf 2)
+    RED=$(tput setaf 1)
+    YELLOW=$(tput setaf 3)
+    NC=$(tput sgr0)
+else
+    # Fallback to ANSI codes if tput not available but terminal might support it
+    if [ -t 1 ]; then
+        GREEN='\033[0;32m'
+        RED='\033[0;31m'
+        YELLOW='\033[1;33m'
+        NC='\033[0m'
+    else
+        # No colors if output is redirected
+        GREEN=''
+        RED=''
+        YELLOW=''
+        NC=''
+    fi
+fi
 
 # Test scenarios
 # Format: "service:description:expected_result"
@@ -39,9 +55,13 @@ run_test() {
     echo "=========================================="
     echo ""
 
-    # Build the container
-    echo "Building container..."
-    if docker-compose build "$service" >/dev/null 2>&1; then
+    # Clean up any existing containers and volumes for this service
+    echo "Cleaning up any existing containers..."
+    docker compose rm -f -v "$service" >/dev/null 2>&1 || docker-compose rm -f -v "$service" >/dev/null 2>&1 || true
+
+    # Build the container (use cache for base image, but TSI will be fresh due to test script cleanup)
+    echo "Building container (using cache for base image)..."
+    if (docker compose build "$service" >/dev/null 2>&1 || docker-compose build "$service" >/dev/null 2>&1); then
         echo "✓ Container built"
     else
         echo "✗ Container build failed"
@@ -51,10 +71,27 @@ run_test() {
     # Use C version test script
     TEST_SCRIPT="test-install-c.sh"
 
-    # Run test script
+    # Run test script in a fresh container (--rm removes container after run)
     echo "Running installation test..."
-    TEST_OUTPUT=$(docker-compose run --rm "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT 2>&1)
+    set +e  # Temporarily disable exit on error for command substitution
+    # Determine which docker compose command to use
+    DOCKER_COMPOSE_CMD=""
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    else
+        echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+        set -e
+        return 1
+    fi
+
+    # Run the test
+    $DOCKER_COMPOSE_CMD run --rm --no-deps "$service" /bin/sh /root/tsi-source/docker/$TEST_SCRIPT >/tmp/test-output-$$.log 2>&1
     TEST_EXIT_CODE=$?
+    TEST_OUTPUT=$(cat /tmp/test-output-$$.log)
+    rm -f /tmp/test-output-$$.log
+    set -e  # Re-enable exit on error
     echo "$TEST_OUTPUT" | tee "/tmp/tsi-test-${service}.log"
 
     # Check result based on expected outcome
@@ -62,11 +99,11 @@ run_test() {
         # Expected to fail - check if it failed gracefully
         if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo ""
-            echo "${GREEN}✓ Test passed (expected failure): $description${NC}"
+            echo -e "${GREEN}✓ Test passed (expected failure): $description${NC}"
             return 0
         else
             echo ""
-            echo "${YELLOW}⚠ Test unexpectedly succeeded: $description${NC}"
+            echo -e "${YELLOW}⚠ Test unexpectedly succeeded: $description${NC}"
             echo "Log saved to: /tmp/tsi-test-${service}.log"
             return 1
         fi
@@ -74,11 +111,11 @@ run_test() {
         # Expected to pass
         if [ "$TEST_EXIT_CODE" -eq 0 ]; then
             echo ""
-            echo "${GREEN}✓ Test passed: $description${NC}"
+            echo -e "${GREEN}✓ Test passed: $description${NC}"
             return 0
         else
             echo ""
-            echo "${RED}✗ Test failed: $description${NC}"
+            echo -e "${RED}✗ Test failed: $description${NC}"
             echo "Log saved to: /tmp/tsi-test-${service}.log"
             return 1
         fi
@@ -92,14 +129,20 @@ FAILED=0
 for scenario in "${SCENARIOS[@]}"; do
     IFS=':' read -r service description expected <<< "$scenario"
 
+    set +e  # Disable exit on error for test execution
     if run_test "$service" "$description" "$expected"; then
-        ((PASSED++))
+        ((PASSED++)) || true
     else
-        ((FAILED++))
+        ((FAILED++)) || true
     fi
+    set -e  # Re-enable exit on error
 
-    # Clean up
-    docker-compose down >/dev/null 2>&1 || true
+    # Clean up containers and volumes
+    echo "Cleaning up containers and volumes..."
+    set +e  # Disable exit on error for cleanup
+    docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1 || true
+    docker compose rm -f -v >/dev/null 2>&1 || docker-compose rm -f -v >/dev/null 2>&1 || true
+    set -e  # Re-enable exit on error
 done
 
 # Summary
@@ -108,16 +151,16 @@ echo "=========================================="
 echo "Test Summary"
 echo "=========================================="
 echo ""
-echo "Passed: ${GREEN}$PASSED${NC}"
-echo "Failed: ${RED}$FAILED${NC}"
+echo -e "Passed: ${GREEN}$PASSED${NC}"
+echo -e "Failed: ${RED}$FAILED${NC}"
 echo "Total:  $((PASSED + FAILED))"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo "${GREEN}All tests passed!${NC}"
+    echo -e "${GREEN}All tests passed!${NC}"
     exit 0
 else
-    echo "${RED}Some tests failed. Check logs in /tmp/tsi-test-*.log${NC}"
+    echo -e "${RED}Some tests failed. Check logs in /tmp/tsi-test-*.log${NC}"
     exit 1
 fi
 
