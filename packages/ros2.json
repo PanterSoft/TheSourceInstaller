@@ -1,0 +1,75 @@
+{
+  "name": "ros2",
+  "versions": [
+    {
+      "version": "humble",
+      "description": "ROS 2 Humble Hawksbill - Long-term support distribution (from source)",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/ros2/ros2.git",
+        "branch": "humble"
+      },
+      "dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_system": "custom",
+      "env": {
+        "ROS_DOMAIN_ID": "0"
+      }
+    },
+    {
+      "version": "iron",
+      "description": "ROS 2 Iron Irwini - Standard distribution (from source)",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/ros2/ros2.git",
+        "branch": "iron"
+      },
+      "dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_system": "custom",
+      "env": {
+        "ROS_DOMAIN_ID": "0"
+      }
+    },
+    {
+      "version": "jazzy",
+      "description": "ROS 2 Jazzy Jalisco - Latest distribution (from source)",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/ros2/ros2.git",
+        "branch": "jazzy"
+      },
+      "dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_dependencies": [
+        "python",
+        "cmake",
+        "git"
+      ],
+      "build_system": "custom",
+      "env": {
+        "ROS_DOMAIN_ID": "0"
+      }
+    }
+  ]
+}
+

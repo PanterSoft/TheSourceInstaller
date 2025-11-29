@@ -213,46 +213,56 @@ main() {
         log_info "Downloading TSI source code..."
 
         # Try git clone first (if git is available)
+        GIT_CLONE_SUCCESS=false
         if command_exists git; then
             log_info "Cloning TSI repository..."
             if [ -d "tsi" ]; then
                 rm -rf tsi
             fi
             if git clone --depth 1 --branch "$TSI_BRANCH" "$TSI_REPO" tsi 2>&1; then
-                cd tsi
                 log_info "Repository cloned successfully"
+                GIT_CLONE_SUCCESS=true
             else
                 log_warn "Git clone failed, trying tarball download..."
                 rm -rf tsi
             fi
         fi
 
-        # Fallback: Download as tarball
-        if [ ! -d "tsi" ] || [ ! -f "tsi/src/Makefile" ]; then
-            log_info "Downloading TSI as tarball..."
-            tarball_url="https://github.com/PanterSoft/tsi/archive/refs/heads/${TSI_BRANCH}.tar.gz"
-            tarball="tsi-${TSI_BRANCH}.tar.gz"
+        # Fallback: Download as tarball (only if git clone didn't succeed)
+        if [ "$GIT_CLONE_SUCCESS" = false ]; then
+            if [ ! -d "tsi" ] || [ ! -f "tsi/src/Makefile" ]; then
+                log_info "Downloading TSI as tarball..."
+                tarball_url="https://github.com/PanterSoft/tsi/archive/refs/heads/${TSI_BRANCH}.tar.gz"
+                tarball="tsi-${TSI_BRANCH}.tar.gz"
 
-            if download_tarball "$tarball_url" "$tarball"; then
-                log_info "Extracting tarball..."
-                if command_exists tar; then
-                    tar -xzf "$tarball" 2>/dev/null || tar -xf "$tarball" 2>/dev/null
-                    # Rename extracted directory
-                    if [ -d "tsi-${TSI_BRANCH}" ]; then
-                        mv "tsi-${TSI_BRANCH}" tsi
+                if download_tarball "$tarball_url" "$tarball"; then
+                    log_info "Extracting tarball..."
+                    if command_exists tar; then
+                        tar -xzf "$tarball" 2>/dev/null || tar -xf "$tarball" 2>/dev/null
+                        # Rename extracted directory
+                        if [ -d "tsi-${TSI_BRANCH}" ]; then
+                            mv "tsi-${TSI_BRANCH}" tsi
+                        fi
+                        rm -f "$tarball"
+                        log_info "Tarball extracted successfully"
+                    else
+                        log_error "tar not found, cannot extract tarball"
+                        exit 1
                     fi
-                    rm -f "$tarball"
-                    cd tsi
-                    log_info "Tarball extracted successfully"
                 else
-                    log_error "tar not found, cannot extract tarball"
+                    log_error "Failed to download TSI source"
+                    log_error "Please check your internet connection and try again"
                     exit 1
                 fi
-            else
-                log_error "Failed to download TSI source"
-                log_error "Please check your internet connection and try again"
-                exit 1
             fi
+        fi
+
+        # Change into tsi directory (after either git clone or tarball extraction)
+        if [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
+            cd tsi
+        else
+            log_error "TSI source directory not found after download"
+            exit 1
         fi
     fi
 
