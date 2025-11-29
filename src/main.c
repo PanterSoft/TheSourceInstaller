@@ -456,12 +456,94 @@ install_package:
 
     if (deps_count > 0) {
         print_section("Resolving dependencies");
-        printf("  Resolved %zu dependency%s: ", deps_count, deps_count == 1 ? "" : "s");
+
+        // Count actual dependencies (excluding the main package itself)
+        size_t actual_deps_count = 0;
         for (size_t i = 0; i < deps_count; i++) {
-            if (i > 0) printf(", ");
-            printf("%s", deps[i]);
+            // Extract package name from deps[i] (may be package@version)
+            char *dep_name = NULL;
+            char *dep_version = NULL;
+            char *at_pos = strchr(deps[i], '@');
+            if (at_pos) {
+                size_t name_len = at_pos - deps[i];
+                dep_name = malloc(name_len + 1);
+                if (dep_name) {
+                    strncpy(dep_name, deps[i], name_len);
+                    dep_name[name_len] = '\0';
+                }
+            } else {
+                dep_name = strdup(deps[i]);
+            }
+
+            // Compare with main package name (extract name from package_name too)
+            char *main_name = NULL;
+            char *main_version = NULL;
+            at_pos = strchr((char*)package_name, '@');
+            if (at_pos) {
+                size_t name_len = at_pos - (char*)package_name;
+                main_name = malloc(name_len + 1);
+                if (main_name) {
+                    strncpy(main_name, package_name, name_len);
+                    main_name[name_len] = '\0';
+                }
+            } else {
+                main_name = strdup(package_name);
+            }
+
+            if (dep_name && main_name && strcmp(dep_name, main_name) != 0) {
+                actual_deps_count++;
+            }
+
+            if (dep_name) free(dep_name);
+            if (dep_version) free(dep_version);
+            if (main_name) free(main_name);
+            if (main_version) free(main_version);
         }
-        printf("\n\n");
+
+        if (actual_deps_count > 0) {
+            printf("  Resolved %zu dependency%s: ", actual_deps_count, actual_deps_count == 1 ? "" : "s");
+            bool first = true;
+            for (size_t i = 0; i < deps_count; i++) {
+                // Extract package name from deps[i]
+                char *dep_name = NULL;
+                char *at_pos = strchr(deps[i], '@');
+                if (at_pos) {
+                    size_t name_len = at_pos - deps[i];
+                    dep_name = malloc(name_len + 1);
+                    if (dep_name) {
+                        strncpy(dep_name, deps[i], name_len);
+                        dep_name[name_len] = '\0';
+                    }
+                } else {
+                    dep_name = strdup(deps[i]);
+                }
+
+                // Extract main package name
+                char *main_name = NULL;
+                at_pos = strchr((char*)package_name, '@');
+                if (at_pos) {
+                    size_t name_len = at_pos - (char*)package_name;
+                    main_name = malloc(name_len + 1);
+                    if (main_name) {
+                        strncpy(main_name, package_name, name_len);
+                        main_name[name_len] = '\0';
+                    }
+                } else {
+                    main_name = strdup(package_name);
+                }
+
+                // Only print if it's not the main package
+                if (dep_name && main_name && strcmp(dep_name, main_name) != 0) {
+                    if (!first) printf(", ");
+                    printf("%s", deps[i]);
+                    first = false;
+                }
+
+                if (dep_name) free(dep_name);
+                if (main_name) free(main_name);
+            }
+            printf("\n\n");
+        }
     }
 
     // Get build order
@@ -556,6 +638,11 @@ install_package:
         return 1;
     }
 
+    // Track failures
+    bool has_failures = false;
+    int failed_deps_count = 0;
+    char **failed_deps = NULL;
+
     // Install dependencies first
     for (size_t i = 0; i < build_order_count; i++) {
         if (strcmp(build_order[i], package_name) == 0) {
@@ -615,8 +702,13 @@ install_package:
 
         if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
-            print_status_done("Error: Failed to build");
+            print_error("Failed to build dependency");
             fprintf(stderr, "  %s\n", build_order[i]);
+            has_failures = true;
+            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
+            if (failed_deps) {
+                failed_deps[failed_deps_count++] = strdup(build_order[i]);
+            }
             free(dep_source_dir);
             continue;
         }
@@ -629,8 +721,13 @@ install_package:
 
         if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
-            print_status_done("Error: Failed to install");
+            print_error("Failed to install dependency");
             fprintf(stderr, "  %s\n", build_order[i]);
+            has_failures = true;
+            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
+            if (failed_deps) {
+                failed_deps[failed_deps_count++] = strdup(build_order[i]);
+            }
             free(dep_source_dir);
             continue;
         }
@@ -707,29 +804,63 @@ install_package:
                         print_caveat(main_pkg->description);
                     }
                 } else {
+                    print_error("Failed to install package");
                     if (package_version) {
-                        fprintf(stderr, "Error: Failed to install %s@%s\n", package_name, package_version);
+                        fprintf(stderr, "  %s@%s\n", package_name, package_version);
                     } else {
-                        fprintf(stderr, "Error: Failed to install %s\n", package_name);
+                        fprintf(stderr, "  %s\n", package_name);
                     }
+                    has_failures = true;
                 }
             } else {
+                print_error("Failed to build package");
                 if (package_version) {
-                    fprintf(stderr, "Error: Failed to build %s@%s\n", package_name, package_version);
+                    fprintf(stderr, "  %s@%s\n", package_name, package_version);
                 } else {
-                    fprintf(stderr, "Error: Failed to build %s\n", package_name);
+                    fprintf(stderr, "  %s\n", package_name);
                 }
+                has_failures = true;
             }
             free(main_source_dir);
         } else {
+            print_error("Failed to fetch source");
             if (package_version) {
-                fprintf(stderr, "Error: Failed to fetch source for %s@%s\n", package_name, package_version);
+                fprintf(stderr, "  %s@%s\n", package_name, package_version);
             } else {
-                fprintf(stderr, "Error: Failed to fetch source for %s\n", package_name);
+                fprintf(stderr, "  %s\n", package_name);
             }
+            has_failures = true;
         }
     } else {
-        fprintf(stderr, "Error: Package not found: %s\n", package_name);
+        print_error("Package not found");
+        fprintf(stderr, "  %s\n", package_name);
+        has_failures = true;
+    }
+
+    // Clean up failed dependencies list
+    if (failed_deps) {
+        for (int i = 0; i < failed_deps_count; i++) {
+            free(failed_deps[i]);
+        }
+        free(failed_deps);
+    }
+
+    // Report summary and exit with error code if there were failures
+    if (has_failures) {
+        printf("\n");
+        print_error("Installation completed with errors");
+        if (failed_deps_count > 0) {
+            printf("Failed dependencies: %d\n", failed_deps_count);
+        }
+        builder_config_free(builder_config);
+        fetcher_free(fetcher);
+        for (size_t i = 0; i < deps_count; i++) free(deps[i]);
+        free(deps);
+        for (size_t i = 0; i < build_order_count; i++) free(build_order[i]);
+        free(build_order);
+        repository_free(repo);
+        database_free(db);
+        return 1;
     }
 
     builder_config_free(builder_config);

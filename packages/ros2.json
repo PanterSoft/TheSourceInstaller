@@ -20,6 +20,19 @@
         "git"
       ],
       "build_system": "custom",
+      "build_commands": [
+        "mkdir -p ros2_ws/src",
+        "cp -r ros2 ros2_ws/src/",
+        "cd ros2_ws/src/ros2",
+        "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
+        "vcs import < ros2.repos",
+        "cd ../..",
+        "python3 -m pip install --user -r ros2_ws/src/ros2/ros2.repos 2>/dev/null || true",
+        "rosdep update 2>/dev/null || true",
+        "rosdep install --from-paths ros2_ws/src --ignore-src -r -y 2>/dev/null || python3 -m pip install --user setuptools wheel",
+        "cd ros2_ws",
+        "colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR || (python3 -m pip install --user colcon-common-extensions && colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR)"
+      ],
       "env": {
         "ROS_DOMAIN_ID": "0"
       }
@@ -43,6 +56,19 @@
         "git"
       ],
       "build_system": "custom",
+      "build_commands": [
+        "mkdir -p ros2_ws/src",
+        "cp -r ros2 ros2_ws/src/",
+        "cd ros2_ws/src/ros2",
+        "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
+        "vcs import < ros2.repos",
+        "cd ../..",
+        "python3 -m pip install --user -r ros2_ws/src/ros2/ros2.repos 2>/dev/null || true",
+        "rosdep update 2>/dev/null || true",
+        "rosdep install --from-paths ros2_ws/src --ignore-src -r -y 2>/dev/null || python3 -m pip install --user setuptools wheel",
+        "cd ros2_ws",
+        "colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR || (python3 -m pip install --user colcon-common-extensions && colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR)"
+      ],
       "env": {
         "ROS_DOMAIN_ID": "0"
       }
@@ -66,6 +92,19 @@
         "git"
       ],
       "build_system": "custom",
+      "build_commands": [
+        "mkdir -p ros2_ws/src",
+        "cp -r ros2 ros2_ws/src/",
+        "cd ros2_ws/src/ros2",
+        "python3 -m pip install --user vcstool colcon-common-extensions || python3 -m pip install vcstool colcon-common-extensions",
+        "vcs import < ros2.repos",
+        "cd ../..",
+        "python3 -m pip install --user -r ros2_ws/src/ros2/ros2.repos 2>/dev/null || true",
+        "rosdep update 2>/dev/null || true",
+        "rosdep install --from-paths ros2_ws/src --ignore-src -r -y 2>/dev/null || python3 -m pip install --user setuptools wheel",
+        "cd ros2_ws",
+        "colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR || (python3 -m pip install --user colcon-common-extensions && colcon build --symlink-install --cmake-args -DCMAKE_INSTALL_PREFIX=$TSI_INSTALL_DIR --install-base $TSI_INSTALL_DIR)"
+      ],
       "env": {
         "ROS_DOMAIN_ID": "0"
       }

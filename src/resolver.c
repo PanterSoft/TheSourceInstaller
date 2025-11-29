@@ -105,6 +105,21 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
         parse_package_version(pkg->dependencies[i], &dep_name, &dep_version);
         const char *dep_spec = pkg->dependencies[i];
 
+        // Skip self-dependency (package depending on itself)
+        char *pkg_name_only = NULL;
+        char *pkg_version_only = NULL;
+        parse_package_version(package_name, &pkg_name_only, &pkg_version_only);
+        if (pkg_name_only && dep_name && strcmp(pkg_name_only, dep_name) == 0) {
+            // Package depends on itself - skip it
+            free(pkg_name_only);
+            free(pkg_version_only);
+            if (dep_name) free(dep_name);
+            if (dep_version) free(dep_version);
+            continue;
+        }
+        if (pkg_name_only) free(pkg_name_only);
+        if (pkg_version_only) free(pkg_version_only);
+
         // Check if already in result (compare by name, and version if specified)
         bool found = false;
         if (result) {
@@ -209,6 +224,27 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     // Add build dependencies
     for (size_t i = 0; i < pkg->build_dependencies_count; i++) {
         if (!pkg->build_dependencies[i]) continue; // Skip NULL dependencies
+
+        // Skip self-dependency (package depending on itself)
+        char *pkg_name_only = NULL;
+        char *pkg_version_only = NULL;
+        parse_package_version(package_name, &pkg_name_only, &pkg_version_only);
+        char *build_dep_name = NULL;
+        char *build_dep_version = NULL;
+        parse_package_version(pkg->build_dependencies[i], &build_dep_name, &build_dep_version);
+        if (pkg_name_only && build_dep_name && strcmp(pkg_name_only, build_dep_name) == 0) {
+            // Package depends on itself - skip it
+            free(pkg_name_only);
+            free(pkg_version_only);
+            if (build_dep_name) free(build_dep_name);
+            if (build_dep_version) free(build_dep_version);
+            continue;
+        }
+        if (pkg_name_only) free(pkg_name_only);
+        if (pkg_version_only) free(pkg_version_only);
+        if (build_dep_name) free(build_dep_name);
+        if (build_dep_version) free(build_dep_version);
+
         bool found = false;
         if (result) {
             for (size_t j = 0; j < *result_count; j++) {

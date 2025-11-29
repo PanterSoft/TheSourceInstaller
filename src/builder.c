@@ -207,6 +207,60 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         if (system(cmd) != 0) {
             return false;
         }
+    } else if (strcmp(build_system, "custom") == 0) {
+        // Custom build commands
+        if (pkg->build_commands_count > 0) {
+            // Expand environment variables in commands
+            char expanded_env[4096];
+            snprintf(expanded_env, sizeof(expanded_env), "%s TSI_INSTALL_DIR='%s'", env, config->install_dir);
+
+            for (size_t i = 0; i < pkg->build_commands_count; i++) {
+                // Replace $TSI_INSTALL_DIR in command
+                char *cmd_expanded = strdup(pkg->build_commands[i]);
+                if (!cmd_expanded) continue;
+
+                // Simple variable substitution
+                char *tsi_var = strstr(cmd_expanded, "$TSI_INSTALL_DIR");
+                if (tsi_var) {
+                    size_t prefix_len = tsi_var - cmd_expanded;
+                    size_t suffix_len = strlen(tsi_var + strlen("$TSI_INSTALL_DIR"));
+                    size_t new_len = prefix_len + strlen(config->install_dir) + suffix_len + 1;
+                    char *new_cmd = malloc(new_len);
+                    if (new_cmd) {
+                        memcpy(new_cmd, cmd_expanded, prefix_len);
+                        memcpy(new_cmd + prefix_len, config->install_dir, strlen(config->install_dir));
+                        memcpy(new_cmd + prefix_len + strlen(config->install_dir),
+                               tsi_var + strlen("$TSI_INSTALL_DIR"), suffix_len);
+                        new_cmd[new_len - 1] = '\0';
+                        free(cmd_expanded);
+                        cmd_expanded = new_cmd;
+                    }
+                }
+
+                // Execute command in source directory
+                size_t cmd_len = strlen(cmd_expanded) + strlen(source_dir) + strlen(expanded_env) + 64;
+                char *full_cmd = malloc(cmd_len);
+                if (full_cmd) {
+                    snprintf(full_cmd, cmd_len, "cd '%s' && %s %s >/dev/null 2>&1",
+                            source_dir, expanded_env, cmd_expanded);
+                    int result = system(full_cmd);
+                    free(full_cmd);
+                    free(cmd_expanded);
+                    if (result != 0) {
+                        // Command failed - return error
+                        return false;
+                    }
+                } else {
+                    free(cmd_expanded);
+                    return false;
+                }
+            }
+            // All commands succeeded
+            return true;
+        } else {
+            // No build commands specified, just return success
+            return true;
+        }
     }
 
     return true;
@@ -247,6 +301,23 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s' >/dev/null 2>&1", build_dir, env, build_dir);
     } else if (strcmp(build_system, "make") == 0) {
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s' >/dev/null 2>&1", source_dir, env, config->install_dir);
+    } else if (strcmp(build_system, "custom") == 0) {
+        // For custom builds, installation is typically handled in build_commands
+        // But we can try to copy common directories if they exist
+        char install_cmd[2048];
+        snprintf(install_cmd, sizeof(install_cmd),
+                "mkdir -p '%s' && "
+                "(cp -r '%s'/bin '%s'/ 2>/dev/null || true) && "
+                "(cp -r '%s'/lib '%s'/ 2>/dev/null || true) && "
+                "(cp -r '%s'/include '%s'/ 2>/dev/null || true) && "
+                "(cp -r '%s'/share '%s'/ 2>/dev/null || true)",
+                config->install_dir,
+                source_dir, config->install_dir,
+                source_dir, config->install_dir,
+                source_dir, config->install_dir,
+                source_dir, config->install_dir);
+        system(install_cmd);
+        return true; // Custom builds might handle installation themselves
     } else {
         return false;
     }
