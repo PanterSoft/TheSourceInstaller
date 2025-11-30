@@ -14,7 +14,11 @@
   "build_dependencies": [
     "pkg-config",
     "coreutils",
-    "make"
+    "make",
+    "sed",
+    "grep",
+    "gawk",
+    "bash"
   ],
   "build_system": "autotools",
   "configure_args": [

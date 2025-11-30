@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
 // Helper function to execute command and capture output
 // Returns exit code (0 = success, non-zero = failure)
@@ -506,70 +507,123 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     return result == 0;
 }
 
+// Helper function to create symlinks from package directory to main directory
+static void create_symlinks_from_dir(const char *package_path, const char *main_install_dir, const char *main_subdir, bool check_executable) {
+    log_developer("create_symlinks_from_dir: package_path=%s, main_install_dir=%s, main_subdir=%s, check_executable=%d",
+                 package_path, main_install_dir, main_subdir, check_executable);
+
+    struct stat st;
+    if (stat(package_path, &st) != 0) {
+        log_developer("create_symlinks_from_dir: package_path does not exist: %s", package_path);
+        return;  // Directory doesn't exist
+    }
+
+    if (!S_ISDIR(st.st_mode)) {
+        log_developer("create_symlinks_from_dir: package_path is not a directory: %s", package_path);
+        return;
+    }
+
+    DIR *dir = opendir(package_path);
+    if (!dir) {
+        log_warning("Failed to open directory for symlinking: %s", package_path);
+        return;
+    }
+
+    log_developer("create_symlinks_from_dir: Successfully opened directory: %s", package_path);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char source_path[2048];
+        snprintf(source_path, sizeof(source_path), "%s/%s", package_path, entry->d_name);
+
+        // Check if it's a file (or directory for include)
+        if (stat(source_path, &st) != 0) continue;
+
+        // For binaries, check if executable (check user, group, or other execute bits)
+        if (check_executable && !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+            log_developer("create_symlinks_from_dir: Skipping non-executable file: %s (mode: %o)", source_path, st.st_mode);
+            continue;  // Not executable, skip
+        }
+
+        // For libraries and includes, allow files and directories
+        if (!check_executable && !S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) {
+            continue;
+        }
+
+        // Create symlink in main directory
+        char target_path[2048];
+        snprintf(target_path, sizeof(target_path), "%s/%s/%s", main_install_dir, main_subdir, entry->d_name);
+
+        // Remove existing symlink/file if it exists
+        unlink(target_path);
+
+        // Create symlink
+        if (symlink(source_path, target_path) != 0) {
+            if (errno != EEXIST) {
+                log_debug("Failed to create symlink %s -> %s: %s", target_path, source_path, strerror(errno));
+            }
+        } else {
+            log_developer("Created symlink: %s -> %s", target_path, source_path);
+        }
+    }
+
+    closedir(dir);
+}
+
 bool builder_create_symlinks(const BuilderConfig *config, const char *package_name, const char *package_version) {
     (void)package_version; // May be used in future for version-specific symlinks
     if (!config || !package_name) return false;
 
     // Get the main install directory (parent of package-specific directory)
     char main_install_dir[1024];
-    char *last_slash = strrchr(config->install_dir, '/');
-    if (last_slash) {
-        size_t len = last_slash - config->install_dir;
+    char *install_pos = strstr(config->install_dir, "/install/");
+    if (install_pos) {
+        // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
+        size_t len = install_pos - config->install_dir + strlen("/install");
         strncpy(main_install_dir, config->install_dir, len);
         main_install_dir[len] = '\0';
     } else {
-        return false;
+        // Already main install directory
+        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
     }
 
-    // Create main install directories if they don't exist
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "mkdir -p '%s/bin' '%s/lib' '%s/include' '%s/share'",
-             main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-    system(cmd);
+    // Create main install directories if they don't exist (using C functions, not system commands)
+    char main_bin[1024], main_lib[1024], main_include[1024], main_share[1024];
+    snprintf(main_bin, sizeof(main_bin), "%s/bin", main_install_dir);
+    snprintf(main_lib, sizeof(main_lib), "%s/lib", main_install_dir);
+    snprintf(main_include, sizeof(main_include), "%s/include", main_install_dir);
+    snprintf(main_share, sizeof(main_share), "%s/share", main_install_dir);
+
+    struct stat st;
+    if (stat(main_bin, &st) != 0) {
+        // Create directory (mkdir -p equivalent)
+        char cmd[2048];
+        snprintf(cmd, sizeof(cmd), "mkdir -p '%s' '%s' '%s' '%s'",
+                 main_bin, main_lib, main_include, main_share);
+        system(cmd);  // TODO: Replace with C-based directory creation
+    }
 
     // Create symlinks for binaries
     char package_bin[1024];
     snprintf(package_bin, sizeof(package_bin), "%s/bin", config->install_dir);
-    struct stat st;
-    if (stat(package_bin, &st) == 0 && S_ISDIR(st.st_mode)) {
-        // Find all binaries in package bin directory and symlink them
-        snprintf(cmd, sizeof(cmd),
-                 "for f in '%s'/*; do "
-                 "if [ -f \"$f\" ] && [ -x \"$f\" ]; then "
-                 "ln -sf \"$f\" '%s/bin/$(basename \"$f\")\" 2>/dev/null; "
-                 "fi; "
-                 "done",
-                 package_bin, main_install_dir);
-        system(cmd);
-    }
+    log_developer("builder_create_symlinks: About to create symlinks from %s to %s/bin", package_bin, main_install_dir);
+    create_symlinks_from_dir(package_bin, main_install_dir, "bin", true);
 
     // Create symlinks for libraries
     char package_lib[1024];
     snprintf(package_lib, sizeof(package_lib), "%s/lib", config->install_dir);
-    if (stat(package_lib, &st) == 0 && S_ISDIR(st.st_mode)) {
-        snprintf(cmd, sizeof(cmd),
-                 "for f in '%s'/*; do "
-                 "if [ -f \"$f\" ]; then "
-                 "ln -sf \"$f\" '%s/lib/$(basename \"$f\")\" 2>/dev/null; "
-                 "fi; "
-                 "done",
-                 package_lib, main_install_dir);
-        system(cmd);
-    }
+    create_symlinks_from_dir(package_lib, main_install_dir, "lib", false);
 
     // Create symlinks for include files
     char package_include[1024];
     snprintf(package_include, sizeof(package_include), "%s/include", config->install_dir);
-    if (stat(package_include, &st) == 0 && S_ISDIR(st.st_mode)) {
-        snprintf(cmd, sizeof(cmd),
-                 "for f in '%s'/*; do "
-                 "if [ -f \"$f\" ] || [ -d \"$f\" ]; then "
-                 "ln -sf \"$f\" '%s/include/$(basename \"$f\")\" 2>/dev/null; "
-                 "fi; "
-                 "done",
-                 package_include, main_install_dir);
-        system(cmd);
-    }
+    create_symlinks_from_dir(package_include, main_install_dir, "include", false);
 
     return true;
 }

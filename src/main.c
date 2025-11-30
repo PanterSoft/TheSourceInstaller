@@ -648,7 +648,7 @@ install_package:
     log_developer("Before resolver_get_build_order: deps=%p, deps_count=%zu, build_order_count=%zu", (void*)deps, deps_count, build_order_count);
     char **build_order = resolver_get_build_order(resolver, deps, deps_count, &build_order_count);
     log_developer("After resolver_get_build_order: build_order=%p, build_order_count=%zu (address of count: %p)", (void*)build_order, build_order_count, (void*)&build_order_count);
-    
+
     // CRITICAL FIX: If build_order is not NULL but count is 0, use deps_count as fallback
     // This handles the case where the function successfully creates the array but the count gets lost
     if (build_order && build_order_count == 0 && deps_count > 0) {
@@ -691,7 +691,7 @@ install_package:
         log_debug("Build order calculated: %zu packages", build_order_count);
         for (size_t i = 0; i < build_order_count; i++) {
             if (build_order[i]) {
-                printf("  %zu. %s\n", i + 1, build_order[i]);
+            printf("  %zu. %s\n", i + 1, build_order[i]);
                 log_developer("  Build order[%zu] = '%s'", i, build_order[i]);
             } else {
                 printf("  %zu. (null)\n", i + 1);

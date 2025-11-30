@@ -12,7 +12,9 @@
   ],
   "build_dependencies": [
     "make",
-    "coreutils"
+    "coreutils",
+    "sed",
+    "grep"
   ],
   "build_system": "autotools",
   "configure_args": [],

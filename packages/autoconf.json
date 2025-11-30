@@ -10,7 +10,11 @@
   "build_dependencies": [
     "m4",
     "make",
-    "coreutils"
+    "coreutils",
+    "sed",
+    "grep",
+    "gawk",
+    "bash"
   ],
   "build_system": "autotools",
   "configure_args": [],

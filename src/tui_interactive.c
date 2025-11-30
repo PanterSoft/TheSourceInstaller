@@ -556,7 +556,7 @@ int menu_show(Menu *menu) {
     gettimeofday(&ready_time, NULL);
 
     while (true) {
-        tui_clear_screen();
+            tui_clear_screen();
         draw_box(x, y, menu_width, menu_height, COLOR_BRIGHT_CYAN);
         menu_draw(menu, x + 2, y + 1, menu_width - 4, menu_height - 2);
 
@@ -1025,29 +1025,29 @@ void dropdown_draw(DropdownMenu *dd) {
         tui_move_cursor(dd->y + i, dd->x);
         printf("%s", v);
 
-        size_t item_idx = (size_t)(i - 1) + dd->scroll_offset;
-        bool is_selected = (item_idx == dd->selected_index);
+            size_t item_idx = (size_t)(i - 1) + dd->scroll_offset;
+            bool is_selected = (item_idx == dd->selected_index);
 
-        if (item_idx < dd->item_count) {
-            int text_width = dd->width - 4;
-            char display[256];
-            snprintf(display, sizeof(display), "%.*s", text_width, dd->items[item_idx]);
+            if (item_idx < dd->item_count) {
+                int text_width = dd->width - 4;
+                char display[256];
+                snprintf(display, sizeof(display), "%.*s", text_width, dd->items[item_idx]);
 
-            if (is_selected) {
-                if (supports_colors()) {
-                    printf(" %s%s%s%s ", COLOR_BG_CYAN, COLOR_BRIGHT_WHITE, display, COLOR_RESET);
+                if (is_selected) {
+                    if (supports_colors()) {
+                        printf(" %s%s%s%s ", COLOR_BG_CYAN, COLOR_BRIGHT_WHITE, display, COLOR_RESET);
+                    } else {
+                        printf(" >%s ", display);
+                    }
                 } else {
-                    printf(" >%s ", display);
+                    printf(" %s ", display);
                 }
+                // Fill remaining space
+                int remaining = dd->width - 4 - (int)strlen(display);
+                for (int j = 0; j < remaining; j++) printf(" ");
             } else {
-                printf(" %s ", display);
+                for (int j = 0; j < dd->width - 2; j++) printf(" ");
             }
-            // Fill remaining space
-            int remaining = dd->width - 4 - (int)strlen(display);
-            for (int j = 0; j < remaining; j++) printf(" ");
-        } else {
-            for (int j = 0; j < dd->width - 2; j++) printf(" ");
-        }
         printf("%s", v);
     }
     fflush(stdout);

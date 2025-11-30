@@ -9,8 +9,53 @@
 #include <unistd.h>
 #include <errno.h>
 
-// Helper function to get minimal bootstrap PATH (only essential system directories)
-// This is ONLY used for building make and coreutils - the bootstrap packages
+// Helper function to get C compiler directory
+// Returns the directory containing the C compiler (gcc, clang, or cc)
+static void get_compiler_dir(char *compiler_dir, size_t compiler_dir_size) {
+    if (!compiler_dir || compiler_dir_size == 0) {
+        return;
+    }
+
+    compiler_dir[0] = '\0';
+
+    // Find C compiler location (gcc, clang, or cc)
+    const char *compilers[] = {"gcc", "clang", "cc"};
+    char compiler_path[512] = "";
+
+    for (size_t i = 0; i < sizeof(compilers) / sizeof(compilers[0]); i++) {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "which %s 2>/dev/null", compilers[i]);
+        FILE *pipe = popen(cmd, "r");
+        if (pipe) {
+            if (fgets(compiler_path, sizeof(compiler_path), pipe)) {
+                // Remove newline
+                size_t len = strlen(compiler_path);
+                if (len > 0 && compiler_path[len - 1] == '\n') {
+                    compiler_path[len - 1] = '\0';
+                }
+                // Extract directory
+                char *last_slash = strrchr(compiler_path, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    if (strlen(compiler_path) > 0) {
+                        strncpy(compiler_dir, compiler_path, compiler_dir_size - 1);
+                        compiler_dir[compiler_dir_size - 1] = '\0';
+                        log_developer("Found C compiler (%s) in: %s", compilers[i], compiler_path);
+                        break;
+                    }
+                }
+            }
+            pclose(pipe);
+        }
+    }
+}
+
+// Helper function to get minimal bootstrap PATH (only essential system tools)
+// This is ONLY used for building minimal bootstrap packages (make, coreutils, sed)
+// Only includes tools that are typically available on a minimal system with just a C compiler:
+// - C compiler location (gcc, clang, or cc)
+// - /bin (for basic POSIX shell and minimal utilities)
+// Does NOT include /usr/local/bin (user-installed, not system-provided)
 static void get_bootstrap_path(char *bootstrap_path, size_t bootstrap_size) {
     if (!bootstrap_path || bootstrap_size == 0) {
         return;
@@ -18,32 +63,27 @@ static void get_bootstrap_path(char *bootstrap_path, size_t bootstrap_size) {
 
     bootstrap_path[0] = '\0';
 
-    // Only use minimal, essential system directories for bootstrap
-    // These are standard POSIX directories that should exist on any Unix-like system
-    const char *essential_dirs[] = {
-        "/usr/bin",
-        "/bin",
-        "/usr/local/bin"
-    };
+    // Get C compiler directory
+    char compiler_dir[512] = "";
+    get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+    if (strlen(compiler_dir) > 0) {
+        strncpy(bootstrap_path, compiler_dir, bootstrap_size - 1);
+        bootstrap_path[bootstrap_size - 1] = '\0';
+    }
 
-    size_t path_len = 0;
-    for (size_t i = 0; i < sizeof(essential_dirs) / sizeof(essential_dirs[0]); i++) {
-        struct stat st;
-        // Only add if directory exists and is valid
-        if (stat(essential_dirs[i], &st) == 0 && S_ISDIR(st.st_mode)) {
-            size_t dir_len = strlen(essential_dirs[i]);
-            if (path_len > 0 && path_len + dir_len + 2 < bootstrap_size) {
-                bootstrap_path[path_len++] = ':';
-                bootstrap_path[path_len] = '\0';
-            }
-            if (path_len + dir_len < bootstrap_size) {
-                strcat(bootstrap_path, essential_dirs[i]);
-                path_len += dir_len;
-            }
+    // Add /bin for basic POSIX shell (sh) and minimal utilities
+    // This is typically provided by the system, not user-installed
+    struct stat st;
+    if (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode)) {
+        if (strlen(bootstrap_path) > 0) {
+            strncat(bootstrap_path, ":/bin", bootstrap_size - strlen(bootstrap_path) - 1);
+        } else {
+            strncpy(bootstrap_path, "/bin", bootstrap_size - 1);
+            bootstrap_path[bootstrap_size - 1] = '\0';
         }
     }
 
-    log_developer("Bootstrap PATH (essential directories only): %s", bootstrap_path);
+    log_developer("Bootstrap PATH (C compiler + /bin only): %s", bootstrap_path);
 }
 
 // Helper function to execute command and capture output line by line
@@ -242,10 +282,12 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     }
 
     char env[4096] = "";
-    // Bootstrap handling: For make and coreutils (the bootstrap packages), we need minimal system tools
+    // Bootstrap handling: For essential bootstrap tools, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent builds use only TSI packages (completely isolated)
-    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0) {
+    // Bootstrap packages: make, coreutils, sed, grep, gawk, bash, m4
+    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 || strcmp(pkg->name, "sed") == 0 ||
+        strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 || strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0) {
         // Bootstrap: Use only essential system directories + TSI PATH
         char bootstrap_path[512] = "";
         get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));
@@ -494,10 +536,12 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
     }
 
     char env[4096] = "";
-    // Bootstrap handling: For make and coreutils install, we need minimal system tools
+    // Bootstrap handling: For essential bootstrap tools install, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent installs use only TSI's tools (completely isolated)
-    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0) {
+    // Bootstrap packages: make, coreutils, sed, grep, gawk, bash, m4
+    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 || strcmp(pkg->name, "sed") == 0 ||
+        strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 || strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0) {
         // Bootstrap: Use only essential system directories + TSI PATH
         char bootstrap_path[512] = "";
         get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));

@@ -9,7 +9,8 @@
   "dependencies": [],
   "build_dependencies": [
     "make",
-    "coreutils"
+    "coreutils",
+    "sed"
   ],
   "build_system": "autotools",
   "configure_args": [],
