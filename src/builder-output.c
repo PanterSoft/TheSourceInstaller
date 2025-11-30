@@ -1,16 +1,22 @@
 #include "builder.h"
 #include "package.h"
+#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <errno.h>
 
 // Helper function to execute command and capture output line by line
-static bool execute_with_output(const char *cmd, void (*output_callback)(const char *line, void *userdata), void *userdata) {
+static bool execute_with_output(const char *cmd, const char *step_name, const char *package_name, void (*output_callback)(const char *line, void *userdata), void *userdata) {
+    log_developer("Executing %s command for package: %s", step_name ? step_name : "build", package_name);
+    log_developer("Command: %s", cmd);
+
     FILE *pipe = popen(cmd, "r");
     if (!pipe) {
+        log_error("Failed to open pipe for %s command (errno: %d): %s", step_name ? step_name : "build", errno, cmd);
         return false;
     }
 
@@ -21,12 +27,48 @@ static bool execute_with_output(const char *cmd, void (*output_callback)(const c
     // Set line buffering for immediate output
     setvbuf(pipe, NULL, _IOLBF, 0);
 
+    // Track output for logging (especially errors)
+    char error_output[8192] = "";
+    size_t error_output_len = 0;
+    size_t line_count = 0;
+    const size_t max_error_lines = 50;  // Limit error output to last 50 lines
+    
     while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
         // Process buffer character by character to handle partial lines
         for (size_t i = 0; buffer[i] != '\0'; i++) {
             if (buffer[i] == '\n' || buffer[i] == '\r') {
                 if (line_pos > 0) {
                     line[line_pos] = '\0';
+                    line_count++;
+                    
+                    // Log each line at DEBUG level
+                    log_debug("%s output: %s", step_name ? step_name : "build", line);
+                    
+                    // Keep last max_error_lines for error logging
+                    if (line_count > max_error_lines) {
+                        // Remove first line from error_output buffer
+                        char *first_newline = strchr(error_output, '\n');
+                        if (first_newline) {
+                            size_t remaining = strlen(first_newline + 1);
+                            memmove(error_output, first_newline + 1, remaining + 1);
+                            error_output_len = remaining;
+                        } else {
+                            error_output[0] = '\0';
+                            error_output_len = 0;
+                        }
+                    }
+                    
+                    // Append to error output buffer
+                    size_t line_len = strlen(line);
+                    if (error_output_len + line_len + 2 < sizeof(error_output)) {
+                        if (error_output_len > 0) {
+                            error_output[error_output_len++] = '\n';
+                        }
+                        memcpy(error_output + error_output_len, line, line_len);
+                        error_output_len += line_len;
+                        error_output[error_output_len] = '\0';
+                    }
+                    
                     // Only call callback for non-empty lines
                     if (line_pos > 0 && output_callback) {
                         output_callback(line, userdata);
@@ -48,21 +90,100 @@ static bool execute_with_output(const char *cmd, void (*output_callback)(const c
     }
 
     int status = pclose(pipe);
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    int exit_code;
+    bool success = false;
+
+    if (WIFEXITED(status)) {
+        exit_code = WEXITSTATUS(status);
+        success = (exit_code == 0);
+        if (success) {
+            log_debug("%s completed successfully for package: %s (exit code: %d)", step_name ? step_name : "build", package_name, exit_code);
+        } else {
+            log_error("%s failed for package: %s (exit code: %d)", step_name ? step_name : "build", package_name, exit_code);
+            // Log error output if available
+            if (error_output_len > 0) {
+                log_error("Error output from %s:", step_name ? step_name : "build");
+                // Log error output line by line
+                char *error_line = error_output;
+                size_t logged_lines = 0;
+                while (error_line && *error_line && logged_lines < max_error_lines) {
+                    char *newline = strchr(error_line, '\n');
+                    if (newline) {
+                        *newline = '\0';
+                    }
+                    if (strlen(error_line) > 0) {
+                        log_error("  %s", error_line);
+                        logged_lines++;
+                    }
+                    if (newline) {
+                        *newline = '\n';
+                        error_line = newline + 1;
+                    } else {
+                        break;
+                    }
+                }
+                if (logged_lines >= max_error_lines) {
+                    log_error("  ... (output truncated)");
+                }
+            }
+        }
+    } else if (WIFSIGNALED(status)) {
+        exit_code = WTERMSIG(status);
+        log_error("%s was terminated by signal %d for package: %s", step_name ? step_name : "build", exit_code, package_name);
+        // Log error output if available
+        if (error_output_len > 0) {
+            log_error("Output before termination:");
+            char *error_line = error_output;
+            size_t logged_lines = 0;
+            while (error_line && *error_line && logged_lines < max_error_lines) {
+                char *newline = strchr(error_line, '\n');
+                if (newline) {
+                    *newline = '\0';
+                }
+                if (strlen(error_line) > 0) {
+                    log_error("  %s", error_line);
+                    logged_lines++;
+                }
+                if (newline) {
+                    *newline = '\n';
+                    error_line = newline + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        success = false;
+    } else {
+        log_error("%s failed with unknown status for package: %s", step_name ? step_name : "build", package_name);
+        success = false;
+    }
+
+    return success;
 }
 
 bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir, void (*output_callback)(const char *line, void *userdata), void *userdata) {
     if (!config || !pkg || !source_dir) {
+        log_error("builder_build_with_output called with invalid parameters");
         return false;
     }
 
+    log_info("Building package: %s@%s (source_dir=%s, build_dir=%s)",
+             pkg->name, pkg->version ? pkg->version : "latest", source_dir, build_dir);
+
     // Create build directory
+    log_developer("Creating build directory: %s", build_dir);
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", build_dir);
-    system(cmd);
+    int mkdir_result = system(cmd);
+    if (mkdir_result != 0) {
+        log_error("Failed to create build directory: %s (exit code: %d)", build_dir, WEXITSTATUS(mkdir_result));
+        return false;
+    }
+    log_developer("Build directory created successfully: %s", build_dir);
 
     // Apply patches
     if (pkg->patches_count > 0) {
+        log_debug("Applying %zu patches to source", pkg->patches_count);
         builder_apply_patches(source_dir, pkg->patches, pkg->patches_count);
     }
 
@@ -91,6 +212,11 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
              main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
+    log_info("Using build system: %s for package: %s", build_system, pkg->name);
+    log_developer("Build environment: %s", env);
+    log_developer("Source directory: %s", source_dir);
+    log_developer("Build directory: %s", build_dir);
+    log_developer("Install directory: %s", config->install_dir);
 
     if (strcmp(build_system, "autotools") == 0) {
         // Check for configure script
@@ -98,35 +224,44 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);
         struct stat st;
         if (stat(configure, &st) != 0) {
-            snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv 2>/dev/null", source_dir);
-            system(cmd);
+            log_debug("Configure script not found, running autoreconf");
+            snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv", source_dir);
+            int autoreconf_result = system(cmd);
+            if (autoreconf_result != 0) {
+                log_warning("autoreconf failed (exit code: %d), continuing anyway", WEXITSTATUS(autoreconf_result));
+            }
         }
 
         // Configure
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        log_debug("Running configure for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s' 2>&1", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->configure_args[i]);
         }
-        if (!execute_with_output(cmd, output_callback, userdata)) {
+        if (!execute_with_output(cmd, "configure", pkg->name, output_callback, userdata)) {
+            log_error("Configure failed for package: %s", pkg->name);
             return false;
         }
 
         // Make
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make", source_dir, env);
+        log_debug("Running make for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make 2>&1", source_dir, env);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->make_args[i]);
         }
-        if (!execute_with_output(cmd, output_callback, userdata)) {
+        if (!execute_with_output(cmd, "make", pkg->name, output_callback, userdata)) {
+            log_error("Make failed for package: %s", pkg->name);
             return false;
         }
 
     } else if (strcmp(build_system, "cmake") == 0) {
         // CMake configure
+        log_debug("Running cmake configure for package: %s", pkg->name);
         size_t cmd_len = 1024;
         char *cmd_buf = malloc(cmd_len);
-        snprintf(cmd_buf, cmd_len, "cd '%s' && %s cmake -S '%s' -B '%s' -DCMAKE_INSTALL_PREFIX='%s'",
+        snprintf(cmd_buf, cmd_len, "cd '%s' && %s cmake -S '%s' -B '%s' -DCMAKE_INSTALL_PREFIX='%s' 2>&1",
                  build_dir, env, source_dir, build_dir, config->install_dir);
         for (size_t i = 0; i < pkg->cmake_args_count; i++) {
             size_t needed = strlen(cmd_buf) + strlen(pkg->cmake_args[i]) + 2;
@@ -137,16 +272,18 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
             strcat(cmd_buf, " ");
             strcat(cmd_buf, pkg->cmake_args[i]);
         }
-        bool result = execute_with_output(cmd_buf, output_callback, userdata);
+        bool result = execute_with_output(cmd_buf, "cmake configure", pkg->name, output_callback, userdata);
         free(cmd_buf);
         if (!result) {
+            log_error("CMake configure failed for package: %s", pkg->name);
             return false;
         }
 
         // CMake build
+        log_debug("Running cmake build for package: %s", pkg->name);
         cmd_len = 1024;
         cmd_buf = malloc(cmd_len);
-        snprintf(cmd_buf, cmd_len, "cd '%s' && %s cmake --build '%s'", build_dir, env, build_dir);
+        snprintf(cmd_buf, cmd_len, "cd '%s' && %s cmake --build '%s' 2>&1", build_dir, env, build_dir);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             size_t needed = strlen(cmd_buf) + strlen(pkg->make_args[i]) + 2;
             if (needed > cmd_len) {
@@ -156,13 +293,15 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
             strcat(cmd_buf, " ");
             strcat(cmd_buf, pkg->make_args[i]);
         }
-        result = execute_with_output(cmd_buf, output_callback, userdata);
+        result = execute_with_output(cmd_buf, "cmake build", pkg->name, output_callback, userdata);
         free(cmd_buf);
         if (!result) {
+            log_error("CMake build failed for package: %s", pkg->name);
             return false;
         }
 
     } else if (strcmp(build_system, "make") == 0) {
+        log_debug("Running make for package: %s", pkg->name);
         size_t cmd_len = 1024;
         char *cmd_buf = malloc(cmd_len);
         snprintf(cmd_buf, cmd_len, "cd '%s' && %s make", source_dir, env);
@@ -175,21 +314,33 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
             strcat(cmd_buf, " ");
             strcat(cmd_buf, pkg->make_args[i]);
         }
-        bool result = execute_with_output(cmd_buf, output_callback, userdata);
+        // Add stderr redirection
+        size_t needed = strlen(cmd_buf) + 5;
+        if (needed > cmd_len) {
+            cmd_len = needed * 2;
+            cmd_buf = realloc(cmd_buf, cmd_len);
+        }
+        strcat(cmd_buf, " 2>&1");
+        bool result = execute_with_output(cmd_buf, "make", pkg->name, output_callback, userdata);
         free(cmd_buf);
         if (!result) {
+            log_error("Make failed for package: %s", pkg->name);
             return false;
         }
 
     } else if (strcmp(build_system, "meson") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson setup '%s' '%s' --prefix='%s'",
+        log_debug("Running meson setup for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson setup '%s' '%s' --prefix='%s' 2>&1",
                  build_dir, env, build_dir, source_dir, config->install_dir);
-        if (!execute_with_output(cmd, output_callback, userdata)) {
+        if (!execute_with_output(cmd, "meson setup", pkg->name, output_callback, userdata)) {
+            log_error("Meson setup failed for package: %s", pkg->name);
             return false;
         }
 
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson compile -C '%s'", build_dir, env, build_dir);
-        if (!execute_with_output(cmd, output_callback, userdata)) {
+        log_debug("Running meson compile for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson compile -C '%s' 2>&1", build_dir, env, build_dir);
+        if (!execute_with_output(cmd, "meson compile", pkg->name, output_callback, userdata)) {
+            log_error("Meson compile failed for package: %s", pkg->name);
             return false;
         }
     } else if (strcmp(build_system, "custom") == 0) {
@@ -231,35 +382,49 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 size_t cmd_len = strlen(cmd_expanded) + strlen(source_dir) + strlen(expanded_env) + 64;
                 char *full_cmd = malloc(cmd_len);
                 if (full_cmd) {
-                    snprintf(full_cmd, cmd_len, "cd '%s' && %s %s",
+                    snprintf(full_cmd, cmd_len, "cd '%s' && %s %s 2>&1",
                             source_dir, expanded_env, cmd_expanded);
-                    if (!execute_with_output(full_cmd, output_callback, userdata)) {
+                    char step_name[256];
+                    snprintf(step_name, sizeof(step_name), "custom build command %zu", i + 1);
+                    if (!execute_with_output(full_cmd, step_name, pkg->name, output_callback, userdata)) {
+                        log_error("Custom build command %zu failed for package: %s", i + 1, pkg->name);
                         free(full_cmd);
                         free(cmd_expanded);
                         return false;
                     }
                     free(full_cmd);
                 } else {
+                    log_error("Failed to allocate memory for custom build command %zu", i + 1);
                     free(cmd_expanded);
                     return false;
                 }
                 free(cmd_expanded);
             }
             // All commands succeeded
+            log_info("All custom build commands completed successfully for package: %s", pkg->name);
             return true;
         } else {
             // No build commands specified, just return success
+            log_warning("No build commands specified for custom build system, assuming success for package: %s", pkg->name);
             return true;
         }
+    } else {
+        log_error("Unknown or unsupported build system: %s for package: %s", build_system, pkg->name);
+        return false;
     }
 
+    log_info("Build completed successfully for package: %s", pkg->name);
     return true;
 }
 
 bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir, void (*output_callback)(const char *line, void *userdata), void *userdata) {
     if (!config || !pkg || !source_dir) {
+        log_error("builder_install_with_output called with invalid parameters");
         return false;
     }
+
+    log_info("Installing package: %s@%s (install_dir=%s)",
+             pkg->name, pkg->version ? pkg->version : "latest", config->install_dir);
 
     char main_install_dir[1024];
     char *install_pos = strstr(config->install_dir, "/install/");
@@ -280,17 +445,24 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
              main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
+    log_debug("Using build system for install: %s", build_system);
+    log_developer("Install environment: %s", env);
     char cmd[1024];
 
     if (strcmp(build_system, "autotools") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install", source_dir, env);
+        log_debug("Running make install for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install 2>&1", source_dir, env);
     } else if (strcmp(build_system, "cmake") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);
+        log_debug("Running cmake --install for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s' 2>&1", build_dir, env, build_dir);
     } else if (strcmp(build_system, "meson") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s'", build_dir, env, build_dir);
+        log_debug("Running meson install for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s' 2>&1", build_dir, env, build_dir);
     } else if (strcmp(build_system, "make") == 0) {
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s'", source_dir, env, config->install_dir);
+        log_debug("Running make install for package: %s", pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s' 2>&1", source_dir, env, config->install_dir);
     } else if (strcmp(build_system, "custom") == 0) {
+        log_debug("Using custom install method for package: %s", pkg->name);
         // For custom builds, installation is typically handled in build_commands
         // But we can try to copy common directories if they exist
         char install_cmd[2048];
@@ -305,11 +477,25 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
                 source_dir, config->install_dir,
                 source_dir, config->install_dir,
                 source_dir, config->install_dir);
-        return execute_with_output(install_cmd, output_callback, userdata);
+        log_developer("Custom install command: %s", install_cmd);
+        bool result = execute_with_output(install_cmd, "custom install", pkg->name, output_callback, userdata);
+        if (result) {
+            log_info("Custom install completed for package: %s", pkg->name);
+        } else {
+            log_warning("Custom install command failed (may be normal for custom builds)");
+        }
+        return result;
     } else {
+        log_error("Unknown build system for install: %s", build_system);
         return false;
     }
 
-    return execute_with_output(cmd, output_callback, userdata);
+    bool result = execute_with_output(cmd, "install", pkg->name, output_callback, userdata);
+    if (result) {
+        log_info("Install completed successfully for package: %s", pkg->name);
+    } else {
+        log_error("Install failed for package: %s", pkg->name);
+    }
+    return result;
 }
 
