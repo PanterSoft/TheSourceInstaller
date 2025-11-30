@@ -14,9 +14,12 @@ on:
         description: 'Maximum versions per package (leave empty to discover all versions)'
         required: false
         type: string
+  pull_request:
+    types: [closed]
 
 jobs:
   discover-versions:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -202,4 +205,72 @@ jobs:
             automated
             version-update
             dependencies
+
+  cleanup-branch:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check if PR is from auto-discovery workflow
+        id: check-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name);
+            const branchName = pr.head.ref;
+
+            // Check if this is an auto-discovery PR
+            const isAutoDiscovery =
+              labels.includes('automated') &&
+              labels.includes('version-update') &&
+              branchName.startsWith('auto-update-versions-');
+
+            console.log(`PR #${pr.number}: ${pr.title}`);
+            console.log(`Branch: ${branchName}`);
+            console.log(`Labels: ${labels.join(', ')}`);
+            console.log(`Is auto-discovery: ${isAutoDiscovery}`);
+
+            core.setOutput('should_cleanup', isAutoDiscovery);
+            core.setOutput('branch_name', branchName);
+            core.setOutput('pr_number', pr.number);
+
+      - name: Delete branch
+        if: steps.check-pr.outputs.should_cleanup == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = '${{ steps.check-pr.outputs.branch_name }}';
+            const prNumber = ${{ steps.check-pr.outputs.pr_number }};
+
+            try {
+              // Check if branch still exists
+              const { data: refs } = await github.rest.git.listMatchingRefs({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${branchName}`
+              });
+
+              if (refs.length > 0) {
+                // Branch exists, delete it
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${branchName}`
+                });
+                console.log(`✅ Deleted branch: ${branchName}`);
+              } else {
+                console.log(`ℹ️  Branch ${branchName} already deleted`);
+              }
+            } catch (error) {
+              // Branch might already be deleted or not exist
+              if (error.status === 422 || error.status === 404) {
+                console.log(`ℹ️  Branch ${branchName} does not exist (may have been already deleted)`);
+              } else {
+                console.error(`⚠️  Error deleting branch ${branchName}:`, error.message);
+                // Don't fail the workflow if branch deletion fails
+              }
+            }
 

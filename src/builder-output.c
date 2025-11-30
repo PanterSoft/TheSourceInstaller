@@ -84,7 +84,10 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     }
 
     char env[4096] = "";
-    snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+    // Only use TSI-installed packages and tools - no system packages
+    // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
+    // Restrict all paths to only TSI to ensure complete isolation from system packages
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
              main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
@@ -270,7 +273,10 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
     }
 
     char env[4096] = "";
-    snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH",
+    // Only use TSI-installed packages and tools - no system packages
+    // PATH only includes TSI's bin directory (build tools must be installed via TSI first)
+    // Restrict all paths to only TSI to ensure complete isolation from system packages
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
              main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";

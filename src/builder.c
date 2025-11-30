@@ -1,5 +1,6 @@
 #include "builder.h"
 #include "package.h"
+#include "tui.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -54,7 +55,9 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
         char cmd[1024];
         snprintf(cmd, sizeof(cmd), "cd '%s' && patch -p1 -i '%s' 2>/dev/null", source_dir, patches[i]);
         if (system(cmd) != 0) {
-            printf("Warning: Failed to apply patch: %s\n", patches[i]);
+            char warn_msg[512];
+            snprintf(warn_msg, sizeof(warn_msg), "Failed to apply patch: %s", patches[i]);
+            print_warning(warn_msg);
         }
     }
     return true;
@@ -98,7 +101,10 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     }
 
     char env[4096] = "";
-    snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+    // Only use TSI-installed packages and tools - no system packages
+    // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
+    // Restrict all paths to only TSI to ensure complete isolation from system packages
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
              main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
@@ -287,7 +293,10 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     }
 
     char env[4096] = "";
-    snprintf(env, sizeof(env), "PATH=%s/bin:$PATH PKG_CONFIG_PATH=%s/lib/pkgconfig:$PKG_CONFIG_PATH LD_LIBRARY_PATH=%s/lib:$LD_LIBRARY_PATH",
+    // Only use TSI-installed packages and tools - no system packages
+    // PATH only includes TSI's bin directory (build tools must be installed via TSI first)
+    // Restrict all paths to only TSI to ensure complete isolation from system packages
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
              main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";

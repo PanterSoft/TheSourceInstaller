@@ -7,7 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/automake/automake-1.17.tar.gz"
   },
   "dependencies": ["autoconf"],
-  "build_dependencies": [],
+  "build_dependencies": ["m4"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
