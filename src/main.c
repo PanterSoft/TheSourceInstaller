@@ -39,6 +39,48 @@ static void print_usage(const char *prog_name) {
     printf("  --version                                    Show version\n");
 }
 
+static bool run_command_with_window(const char *overview, const char *detail, const char *cmd) {
+    if (!cmd || !*cmd) {
+        return false;
+    }
+
+    bool interactive = is_tty();
+
+    if (overview && *overview) {
+        print_step_overview(overview, detail);
+    }
+
+    OutputBuffer buffer;
+    output_buffer_init(&buffer);
+    output_capture_start(cmd);
+    output_buffer_add(&buffer, cmd);
+    if (interactive) {
+        output_buffer_display(&buffer);
+    } else {
+        printf("%s\n", cmd);
+    }
+
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) {
+        output_capture_end(&buffer);
+        return false;
+    }
+
+    char line[OUTPUT_LINE_LENGTH];
+    while (fgets(line, sizeof(line), pipe)) {
+        output_buffer_add(&buffer, line);
+        if (interactive) {
+            output_buffer_display(&buffer);
+        } else {
+            fputs(line, stdout);
+        }
+    }
+
+    int status = pclose(pipe);
+    output_capture_end(&buffer);
+    return status == 0;
+}
+
 static int cmd_install(int argc, char **argv) {
     bool force = false;
     const char *package_name = NULL;
@@ -372,9 +414,13 @@ install_package:
             // If version specified, check if that specific version is installed
             if (package_version && installed_pkg->version && strcmp(installed_pkg->version, package_version) == 0) {
                 if (package_version) {
-                    printf("Warning: %s@%s is already installed\n", package_name, package_version);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "%s@%s is already installed", package_name, package_version);
+                    print_warning(warn_msg);
                 } else {
-                    printf("Warning: %s is already installed\n", package_name);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
+                    print_warning(warn_msg);
                 }
                 if (installed_pkg->install_path) {
                     printf("  Install path: %s\n", installed_pkg->install_path);
@@ -398,7 +444,9 @@ install_package:
                 return 0;
             } else if (!package_version) {
                 // No version specified, but package is installed
-                printf("Warning: %s is already installed\n", package_name);
+                char warn_msg[256];
+                snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
+                print_warning(warn_msg);
                 if (installed_pkg->version) {
                     printf("  Version: %s\n", installed_pkg->version);
                 }
@@ -562,7 +610,9 @@ install_package:
             for (size_t i = 0; i < deps_count; i++) {
                 Package *pkg = repository_get_package(repo, deps[i]);
                 if (!pkg) {
-                    fprintf(stderr, "  Warning: Package '%s' not found in repository\n", deps[i]);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "Package '%s' not found in repository", deps[i]);
+                    print_warning(warn_msg);
                 }
             }
         }
@@ -672,7 +722,9 @@ install_package:
         if (dep_name) free(dep_name);
         if (dep_version) free(dep_version);
         if (!dep_pkg) {
-            printf("Warning: Dependency package not found: %s\n", build_order[i]);
+            char warn_msg[256];
+            snprintf(warn_msg, sizeof(warn_msg), "Dependency package not found: %s", build_order[i]);
+            print_warning(warn_msg);
             continue;
         }
 
@@ -698,7 +750,13 @@ install_package:
         // Setup output buffer for showing last 5 lines
         OutputBuffer output_buf;
         output_buffer_init(&output_buf);
-        output_capture_start();  // Reserve space for output
+        char build_window_title[256];
+        if (dep_pkg->version && dep_pkg->version[0]) {
+            snprintf(build_window_title, sizeof(build_window_title), "%s Building %s %s", ICON_BUILD, dep_pkg->name, dep_pkg->version);
+        } else {
+            snprintf(build_window_title, sizeof(build_window_title), "%s Building %s", ICON_BUILD, dep_pkg->name);
+        }
+        output_capture_start(build_window_title);
 
         if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
@@ -717,7 +775,13 @@ install_package:
         // Install
         print_installing_compact(dep_pkg->name, dep_pkg->version);
         output_buffer_init(&output_buf);
-        output_capture_start();  // Reserve space for output
+        char install_window_title[256];
+        if (dep_pkg->version && dep_pkg->version[0]) {
+            snprintf(install_window_title, sizeof(install_window_title), "%s Installing %s %s", ICON_INSTALL, dep_pkg->name, dep_pkg->version);
+        } else {
+            snprintf(install_window_title, sizeof(install_window_title), "%s Installing %s", ICON_INSTALL, dep_pkg->name);
+        }
+        output_capture_start(install_window_title);
 
         if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
@@ -770,13 +834,25 @@ install_package:
             // Setup output buffer for showing last 5 lines
             OutputBuffer output_buf;
             output_buffer_init(&output_buf);
-            output_capture_start();  // Reserve space for output
+            char main_build_title[256];
+            if (main_pkg->version && main_pkg->version[0]) {
+                snprintf(main_build_title, sizeof(main_build_title), "%s Building %s %s", ICON_BUILD, main_pkg->name, main_pkg->version);
+            } else {
+                snprintf(main_build_title, sizeof(main_build_title), "%s Building %s", ICON_BUILD, main_pkg->name);
+            }
+            output_capture_start(main_build_title);
 
             if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
                 output_capture_end(&output_buf);
                 print_installing_compact(main_pkg->name, main_pkg->version);
                 output_buffer_init(&output_buf);
-                output_capture_start();  // Reserve space for output
+                char main_install_title[256];
+                if (main_pkg->version && main_pkg->version[0]) {
+                    snprintf(main_install_title, sizeof(main_install_title), "%s Installing %s %s", ICON_INSTALL, main_pkg->name, main_pkg->version);
+                } else {
+                    snprintf(main_install_title, sizeof(main_install_title), "%s Installing %s", ICON_INSTALL, main_pkg->name);
+                }
+                output_capture_start(main_install_title);
 
                 if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
                     output_capture_end(&output_buf);
@@ -1304,11 +1380,13 @@ static int cmd_update(int argc, char **argv) {
         printf("  %s\n", local_path);
         char copy_cmd[2048];
         int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
-        if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) && system(copy_cmd) == 0) {
-            print_success("Packages copied from local path");
-            success = true;
-        } else {
-            fprintf(stderr, "Error: Failed to copy packages from local path\n");
+        if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd)) {
+            if (run_command_with_window("Copying packages", local_path, copy_cmd)) {
+                print_success("Packages copied from local path");
+                success = true;
+            } else {
+                fprintf(stderr, "Error: Failed to copy packages from local path\n");
+            }
         }
     }
     // Update from git repository
@@ -1337,7 +1415,7 @@ static int cmd_update(int argc, char **argv) {
             return 1;
         }
 
-        if (system(git_cmd) == 0) {
+        if (run_command_with_window("Syncing repository", repo_url, git_cmd)) {
             // Copy package files
             char packages_dir[1024];
             int packages_dir_len = snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
@@ -1358,7 +1436,7 @@ static int cmd_update(int argc, char **argv) {
                 fprintf(stderr, "Error: Command too long\n");
                 return 1;
             }
-            if (system(copy_cmd) == 0) {
+            if (run_command_with_window("Copying packages", packages_dir, copy_cmd)) {
                 print_success("Packages updated from repository");
                 success = true;
             } else {
@@ -1396,7 +1474,7 @@ static int cmd_update(int argc, char **argv) {
             return 1;
         }
 
-        if (system(git_cmd) == 0) {
+        if (run_command_with_window("Syncing repository", default_repo, git_cmd)) {
             // Copy package files
             char packages_dir[1024];
             int packages_dir_len = snprintf(packages_dir, sizeof(packages_dir), "%s/packages", temp_dir);
@@ -1407,7 +1485,8 @@ static int cmd_update(int argc, char **argv) {
 
             char copy_cmd[2048];
             int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
-            if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) && system(copy_cmd) == 0) {
+            if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) &&
+                run_command_with_window("Copying packages", packages_dir, copy_cmd)) {
                 print_success("Packages updated from default repository");
                 success = true;
             } else {
@@ -1543,7 +1622,7 @@ static int cmd_update(int argc, char **argv) {
     snprintf(fetch_cmd, sizeof(fetch_cmd), "cd '%s' && git fetch origin main 2>&1", tsi_source_dir);
     FILE *fetch_pipe = popen(fetch_cmd, "r");
     if (!fetch_pipe) {
-        printf("Warning: Could not check for TSI updates (git fetch failed)\n");
+        print_warning("Could not check for TSI updates (git fetch failed)");
         return 0;
     }
 
@@ -1633,17 +1712,15 @@ static int cmd_update(int argc, char **argv) {
     // Pull latest changes
     char pull_cmd[2048];
     snprintf(pull_cmd, sizeof(pull_cmd), "cd '%s' && git pull origin main 2>&1", tsi_source_dir);
-    printf("Pulling latest changes...\n");
-    if (system(pull_cmd) != 0) {
+    if (!run_command_with_window("Pulling latest changes", tsi_source_dir, pull_cmd)) {
         fprintf(stderr, "Error: Failed to pull TSI updates\n");
         return 1;
     }
 
     // Build TSI
-    printf("Building TSI...\n");
     char build_cmd[2048];
     snprintf(build_cmd, sizeof(build_cmd), "cd '%s/src' && make clean && make 2>&1", tsi_source_dir);
-    if (system(build_cmd) != 0) {
+    if (!run_command_with_window("Building TSI", tsi_source_dir, build_cmd)) {
         fprintf(stderr, "Error: Failed to build TSI\n");
         return 1;
     }
@@ -1657,11 +1734,10 @@ static int cmd_update(int argc, char **argv) {
     }
 
     // Install TSI
-    printf("Installing TSI...\n");
     char install_cmd[2048];
     snprintf(install_cmd, sizeof(install_cmd), "mkdir -p '%s/bin' && cp '%s' '%s/bin/tsi' && chmod +x '%s/bin/tsi'",
              tsi_prefix, binary_path, tsi_prefix, tsi_prefix);
-    if (system(install_cmd) != 0) {
+    if (!run_command_with_window("Installing TSI", tsi_prefix, install_cmd)) {
         fprintf(stderr, "Error: Failed to install TSI\n");
         return 1;
     }
@@ -1771,6 +1847,42 @@ static int cmd_uninstall(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    tui_style_reload_from_env();
+
+    int write_idx = 1;
+    for (int read_idx = 1; read_idx < argc; read_idx++) {
+        char *arg = argv[read_idx];
+        if (strcmp(arg, "--style") == 0) {
+            if (read_idx + 1 >= argc) {
+                print_error("Missing style name after --style");
+                return 1;
+            }
+            const char *style_name = argv[++read_idx];
+            if (!tui_style_apply(style_name)) {
+                char warn_msg[128];
+                snprintf(warn_msg, sizeof(warn_msg),
+                         "Unknown style '%s'. Using %s",
+                         style_name, tui_style_active_name());
+                print_warning(warn_msg);
+            }
+            continue;
+        }
+        if (strncmp(arg, "--style=", 8) == 0) {
+            const char *style_name = arg + 8;
+            if (!tui_style_apply(style_name)) {
+                char warn_msg[128];
+                snprintf(warn_msg, sizeof(warn_msg),
+                         "Unknown style '%s'. Using %s",
+                         style_name, tui_style_active_name());
+                print_warning(warn_msg);
+            }
+            continue;
+        }
+        argv[write_idx++] = argv[read_idx];
+    }
+    argc = write_idx;
+    argv[argc] = NULL;
+
     if (argc < 2) {
         print_usage(argv[0]);
         return 1;
@@ -1813,7 +1925,9 @@ int main(int argc, char **argv) {
             database_free(db);
             return 0;
         } else {
-            printf("Warning: Package %s is not installed\n", argv[2]);
+            char warn_msg[256];
+            snprintf(warn_msg, sizeof(warn_msg), "Package %s is not installed", argv[2]);
+            print_warning(warn_msg);
             database_free(db);
             return 1;
         }
