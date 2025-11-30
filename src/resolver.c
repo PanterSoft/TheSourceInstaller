@@ -250,7 +250,40 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             if (deps && deps_count > 0) {
                 for (size_t j = 0; j < deps_count; j++) {
                     if (deps[j]) { // Only add non-NULL dependencies
-                        if (*result_count >= capacity) {
+                        // Check if this dependency is already in result (by name)
+                        bool already_added = false;
+                        if (result) {
+                            for (size_t k = 0; k < *result_count; k++) {
+                                if (!result[k]) continue;
+
+                                // Extract names for comparison
+                                char *res_name = NULL;
+                                char *res_version = NULL;
+                                parse_package_version(result[k], &res_name, &res_version);
+
+                                char *dep_name_check = NULL;
+                                char *dep_version_check = NULL;
+                                parse_package_version(deps[j], &dep_name_check, &dep_version_check);
+
+                                const char *res_name_str = res_name ? res_name : result[k];
+                                const char *dep_name_str = dep_name_check ? dep_name_check : deps[j];
+
+                                // Match by name (version is optional)
+                                if (strcmp(res_name_str, dep_name_str) == 0) {
+                                    already_added = true;
+                                }
+
+                                if (res_name) free(res_name);
+                                if (res_version) free(res_version);
+                                if (dep_name_check) free(dep_name_check);
+                                if (dep_version_check) free(dep_version_check);
+
+                                if (already_added) break;
+                            }
+                        }
+
+                        if (!already_added) {
+                            if (*result_count >= capacity) {
                             capacity = capacity ? capacity * 2 : 8;
                             char **new_result = realloc(result, sizeof(char*) * capacity);
                             if (!new_result) {
@@ -281,8 +314,9 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
                             free(deps);
                             *result_count = 0;
                             return NULL;
+                            }
+                            (*result_count)++;
                         }
-                        (*result_count)++;
                     }
                     if (deps[j]) free(deps[j]);
                 }
@@ -356,15 +390,64 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
             if (deps && deps_count > 0) {
                 for (size_t j = 0; j < deps_count; j++) {
                     if (deps[j]) { // Only add non-NULL dependencies
-                        if (*result_count >= capacity) {
-                            capacity = capacity ? capacity * 2 : 8;
-                            char **new_result = realloc(result, sizeof(char*) * capacity);
-                            if (!new_result) {
-                                // Allocation failed - clean up
-                                for (size_t k = 0; k < *result_count; k++) {
-                                    if (result && result[k]) free(result[k]);
+                        // Check if this dependency is already in result (by name)
+                        bool already_added = false;
+                        if (result) {
+                            for (size_t k = 0; k < *result_count; k++) {
+                                if (!result[k]) continue;
+
+                                // Extract names for comparison
+                                char *res_name = NULL;
+                                char *res_version = NULL;
+                                parse_package_version(result[k], &res_name, &res_version);
+
+                                char *dep_name_check = NULL;
+                                char *dep_version_check = NULL;
+                                parse_package_version(deps[j], &dep_name_check, &dep_version_check);
+
+                                const char *res_name_str = res_name ? res_name : result[k];
+                                const char *dep_name_str = dep_name_check ? dep_name_check : deps[j];
+
+                                // Match by name (version is optional)
+                                if (strcmp(res_name_str, dep_name_str) == 0) {
+                                    already_added = true;
                                 }
-                                if (result) free(result);
+
+                                if (res_name) free(res_name);
+                                if (res_version) free(res_version);
+                                if (dep_name_check) free(dep_name_check);
+                                if (dep_version_check) free(dep_version_check);
+
+                                if (already_added) break;
+                            }
+                        }
+
+                        if (!already_added) {
+                            if (*result_count >= capacity) {
+                                capacity = capacity ? capacity * 2 : 8;
+                                char **new_result = realloc(result, sizeof(char*) * capacity);
+                                if (!new_result) {
+                                    // Allocation failed - clean up
+                                    for (size_t k = 0; k < *result_count; k++) {
+                                        if (result && result[k]) free(result[k]);
+                                    }
+                                    if (result) free(result);
+                                    for (size_t k = 0; k < deps_count; k++) {
+                                        if (deps[k]) free(deps[k]);
+                                    }
+                                    free(deps);
+                                    *result_count = 0;
+                                    return NULL;
+                                }
+                                result = new_result;
+                            }
+                            result[*result_count] = strdup(deps[j]);
+                            if (!result[*result_count]) {
+                                // strdup failed - clean up
+                                for (size_t k = 0; k < *result_count; k++) {
+                                    if (result[k]) free(result[k]);
+                                }
+                                free(result);
                                 for (size_t k = 0; k < deps_count; k++) {
                                     if (deps[k]) free(deps[k]);
                                 }
@@ -372,23 +455,8 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
                                 *result_count = 0;
                                 return NULL;
                             }
-                            result = new_result;
+                            (*result_count)++;
                         }
-                        result[*result_count] = strdup(deps[j]);
-                        if (!result[*result_count]) {
-                            // strdup failed - clean up
-                            for (size_t k = 0; k < *result_count; k++) {
-                                if (result[k]) free(result[k]);
-                            }
-                            free(result);
-                            for (size_t k = 0; k < deps_count; k++) {
-                                if (deps[k]) free(deps[k]);
-                            }
-                            free(deps);
-                            *result_count = 0;
-                            return NULL;
-                        }
-                        (*result_count)++;
                     }
                     if (deps[j]) free(deps[j]);
                 }
@@ -570,7 +638,7 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
                 char *added_pkg_version = NULL;
                 parse_package_version(packages[i], &added_pkg_name, &added_pkg_version);
                 const char *added_name = added_pkg_name ? added_pkg_name : packages[i];
-                
+
                 Package *pkg = repository_get_package(resolver->repository, added_name);
                 if (pkg) {
                     for (size_t j = 0; j < packages_count; j++) {
@@ -580,11 +648,11 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
                             char *other_pkg_version = NULL;
                             parse_package_version(packages[j], &other_pkg_name, &other_pkg_version);
                             const char *other_name = other_pkg_name ? other_pkg_name : packages[j];
-                            
+
                             Package *other = repository_get_package(resolver->repository, other_name);
                             if (other) {
                                 if (package_has_dependency(other, added_name)) {
-                                    log_developer("  Package '%s' depends on '%s', decreasing in_degree[%zu] from %d to %d", 
+                                    log_developer("  Package '%s' depends on '%s', decreasing in_degree[%zu] from %d to %d",
                                                   other_name, added_name, j, in_degree[j], in_degree[j] - 1);
                                     in_degree[j]--;
                                 }

@@ -10,7 +10,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -28,7 +30,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -46,7 +50,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -64,7 +70,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -82,7 +90,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -100,7 +110,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -118,7 +130,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -136,7 +150,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -154,7 +170,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -172,7 +190,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -190,7 +210,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -208,7 +230,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -226,7 +250,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -244,7 +270,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -262,7 +290,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -280,7 +310,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -298,7 +330,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -316,7 +350,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -334,7 +370,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -352,7 +390,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -370,7 +410,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -388,7 +430,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -406,7 +450,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -424,7 +470,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -442,7 +490,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -460,7 +510,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -478,7 +530,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -496,7 +550,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -514,7 +570,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -532,7 +590,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -550,7 +610,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -568,7 +630,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -586,7 +650,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -604,7 +670,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -622,7 +690,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -640,7 +710,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -658,7 +730,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -676,7 +750,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -694,7 +770,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -712,7 +790,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -730,7 +810,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -748,7 +830,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -766,7 +850,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -784,7 +870,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -802,7 +890,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -820,7 +910,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -838,7 +930,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -856,7 +950,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -874,7 +970,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -892,7 +990,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -910,7 +1010,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -928,7 +1030,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -946,7 +1050,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -964,7 +1070,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -982,7 +1090,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1000,7 +1110,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1018,7 +1130,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1036,7 +1150,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1054,7 +1170,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1072,7 +1190,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1090,7 +1210,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1108,7 +1230,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1126,7 +1250,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1144,7 +1270,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1162,7 +1290,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1180,7 +1310,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -1198,7 +1330,9 @@
       },
       "dependencies": [],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [

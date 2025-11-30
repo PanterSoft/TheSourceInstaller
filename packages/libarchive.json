@@ -17,7 +17,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -46,7 +48,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -75,7 +79,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -104,7 +110,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -133,7 +141,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -162,7 +172,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -191,7 +203,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -220,7 +234,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -249,7 +265,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -278,7 +296,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -307,7 +327,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -336,7 +358,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -365,7 +389,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -394,7 +420,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -423,7 +451,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -452,7 +482,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -481,7 +513,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -510,7 +544,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -539,7 +575,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -568,7 +606,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -597,7 +637,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -626,7 +668,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -655,7 +699,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -684,7 +730,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -713,7 +761,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -742,7 +792,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -771,7 +823,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -800,7 +854,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -829,7 +885,9 @@
         "openssl"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [

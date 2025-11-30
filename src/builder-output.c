@@ -9,6 +9,43 @@
 #include <unistd.h>
 #include <errno.h>
 
+// Helper function to get minimal bootstrap PATH (only essential system directories)
+// This is ONLY used for building make and coreutils - the bootstrap packages
+static void get_bootstrap_path(char *bootstrap_path, size_t bootstrap_size) {
+    if (!bootstrap_path || bootstrap_size == 0) {
+        return;
+    }
+
+    bootstrap_path[0] = '\0';
+
+    // Only use minimal, essential system directories for bootstrap
+    // These are standard POSIX directories that should exist on any Unix-like system
+    const char *essential_dirs[] = {
+        "/usr/bin",
+        "/bin",
+        "/usr/local/bin"
+    };
+
+    size_t path_len = 0;
+    for (size_t i = 0; i < sizeof(essential_dirs) / sizeof(essential_dirs[0]); i++) {
+        struct stat st;
+        // Only add if directory exists and is valid
+        if (stat(essential_dirs[i], &st) == 0 && S_ISDIR(st.st_mode)) {
+            size_t dir_len = strlen(essential_dirs[i]);
+            if (path_len > 0 && path_len + dir_len + 2 < bootstrap_size) {
+                bootstrap_path[path_len++] = ':';
+                bootstrap_path[path_len] = '\0';
+            }
+            if (path_len + dir_len < bootstrap_size) {
+                strcat(bootstrap_path, essential_dirs[i]);
+                path_len += dir_len;
+            }
+        }
+    }
+
+    log_developer("Bootstrap PATH (essential directories only): %s", bootstrap_path);
+}
+
 // Helper function to execute command and capture output line by line
 static bool execute_with_output(const char *cmd, const char *step_name, const char *package_name, void (*output_callback)(const char *line, void *userdata), void *userdata) {
     log_developer("Executing %s command for package: %s", step_name ? step_name : "build", package_name);
@@ -32,7 +69,7 @@ static bool execute_with_output(const char *cmd, const char *step_name, const ch
     size_t error_output_len = 0;
     size_t line_count = 0;
     const size_t max_error_lines = 50;  // Limit error output to last 50 lines
-    
+
     while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
         // Process buffer character by character to handle partial lines
         for (size_t i = 0; buffer[i] != '\0'; i++) {
@@ -40,10 +77,10 @@ static bool execute_with_output(const char *cmd, const char *step_name, const ch
                 if (line_pos > 0) {
                     line[line_pos] = '\0';
                     line_count++;
-                    
+
                     // Log each line at DEBUG level
                     log_debug("%s output: %s", step_name ? step_name : "build", line);
-                    
+
                     // Keep last max_error_lines for error logging
                     if (line_count > max_error_lines) {
                         // Remove first line from error_output buffer
@@ -57,7 +94,7 @@ static bool execute_with_output(const char *cmd, const char *step_name, const ch
                             error_output_len = 0;
                         }
                     }
-                    
+
                     // Append to error output buffer
                     size_t line_len = strlen(line);
                     if (error_output_len + line_len + 2 < sizeof(error_output)) {
@@ -68,7 +105,7 @@ static bool execute_with_output(const char *cmd, const char *step_name, const ch
                         error_output_len += line_len;
                         error_output[error_output_len] = '\0';
                     }
-                    
+
                     // Only call callback for non-empty lines
                     if (line_pos > 0 && output_callback) {
                         output_callback(line, userdata);
@@ -205,11 +242,30 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     }
 
     char env[4096] = "";
-    // Only use TSI-installed packages and tools - no system packages
-    // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
-    // Restrict all paths to only TSI to ensure complete isolation from system packages
-    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    // Bootstrap handling: For make and coreutils (the bootstrap packages), we need minimal system tools
+    // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
+    // Once these are installed, all subsequent builds use only TSI packages (completely isolated)
+    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0) {
+        // Bootstrap: Use only essential system directories + TSI PATH
+        char bootstrap_path[512] = "";
+        get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));
+
+        if (bootstrap_path[0] != '\0') {
+            log_developer("Bootstrap mode: Building %s, using minimal essential system directories for bootstrap", pkg->name);
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, bootstrap_path, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else {
+            log_warning("No essential system directories found, using only TSI PATH for bootstrap");
+            snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Only use TSI-installed packages and tools
+        // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
+        // Restrict all paths to only TSI to ensure complete isolation from system packages
+        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    }
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     log_info("Using build system: %s for package: %s", build_system, pkg->name);
@@ -438,11 +494,30 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
     }
 
     char env[4096] = "";
-    // Only use TSI-installed packages and tools - no system packages
-    // PATH only includes TSI's bin directory (build tools must be installed via TSI first)
-    // Restrict all paths to only TSI to ensure complete isolation from system packages
-    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-             main_install_dir, main_install_dir, main_install_dir);
+    // Bootstrap handling: For make and coreutils install, we need minimal system tools
+    // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
+    // Once these are installed, all subsequent installs use only TSI's tools (completely isolated)
+    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0) {
+        // Bootstrap: Use only essential system directories + TSI PATH
+        char bootstrap_path[512] = "";
+        get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));
+
+        if (bootstrap_path[0] != '\0') {
+            log_developer("Bootstrap mode: Installing %s, using minimal essential system directories for bootstrap", pkg->name);
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, bootstrap_path, main_install_dir, main_install_dir);
+        } else {
+            log_warning("No essential system directories found, using only TSI PATH for bootstrap install");
+            snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Only use TSI-installed packages and tools
+        // PATH only includes TSI's bin directory (build tools must be installed via TSI first)
+        // Restrict all paths to only TSI to ensure complete isolation from system packages
+        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir);
+    }
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     log_debug("Using build system for install: %s", build_system);

@@ -7,7 +7,10 @@
     "url": "https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}

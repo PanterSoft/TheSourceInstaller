@@ -12,7 +12,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -28,7 +31,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -44,7 +50,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -60,7 +69,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -76,7 +88,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -92,7 +107,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -108,7 +126,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -124,7 +145,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -140,7 +164,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -156,7 +183,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -172,7 +202,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -188,7 +221,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -204,7 +240,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -220,7 +259,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -236,7 +278,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -252,7 +297,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -268,7 +316,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -284,7 +335,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -300,7 +354,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -316,7 +373,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -332,7 +392,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -348,7 +411,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -364,7 +430,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -380,7 +449,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -396,7 +468,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -412,7 +487,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -428,7 +506,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -444,7 +525,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -460,7 +544,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -476,7 +563,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -492,7 +582,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -508,7 +601,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -524,7 +620,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -540,7 +639,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -556,7 +658,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -572,7 +677,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -588,7 +696,10 @@
         "ncurses",
         "libevent"
       ],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}

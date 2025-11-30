@@ -7,9 +7,11 @@
     "url": "https://ftp.gnu.org/gnu/tar/tar-1.35.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
 }
-

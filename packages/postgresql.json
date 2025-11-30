@@ -6,8 +6,15 @@
     "type": "tarball",
     "url": "https://ftp.postgresql.org/pub/source/v16.2/postgresql-16.2.tar.gz"
   },
-  "dependencies": ["openssl", "zlib", "readline"],
-  "build_dependencies": [],
+  "dependencies": [
+    "openssl",
+    "zlib",
+    "readline"
+  ],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-openssl",
@@ -17,4 +24,3 @@
   ],
   "env": {}
 }
-

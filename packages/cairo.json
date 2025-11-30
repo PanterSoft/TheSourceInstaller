@@ -6,8 +6,16 @@
     "type": "tarball",
     "url": "https://cairographics.org/releases/cairo-1.18.0.tar.xz"
   },
-  "dependencies": ["libpng", "freetype", "pixman"],
-  "build_dependencies": ["pkg-config"],
+  "dependencies": [
+    "libpng",
+    "freetype",
+    "pixman"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--enable-png",
@@ -15,4 +23,3 @@
   ],
   "env": {}
 }
-

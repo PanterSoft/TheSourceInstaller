@@ -7,9 +7,11 @@
     "url": "https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz/download"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
 }
-

@@ -12,7 +12,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -32,7 +34,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -52,7 +56,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -72,7 +78,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -92,7 +100,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -112,7 +122,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -132,7 +144,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -152,7 +166,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -172,7 +188,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -192,7 +210,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -212,7 +232,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -232,7 +254,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -252,7 +276,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -272,7 +298,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -292,7 +320,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -312,7 +342,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -332,7 +364,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -352,7 +386,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -372,7 +408,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -392,7 +430,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [
@@ -412,7 +452,9 @@
         "snappy"
       ],
       "build_dependencies": [
-        "cmake"
+        "cmake",
+        "make",
+        "coreutils"
       ],
       "build_system": "cmake",
       "cmake_args": [

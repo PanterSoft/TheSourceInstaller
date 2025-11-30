@@ -6,12 +6,17 @@
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/emacs/emacs-29.3.tar.xz"
   },
-  "dependencies": ["ncurses", "libxml2"],
-  "build_dependencies": [],
+  "dependencies": [
+    "ncurses",
+    "libxml2"
+  ],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-xml2"
   ],
   "env": {}
 }
-

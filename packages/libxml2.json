@@ -6,8 +6,14 @@
     "type": "tarball",
     "url": "https://download.gnome.org/sources/libxml2/2.12/libxml2-2.12.7.tar.xz"
   },
-  "dependencies": ["zlib"],
-  "build_dependencies": ["pkg-config"],
+  "dependencies": [
+    "zlib"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-zlib",
@@ -15,4 +21,3 @@
   ],
   "env": {}
 }
-

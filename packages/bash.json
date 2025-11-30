@@ -6,10 +6,15 @@
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/bash/bash-5.2.21.tar.gz"
   },
-  "dependencies": ["readline", "ncurses"],
-  "build_dependencies": [],
+  "dependencies": [
+    "readline",
+    "ncurses"
+  ],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
 }
-

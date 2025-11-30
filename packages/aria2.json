@@ -14,7 +14,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -36,7 +38,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -58,7 +62,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -80,7 +86,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -102,7 +110,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -124,7 +134,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -146,7 +158,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -168,7 +182,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -190,7 +206,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -212,7 +230,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -234,7 +254,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -256,7 +278,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -278,7 +302,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -300,7 +326,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -322,7 +350,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -344,7 +374,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -366,7 +398,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -388,7 +422,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -410,7 +446,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -432,7 +470,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -454,7 +494,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -476,7 +518,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -498,7 +542,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [
@@ -520,7 +566,9 @@
         "libxml2"
       ],
       "build_dependencies": [
-        "pkg-config"
+        "pkg-config",
+        "make",
+        "coreutils"
       ],
       "build_system": "autotools",
       "configure_args": [

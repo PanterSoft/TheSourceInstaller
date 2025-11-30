@@ -9,7 +9,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -24,7 +27,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.5.1/libffi-3.5.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -39,7 +45,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.5.0/libffi-3.5.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -54,7 +63,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.8/libffi-3.4.8.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -69,7 +81,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.7/libffi-3.4.7.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -84,7 +99,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.5/libffi-3.4.5.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -99,7 +117,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -114,7 +135,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.3/libffi-3.4.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -129,7 +153,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.2/libffi-3.4.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -144,7 +171,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.0-rc2/libffi-3.4.0-rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -159,7 +189,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4-rc1/libffi-3.4-rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -174,7 +207,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.3/libffi-3.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -189,7 +225,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.3-rc2/libffi-3.3-rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -204,7 +243,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.3-rc1/libffi-3.3-rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -219,7 +261,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.3-rc0/libffi-3.3-rc0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -234,7 +279,10 @@
         "url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",

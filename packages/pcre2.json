@@ -9,7 +9,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -27,7 +30,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.46/pcre2-10.46.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -45,7 +51,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -63,7 +72,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -81,7 +93,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.42/pcre2-10.42.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -99,7 +114,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.41/pcre2-10.41.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -117,7 +135,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.40/pcre2-10.40.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -135,7 +156,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.39/pcre2-10.39.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -153,7 +177,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.38/pcre2-10.38.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -171,7 +198,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.37/pcre2-10.37.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -189,7 +219,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.36/pcre2-10.36.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -207,7 +240,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.35/pcre2-10.35.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -225,7 +261,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.34/pcre2-10.34.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -243,7 +282,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.33/pcre2-10.33.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -261,7 +303,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.32/pcre2-10.32.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -279,7 +324,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.31/pcre2-10.31.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -297,7 +345,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.30/pcre2-10.30.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -315,7 +366,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.23/pcre2-10.23.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -333,7 +387,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.22/pcre2-10.22.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -351,7 +408,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.21/pcre2-10.21.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -369,7 +429,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.20/pcre2-10.20.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -387,7 +450,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.10/pcre2-10.10.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -405,7 +471,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.00/pcre2-10.00.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",
@@ -423,7 +492,10 @@
         "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.43/pcre2-10.43.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--enable-static",

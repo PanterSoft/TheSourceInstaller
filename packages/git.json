@@ -8,8 +8,17 @@
         "type": "tarball",
         "url": "https://www.kernel.org/pub/software/scm/git/git-2.45.0.tar.gz"
       },
-      "dependencies": ["zlib", "openssl", "curl", "pcre2"],
-      "build_dependencies": ["pkg-config"],
+      "dependencies": [
+        "zlib",
+        "openssl",
+        "curl",
+        "pcre2"
+      ],
+      "build_dependencies": [
+        "pkg-config",
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--with-openssl",
@@ -27,8 +36,17 @@
         "type": "tarball",
         "url": "https://www.kernel.org/pub/software/scm/git/git-2.44.0.tar.gz"
       },
-      "dependencies": ["zlib", "openssl", "curl", "pcre2"],
-      "build_dependencies": ["pkg-config"],
+      "dependencies": [
+        "zlib",
+        "openssl",
+        "curl",
+        "pcre2"
+      ],
+      "build_dependencies": [
+        "pkg-config",
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [
         "--with-openssl",
