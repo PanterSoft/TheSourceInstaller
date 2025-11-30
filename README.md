@@ -62,6 +62,16 @@ tsi versions git
 tsi remove curl
 ```
 
+## TUI Styles
+
+TSI ships with a themed terminal UI so every command shares the same colors, icons, and progress indicators. The default `vibrant` style uses Unicode glyphs and bright colors, but you can switch styles globally or per command:
+
+- Set `TSI_TUI_STYLE=plain` to use ASCII-only output (also respects the standard `NO_COLOR` flag).
+- Force the vibrant style even on limited terminals with `TSI_FORCE_COLOR=1`.
+- Override per invocation with `tsi --style plain install curl`.
+
+Available styles today: `vibrant` (default) and `plain`. More palettes can be added by creating new named styles without touching every printf in the codebase.
+
 ## Requirements
 
 - **C compiler** (gcc, clang, or cc)

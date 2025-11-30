@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include "tui_style.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +20,7 @@ static inline bool is_tty(void) {
 
 // Check if terminal supports colors (works on bash, zsh, and most serial consoles)
 static inline bool supports_colors(void) {
+    if (!tui_style_colors_enabled()) return false;
     if (!is_tty()) return false;
 
     const char *term = getenv("TERM");
@@ -40,71 +43,65 @@ static inline bool supports_colors(void) {
 }
 
 // Vibrant Colors (ANSI escape codes) - Works on bash, zsh, and serial consoles
-#define COLOR_RESET        "\033[0m"
-#define COLOR_BOLD         "\033[1m"
-#define COLOR_DIM          "\033[2m"
-#define COLOR_ITALIC       "\033[3m"
-#define COLOR_UNDERLINE    "\033[4m"
+#define COLOR_RESET        tui_style_color(TUI_COLOR_RESET)
+#define COLOR_BOLD         tui_style_color(TUI_COLOR_BOLD)
+#define COLOR_DIM          tui_style_color(TUI_COLOR_DIM)
+#define COLOR_ITALIC       tui_style_color(TUI_COLOR_ITALIC)
+#define COLOR_UNDERLINE    tui_style_color(TUI_COLOR_UNDERLINE)
 
 // Standard colors
-#define COLOR_BLACK        "\033[30m"
-#define COLOR_RED          "\033[31m"
-#define COLOR_GREEN        "\033[32m"
-#define COLOR_YELLOW       "\033[33m"
-#define COLOR_BLUE         "\033[34m"
-#define COLOR_MAGENTA      "\033[35m"
-#define COLOR_CYAN         "\033[36m"
-#define COLOR_WHITE        "\033[37m"
+#define COLOR_BLACK        tui_style_color(TUI_COLOR_BLACK)
+#define COLOR_RED          tui_style_color(TUI_COLOR_RED)
+#define COLOR_GREEN        tui_style_color(TUI_COLOR_GREEN)
+#define COLOR_YELLOW       tui_style_color(TUI_COLOR_YELLOW)
+#define COLOR_BLUE         tui_style_color(TUI_COLOR_BLUE)
+#define COLOR_MAGENTA      tui_style_color(TUI_COLOR_MAGENTA)
+#define COLOR_CYAN         tui_style_color(TUI_COLOR_CYAN)
+#define COLOR_WHITE        tui_style_color(TUI_COLOR_WHITE)
 
-// Bright colors (works on most terminals including serial consoles)
-#define COLOR_BRIGHT_BLACK   "\033[90m"
-#define COLOR_BRIGHT_RED     "\033[91m"
-#define COLOR_BRIGHT_GREEN   "\033[92m"
-#define COLOR_BRIGHT_YELLOW  "\033[93m"
-#define COLOR_BRIGHT_BLUE    "\033[94m"
-#define COLOR_BRIGHT_MAGENTA "\033[95m"
-#define COLOR_BRIGHT_CYAN    "\033[96m"
-#define COLOR_BRIGHT_WHITE   "\033[97m"
+// Bright colors
+#define COLOR_BRIGHT_BLACK   tui_style_color(TUI_COLOR_BRIGHT_BLACK)
+#define COLOR_BRIGHT_RED     tui_style_color(TUI_COLOR_BRIGHT_RED)
+#define COLOR_BRIGHT_GREEN   tui_style_color(TUI_COLOR_BRIGHT_GREEN)
+#define COLOR_BRIGHT_YELLOW  tui_style_color(TUI_COLOR_BRIGHT_YELLOW)
+#define COLOR_BRIGHT_BLUE    tui_style_color(TUI_COLOR_BRIGHT_BLUE)
+#define COLOR_BRIGHT_MAGENTA tui_style_color(TUI_COLOR_BRIGHT_MAGENTA)
+#define COLOR_BRIGHT_CYAN    tui_style_color(TUI_COLOR_BRIGHT_CYAN)
+#define COLOR_BRIGHT_WHITE   tui_style_color(TUI_COLOR_BRIGHT_WHITE)
 
 // Background colors
-#define COLOR_BG_RED        "\033[41m"
-#define COLOR_BG_GREEN      "\033[42m"
-#define COLOR_BG_YELLOW     "\033[43m"
-#define COLOR_BG_BLUE       "\033[44m"
-#define COLOR_BG_MAGENTA    "\033[45m"
-#define COLOR_BG_CYAN       "\033[46m"
+#define COLOR_BG_RED        tui_style_color(TUI_COLOR_BG_RED)
+#define COLOR_BG_GREEN      tui_style_color(TUI_COLOR_BG_GREEN)
+#define COLOR_BG_YELLOW     tui_style_color(TUI_COLOR_BG_YELLOW)
+#define COLOR_BG_BLUE       tui_style_color(TUI_COLOR_BG_BLUE)
+#define COLOR_BG_MAGENTA    tui_style_color(TUI_COLOR_BG_MAGENTA)
+#define COLOR_BG_CYAN       tui_style_color(TUI_COLOR_BG_CYAN)
 
-// Color combinations for vibrant effects
-#define COLOR_SUCCESS       COLOR_BRIGHT_GREEN
-#define COLOR_ERROR          COLOR_BRIGHT_RED
-#define COLOR_WARNING        COLOR_BRIGHT_YELLOW
-#define COLOR_INFO           COLOR_BRIGHT_CYAN
-#define COLOR_HIGHLIGHT      COLOR_BRIGHT_MAGENTA
-#define COLOR_ACCENT         COLOR_BRIGHT_BLUE
+// Style roles
+#define COLOR_SUCCESS       tui_style_color(TUI_COLOR_SUCCESS)
+#define COLOR_ERROR         tui_style_color(TUI_COLOR_ERROR)
+#define COLOR_WARNING       tui_style_color(TUI_COLOR_WARNING)
+#define COLOR_INFO          tui_style_color(TUI_COLOR_INFO)
+#define COLOR_HIGHLIGHT     tui_style_color(TUI_COLOR_HIGHLIGHT)
+#define COLOR_ACCENT        tui_style_color(TUI_COLOR_ACCENT)
 
-// Enhanced Icons - colorful and full of life
-#define ICON_SUCCESS        "✓"
-#define ICON_ERROR          "✗"
-#define ICON_WARNING        "⚠"
-#define ICON_INFO           "ℹ"
-#define ICON_IN_PROGRESS    "⟳"
-#define ICON_ARROW          "→"
-#define ICON_STAR           "★"
-#define ICON_SPARKLE        "✨"
-#define ICON_ROCKET         "🚀"
-#define ICON_PACKAGE        "📦"
-#define ICON_GEAR           "⚙"
-#define ICON_FLAME          "🔥"
-#define ICON_CHECK          "✔"
-#define ICON_DOWNLOAD       "⬇"
-#define ICON_BUILD          "🔨"
-#define ICON_INSTALL        "📥"
-
-// Spinner frames for animated progress
-static const char *SPINNER_FRAMES[] = {
-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
-};
-#define SPINNER_FRAMES_COUNT 10
+// Icons
+#define ICON_SUCCESS        tui_style_icon(TUI_ICON_SUCCESS)
+#define ICON_ERROR          tui_style_icon(TUI_ICON_ERROR)
+#define ICON_WARNING        tui_style_icon(TUI_ICON_WARNING)
+#define ICON_INFO           tui_style_icon(TUI_ICON_INFO)
+#define ICON_IN_PROGRESS    tui_style_icon(TUI_ICON_PROGRESS)
+#define ICON_ARROW          tui_style_icon(TUI_ICON_ARROW)
+#define ICON_STAR           tui_style_icon(TUI_ICON_STAR)
+#define ICON_SPARKLE        tui_style_icon(TUI_ICON_SPARKLE)
+#define ICON_ROCKET         tui_style_icon(TUI_ICON_ROCKET)
+#define ICON_PACKAGE        tui_style_icon(TUI_ICON_PACKAGE)
+#define ICON_GEAR           tui_style_icon(TUI_ICON_GEAR)
+#define ICON_FLAME          tui_style_icon(TUI_ICON_FLAME)
+#define ICON_CHECK          tui_style_icon(TUI_ICON_CHECK)
+#define ICON_DOWNLOAD       tui_style_icon(TUI_ICON_DOWNLOAD)
+#define ICON_BUILD          tui_style_icon(TUI_ICON_BUILD)
+#define ICON_INSTALL        tui_style_icon(TUI_ICON_INSTALL)
 
 // Vibrant section header with colorful styling
 static inline void print_section(const char *title) {
@@ -491,7 +488,11 @@ static inline void spinner_update(Spinner *spinner) {
         return; // Don't show spinner on non-TTY
     }
 
-    const char *frame = SPINNER_FRAMES[spinner->frame % SPINNER_FRAMES_COUNT];
+    size_t frame_count = tui_style_spinner_frame_count();
+    if (frame_count == 0) {
+        return;
+    }
+    const char *frame = tui_style_spinner_frame((size_t)spinner->frame);
     printf("\r%s%s%s %s%s%s",
            COLOR_ACCENT, frame, COLOR_RESET,
            COLOR_INFO, spinner->message, COLOR_RESET);

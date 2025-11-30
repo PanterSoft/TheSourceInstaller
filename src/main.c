@@ -372,9 +372,13 @@ install_package:
             // If version specified, check if that specific version is installed
             if (package_version && installed_pkg->version && strcmp(installed_pkg->version, package_version) == 0) {
                 if (package_version) {
-                    printf("Warning: %s@%s is already installed\n", package_name, package_version);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "%s@%s is already installed", package_name, package_version);
+                    print_warning(warn_msg);
                 } else {
-                    printf("Warning: %s is already installed\n", package_name);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
+                    print_warning(warn_msg);
                 }
                 if (installed_pkg->install_path) {
                     printf("  Install path: %s\n", installed_pkg->install_path);
@@ -398,7 +402,9 @@ install_package:
                 return 0;
             } else if (!package_version) {
                 // No version specified, but package is installed
-                printf("Warning: %s is already installed\n", package_name);
+                char warn_msg[256];
+                snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
+                print_warning(warn_msg);
                 if (installed_pkg->version) {
                     printf("  Version: %s\n", installed_pkg->version);
                 }
@@ -562,7 +568,9 @@ install_package:
             for (size_t i = 0; i < deps_count; i++) {
                 Package *pkg = repository_get_package(repo, deps[i]);
                 if (!pkg) {
-                    fprintf(stderr, "  Warning: Package '%s' not found in repository\n", deps[i]);
+                    char warn_msg[256];
+                    snprintf(warn_msg, sizeof(warn_msg), "Package '%s' not found in repository", deps[i]);
+                    print_warning(warn_msg);
                 }
             }
         }
@@ -672,7 +680,9 @@ install_package:
         if (dep_name) free(dep_name);
         if (dep_version) free(dep_version);
         if (!dep_pkg) {
-            printf("Warning: Dependency package not found: %s\n", build_order[i]);
+            char warn_msg[256];
+            snprintf(warn_msg, sizeof(warn_msg), "Dependency package not found: %s", build_order[i]);
+            print_warning(warn_msg);
             continue;
         }
 
@@ -1543,7 +1553,7 @@ static int cmd_update(int argc, char **argv) {
     snprintf(fetch_cmd, sizeof(fetch_cmd), "cd '%s' && git fetch origin main 2>&1", tsi_source_dir);
     FILE *fetch_pipe = popen(fetch_cmd, "r");
     if (!fetch_pipe) {
-        printf("Warning: Could not check for TSI updates (git fetch failed)\n");
+        print_warning("Could not check for TSI updates (git fetch failed)");
         return 0;
     }
 
@@ -1771,6 +1781,42 @@ static int cmd_uninstall(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    tui_style_reload_from_env();
+
+    int write_idx = 1;
+    for (int read_idx = 1; read_idx < argc; read_idx++) {
+        char *arg = argv[read_idx];
+        if (strcmp(arg, "--style") == 0) {
+            if (read_idx + 1 >= argc) {
+                print_error("Missing style name after --style");
+                return 1;
+            }
+            const char *style_name = argv[++read_idx];
+            if (!tui_style_apply(style_name)) {
+                char warn_msg[128];
+                snprintf(warn_msg, sizeof(warn_msg),
+                         "Unknown style '%s'. Using %s",
+                         style_name, tui_style_active_name());
+                print_warning(warn_msg);
+            }
+            continue;
+        }
+        if (strncmp(arg, "--style=", 8) == 0) {
+            const char *style_name = arg + 8;
+            if (!tui_style_apply(style_name)) {
+                char warn_msg[128];
+                snprintf(warn_msg, sizeof(warn_msg),
+                         "Unknown style '%s'. Using %s",
+                         style_name, tui_style_active_name());
+                print_warning(warn_msg);
+            }
+            continue;
+        }
+        argv[write_idx++] = argv[read_idx];
+    }
+    argc = write_idx;
+    argv[argc] = NULL;
+
     if (argc < 2) {
         print_usage(argv[0]);
         return 1;
@@ -1813,7 +1859,9 @@ int main(int argc, char **argv) {
             database_free(db);
             return 0;
         } else {
-            printf("Warning: Package %s is not installed\n", argv[2]);
+            char warn_msg[256];
+            snprintf(warn_msg, sizeof(warn_msg), "Package %s is not installed", argv[2]);
+            print_warning(warn_msg);
             database_free(db);
             return 1;
         }

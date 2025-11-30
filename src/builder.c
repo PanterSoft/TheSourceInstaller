@@ -1,5 +1,6 @@
 #include "builder.h"
 #include "package.h"
+#include "tui.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -54,7 +55,9 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
         char cmd[1024];
         snprintf(cmd, sizeof(cmd), "cd '%s' && patch -p1 -i '%s' 2>/dev/null", source_dir, patches[i]);
         if (system(cmd) != 0) {
-            printf("Warning: Failed to apply patch: %s\n", patches[i]);
+            char warn_msg[512];
+            snprintf(warn_msg, sizeof(warn_msg), "Failed to apply patch: %s", patches[i]);
+            print_warning(warn_msg);
         }
     }
     return true;
