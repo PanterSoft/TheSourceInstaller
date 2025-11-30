@@ -14,6 +14,8 @@
 #include "fetcher.h"
 #include "builder.h"
 #include "tui.h"
+#include "tui_interactive.h"
+#include "log.h"
 
 // Output callback for build/install progress
 static void output_callback(const char *line, void *userdata) {
@@ -51,8 +53,11 @@ static void print_usage(const char *prog_name) {
     printf("  versions <package>                           List all available versions\n");
     printf("  update [--repo URL] [--local PATH]           Update package repository and TSI\n");
     printf("  uninstall [--prefix PATH]                    Uninstall TSI and all data\n");
+    printf("  --tui, -t                                    Launch interactive TUI\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
+    printf("\n");
+    printf("If no command is provided and running in a terminal, the TUI will launch automatically.\n");
 }
 
 static bool run_command_with_window(const char *overview, const char *detail, const char *cmd) {
@@ -910,6 +915,7 @@ install_package:
                         snprintf(done_msg, sizeof(done_msg), "%s Installed %s", ICON_SUCCESS, main_pkg->name);
                     }
                     print_status_done(done_msg);
+                    log_info("Successfully installed package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
 
                     // Show summary
                     print_summary(builder_config->install_dir, 0, NULL);
@@ -923,8 +929,10 @@ install_package:
                     print_error("Failed to install package");
                     if (package_version) {
                         fprintf(stderr, "  %s@%s\n", package_name, package_version);
+                        log_error("Failed to install package: %s@%s", package_name, package_version);
                     } else {
                         fprintf(stderr, "  %s\n", package_name);
+                        log_error("Failed to install package: %s", package_name);
                     }
                     has_failures = true;
                 }
@@ -932,8 +940,10 @@ install_package:
                 print_error("Failed to build package");
                 if (package_version) {
                     fprintf(stderr, "  %s@%s\n", package_name, package_version);
+                    log_error("Failed to build package: %s@%s", package_name, package_version);
                 } else {
                     fprintf(stderr, "  %s\n", package_name);
+                    log_error("Failed to build package: %s", package_name);
                 }
                 has_failures = true;
             }
@@ -942,8 +952,10 @@ install_package:
             print_error("Failed to fetch source");
             if (package_version) {
                 fprintf(stderr, "  %s@%s\n", package_name, package_version);
+                log_error("Failed to fetch source for package: %s@%s", package_name, package_version);
             } else {
                 fprintf(stderr, "  %s\n", package_name);
+                log_error("Failed to fetch source for package: %s", package_name);
             }
             has_failures = true;
         }
@@ -992,6 +1004,9 @@ install_package:
         free(build_order[i]);
     }
     free(build_order);
+
+    // Cleanup logging
+    log_cleanup();
 
     if (installed) {
         for (size_t i = 0; i < installed_count; i++) {
@@ -1887,9 +1902,21 @@ static int cmd_uninstall(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    // Initialize logging from environment (must be first)
+    int log_result = log_init_from_env();
+    if (log_result != 0) {
+        // Log initialization failed, but continue anyway
+        fprintf(stderr, "Warning: Failed to initialize logging\n");
+    }
+    
+    // Log program start
+    log_developer("TSI starting (argc=%d)", argc);
+    log_debug("Logging system initialized (level=%s)", log_level_name(log_get_level()));
+    
     tui_style_reload_from_env();
 
     int write_idx = 1;
+    bool use_tui = false;
     for (int read_idx = 1; read_idx < argc; read_idx++) {
         char *arg = argv[read_idx];
         if (strcmp(arg, "--style") == 0) {
@@ -1918,27 +1945,46 @@ int main(int argc, char **argv) {
             }
             continue;
         }
+        if (strcmp(arg, "--tui") == 0 || strcmp(arg, "-t") == 0) {
+            use_tui = true;
+            continue;
+        }
         argv[write_idx++] = argv[read_idx];
     }
     argc = write_idx;
     argv[argc] = NULL;
 
+    // Launch TUI if requested or no arguments
+    if (use_tui || (argc < 2 && is_tty())) {
+        return tui_main_menu();
+    }
+
     if (argc < 2) {
+        log_debug("No command provided, showing usage");
         print_usage(argv[0]);
+        log_cleanup();
         return 1;
     }
 
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+        log_debug("Help requested");
         print_usage(argv[0]);
+        log_cleanup();
         return 0;
     }
 
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
+        log_debug("Version requested");
         printf("TSI 0.2.0 (C implementation)\n");
+        log_cleanup();
         return 0;
     }
+    
+    log_developer("Command: %s", argv[1]);
 
     if (strcmp(argv[1], "install") == 0) {
+        log_info("Install command invoked");
+        log_developer("Install arguments: argc=%d", argc - 1);
         return cmd_install(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "uninstall") == 0) {
         // TSI uninstall (check before package remove)
