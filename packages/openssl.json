@@ -7,7 +7,7 @@
     "url": "https://www.openssl.org/source/openssl-3.2.1.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": ["coreutils"],
   "build_system": "custom",
   "build_commands": [
     "./config --prefix=$TSI_INSTALL_DIR --openssldir=$TSI_INSTALL_DIR/ssl shared zlib",

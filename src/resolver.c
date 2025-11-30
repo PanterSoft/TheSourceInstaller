@@ -74,12 +74,58 @@ DependencyResolver* resolver_new(Repository *repo) {
         return NULL;
     }
     resolver->repository = repo;
+    resolver->visited = NULL;
+    resolver->visited_count = 0;
+    resolver->visited_capacity = 0;
     log_debug("DependencyResolver initialized");
     return resolver;
 }
 
 void resolver_free(DependencyResolver *resolver) {
+    if (resolver && resolver->visited) {
+        for (size_t i = 0; i < resolver->visited_count; i++) {
+            if (resolver->visited[i]) free(resolver->visited[i]);
+        }
+        free(resolver->visited);
+    }
     free(resolver);
+}
+
+// Helper to check if a package name (possibly with @version) matches an installed package
+static bool is_package_installed(const char *package_spec, char **installed, size_t installed_count) {
+    if (!package_spec || !installed) return false;
+
+    // Extract package name from package_spec (may be "package@version")
+    char *spec_name = NULL;
+    char *spec_version = NULL;
+    parse_package_version(package_spec, &spec_name, &spec_version);
+    const char *search_name = spec_name ? spec_name : package_spec;
+
+    for (size_t i = 0; i < installed_count; i++) {
+        if (!installed[i]) continue;
+
+        // Extract name from installed[i] (may be "package@version")
+        char *inst_name = NULL;
+        char *inst_version = NULL;
+        parse_package_version(installed[i], &inst_name, &inst_version);
+        const char *cmp_name = inst_name ? inst_name : installed[i];
+
+        // Match by name (version is optional)
+        bool name_matches = (strcmp(cmp_name, search_name) == 0);
+
+        if (inst_name) free(inst_name);
+        if (inst_version) free(inst_version);
+
+        if (name_matches) {
+            if (spec_name) free(spec_name);
+            if (spec_version) free(spec_version);
+            return true;
+        }
+    }
+
+    if (spec_name) free(spec_name);
+    if (spec_version) free(spec_version);
+    return false;
 }
 
 char** resolver_resolve(DependencyResolver *resolver, const char *package_name, char **installed, size_t installed_count, size_t *result_count) {
@@ -88,13 +134,43 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     char **result = NULL;
     size_t capacity = 0;
 
-    // Simple recursive resolution (no cycle detection for now)
-    // Check if already installed
-    for (size_t i = 0; i < installed_count; i++) {
-        if (installed[i] && strcmp(installed[i], package_name) == 0) {
-            log_debug("Package already installed, skipping resolution: %s", package_name);
-            return NULL; // Already installed
+    if (!resolver) {
+        log_error("resolver_resolve called with NULL resolver");
+        return NULL;
+    }
+
+    // Initialize visited list if needed
+    if (resolver->visited == NULL) {
+        resolver->visited_capacity = 16;
+        resolver->visited = malloc(sizeof(char*) * resolver->visited_capacity);
+        resolver->visited_count = 0;
+    }
+
+    // Check for circular dependency
+    for (size_t i = 0; i < resolver->visited_count; i++) {
+        if (resolver->visited[i] && strcmp(resolver->visited[i], package_name) == 0) {
+            log_error("Circular dependency detected: %s", package_name);
+            *result_count = 0;
+            return NULL;
         }
+    }
+
+    // Add to visited list
+    if (resolver->visited_count >= resolver->visited_capacity) {
+        resolver->visited_capacity *= 2;
+        resolver->visited = realloc(resolver->visited, sizeof(char*) * resolver->visited_capacity);
+    }
+    resolver->visited[resolver->visited_count++] = strdup(package_name);
+
+    // Check if already installed
+    if (is_package_installed(package_name, installed, installed_count)) {
+        log_debug("Package already installed, skipping resolution: %s", package_name);
+        // Remove from visited before returning
+        if (resolver->visited_count > 0) {
+            free(resolver->visited[--resolver->visited_count]);
+            resolver->visited[resolver->visited_count] = NULL;
+        }
+        return NULL; // Already installed
     }
 
     // Get package
@@ -374,6 +450,27 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     }
     (*result_count)++;
 
+    // Remove from visited list before returning
+    for (size_t i = 0; i < resolver->visited_count; i++) {
+        if (resolver->visited[i] && strcmp(resolver->visited[i], package_name) == 0) {
+            free(resolver->visited[i]);
+            // Shift remaining entries
+            for (size_t j = i; j < resolver->visited_count - 1; j++) {
+                resolver->visited[j] = resolver->visited[j + 1];
+            }
+            resolver->visited_count--;
+            resolver->visited[resolver->visited_count] = NULL;
+            break;
+        }
+    }
+
+    // Reset visited list if we're back at the top level (visited_count == 0)
+    if (resolver->visited_count == 0 && resolver->visited) {
+        free(resolver->visited);
+        resolver->visited = NULL;
+        resolver->visited_capacity = 0;
+    }
+
     log_debug("Dependency resolution completed for %s: %zu total packages", package_name, *result_count);
     return result;
 }
@@ -395,7 +492,7 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
         return result;
     }
 
-    char **result = malloc(sizeof(char*) * packages_count);
+    char **result = calloc(packages_count, sizeof(char*));  // Initialize to NULL
     if (!result) return NULL;
 
     bool *added = calloc(packages_count, sizeof(bool));
@@ -445,32 +542,65 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
     }
 
     // Topological sort
+    log_developer("Starting topological sort: packages_count=%zu", packages_count);
+    for (size_t i = 0; i < packages_count; i++) {
+        log_developer("  Initial in_degree[%zu] for '%s': %d", i, packages[i], in_degree[i]);
+    }
     while (*result_count < packages_count) {
+        log_developer("Topological sort iteration: *result_count=%zu, packages_count=%zu", *result_count, packages_count);
         bool found = false;
         for (size_t i = 0; i < packages_count; i++) {
             if (!added[i] && in_degree[i] == 0) {
-                result[*result_count++] = strdup(packages[i]);
+                log_developer("Adding package %zu: '%s' (in_degree=0)", *result_count, packages[i]);
+                char *dup_str = strdup(packages[i]);
+                if (!dup_str) {
+                    log_error("strdup failed for '%s'", packages[i]);
+                    continue;
+                }
+                result[*result_count] = dup_str;
+                log_developer("  Assigned result[%zu] = '%s' (pointer: %p)", *result_count, result[*result_count], (void*)result[*result_count]);
+                (*result_count)++;
+                log_developer("  Incremented *result_count to %zu", *result_count);
                 added[i] = true;
                 found = true;
 
                 // Decrease in-degree of dependents
-                Package *pkg = repository_get_package(resolver->repository, packages[i]);
+                // Parse package name from packages[i] (may be "package@version")
+                char *added_pkg_name = NULL;
+                char *added_pkg_version = NULL;
+                parse_package_version(packages[i], &added_pkg_name, &added_pkg_version);
+                const char *added_name = added_pkg_name ? added_pkg_name : packages[i];
+                
+                Package *pkg = repository_get_package(resolver->repository, added_name);
                 if (pkg) {
                     for (size_t j = 0; j < packages_count; j++) {
                         if (!added[j]) {
-                            Package *other = repository_get_package(resolver->repository, packages[j]);
+                            // Parse package name from packages[j] (may be "package@version")
+                            char *other_pkg_name = NULL;
+                            char *other_pkg_version = NULL;
+                            parse_package_version(packages[j], &other_pkg_name, &other_pkg_version);
+                            const char *other_name = other_pkg_name ? other_pkg_name : packages[j];
+                            
+                            Package *other = repository_get_package(resolver->repository, other_name);
                             if (other) {
-                                if (package_has_dependency(other, packages[i])) {
+                                if (package_has_dependency(other, added_name)) {
+                                    log_developer("  Package '%s' depends on '%s', decreasing in_degree[%zu] from %d to %d", 
+                                                  other_name, added_name, j, in_degree[j], in_degree[j] - 1);
                                     in_degree[j]--;
                                 }
                             }
+                            if (other_pkg_name) free(other_pkg_name);
+                            if (other_pkg_version) free(other_pkg_version);
                         }
                     }
                 }
-                break;
+                if (added_pkg_name) free(added_pkg_name);
+                if (added_pkg_version) free(added_pkg_version);
+                break;  // Break inner for loop, continue while loop
             }
         }
         if (!found) {
+            log_warning("No package found with in_degree=0, but *result_count=%zu < packages_count=%zu", *result_count, packages_count);
             // Circular dependency or error - check if we added all packages
             if (*result_count < packages_count) {
                 // Failed to add all packages - free result and return NULL
@@ -501,8 +631,10 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
     }
 
     log_debug("Build order calculated successfully: %zu packages", *result_count);
+    log_developer("About to return from resolver_get_build_order: result=%p, *result_count=%zu", (void*)result, *result_count);
     free(added);
     free(in_degree);
+    log_developer("After freeing memory: result=%p, *result_count=%zu", (void*)result, *result_count);
     return result;
 }
 

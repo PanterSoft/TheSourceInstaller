@@ -7,7 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/wget/wget-1.21.4.tar.gz"
   },
   "dependencies": ["openssl", "zlib", "pcre2"],
-  "build_dependencies": ["pkg-config"],
+  "build_dependencies": ["pkg-config", "coreutils"],
   "build_system": "autotools",
   "configure_args": [
     "--with-ssl=openssl",

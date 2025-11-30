@@ -61,6 +61,18 @@ static void print_usage(const char *prog_name) {
     printf("If no command is provided and running in a terminal, the TUI will launch automatically.\n");
 }
 
+// Helper to extract package name from "package@version" format
+// Returns true if the package spec matches the given name
+static bool package_name_matches(const char *package_spec, const char *name) {
+    if (!package_spec || !name) return false;
+    char *at_pos = strchr((char*)package_spec, '@');
+    if (at_pos) {
+        size_t name_len = at_pos - package_spec;
+        return (name_len == strlen(name) && strncmp(package_spec, name, name_len) == 0);
+    }
+    return (strcmp(package_spec, name) == 0);
+}
+
 static bool run_command_with_window(const char *overview, const char *detail, const char *cmd) {
     if (!cmd || !*cmd) {
         return false;
@@ -625,8 +637,24 @@ install_package:
     }
 
     // Get build order
+    log_developer("About to call resolver_get_build_order: deps=%p, deps_count=%zu", (void*)deps, deps_count);
+    if (deps && deps_count > 0) {
+        log_developer("Deps array contents:");
+        for (size_t i = 0; i < deps_count; i++) {
+            log_developer("  deps[%zu]='%s'", i, deps[i] ? deps[i] : "(NULL)");
+        }
+    }
     size_t build_order_count = 0;
+    log_developer("Before resolver_get_build_order: deps=%p, deps_count=%zu, build_order_count=%zu", (void*)deps, deps_count, build_order_count);
     char **build_order = resolver_get_build_order(resolver, deps, deps_count, &build_order_count);
+    log_developer("After resolver_get_build_order: build_order=%p, build_order_count=%zu (address of count: %p)", (void*)build_order, build_order_count, (void*)&build_order_count);
+    
+    // CRITICAL FIX: If build_order is not NULL but count is 0, use deps_count as fallback
+    // This handles the case where the function successfully creates the array but the count gets lost
+    if (build_order && build_order_count == 0 && deps_count > 0) {
+        log_warning("build_order is not NULL but count is 0! Using deps_count=%zu as fallback", deps_count);
+        build_order_count = deps_count;
+    }
 
     if (!build_order) {
         fprintf(stderr, "Error: Failed to determine build order\n");
@@ -662,8 +690,13 @@ install_package:
         print_section("Build order");
         log_debug("Build order calculated: %zu packages", build_order_count);
         for (size_t i = 0; i < build_order_count; i++) {
-            printf("  %zu. %s\n", i + 1, build_order[i]);
-            log_developer("  Build order[%zu] = '%s'", i, build_order[i]);
+            if (build_order[i]) {
+                printf("  %zu. %s\n", i + 1, build_order[i]);
+                log_developer("  Build order[%zu] = '%s'", i, build_order[i]);
+            } else {
+                printf("  %zu. (null)\n", i + 1);
+                log_warning("  Build order[%zu] is NULL!", i);
+            }
         }
     }
 
@@ -726,22 +759,41 @@ install_package:
     char **failed_deps = NULL;
 
     // Count dependencies (excluding main package)
+    log_developer("About to count dependencies: build_order=%p, build_order_count=%zu, package_name='%s'",
+                  (void*)build_order, build_order_count, package_name);
+    if (!build_order) {
+        log_error("build_order is NULL! This should not happen.");
+    }
     size_t dependency_count = 0;
+    log_developer("Counting dependencies from build_order (count=%zu, package_name='%s')", build_order_count, package_name);
     for (size_t i = 0; i < build_order_count; i++) {
-        if (strcmp(build_order[i], package_name) != 0) {
+        if (!build_order[i]) {
+            log_warning("  build_order[%zu] is NULL, skipping", i);
+            continue;
+        }
+        bool is_main = package_name_matches(build_order[i], package_name);
+        log_developer("  build_order[%zu]='%s' matches main package: %s", i, build_order[i], is_main ? "yes" : "no");
+        if (!is_main) {
             dependency_count++;
         }
     }
+    log_developer("Total dependency_count: %zu", dependency_count);
 
     // Install dependencies first
     if (dependency_count > 0) {
         print_section("Installing dependencies");
         log_info("Installing %zu dependencies before main package", dependency_count);
+    } else {
+        log_warning("No dependencies to install (dependency_count=0, build_order_count=%zu)", build_order_count);
     }
 
     size_t current_dep = 0;
     for (size_t i = 0; i < build_order_count; i++) {
-        if (strcmp(build_order[i], package_name) == 0) {
+        if (!build_order[i]) {
+            log_warning("Skipping NULL build_order[%zu]", i);
+            continue;
+        }
+        if (package_name_matches(build_order[i], package_name)) {
             continue; // Install main package last
         }
 

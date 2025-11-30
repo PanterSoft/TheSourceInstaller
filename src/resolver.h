@@ -17,6 +17,9 @@ typedef struct {
 // Dependency resolver
 typedef struct {
     Repository *repository;
+    char **visited;  // For cycle detection during resolution
+    size_t visited_count;
+    size_t visited_capacity;
 } DependencyResolver;
 
 // Resolver functions
