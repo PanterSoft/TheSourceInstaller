@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <errno.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
@@ -1881,13 +1882,77 @@ static int cmd_uninstall(int argc, char **argv) {
     // Remove all TSI data (everything)
     printf("Removing all TSI data...\n");
 
-    // Remove all TSI directories
+    // First, explicitly remove the binary (can't delete itself while running on some systems)
+    char bin_path[2048];
+    int bin_len = snprintf(bin_path, sizeof(bin_path), "%s/bin/tsi", tsi_prefix);
+    bool binary_removed = false;
+    if (bin_len >= 0 && (size_t)bin_len < sizeof(bin_path)) {
+        // Try to remove the binary first using unlink (works on most Unix systems)
+        if (unlink(bin_path) == 0) {
+            printf("✓ Removed TSI binary: %s\n", bin_path);
+            binary_removed = true;
+        } else if (errno == ENOENT) {
+            // File doesn't exist, that's okay
+            binary_removed = true;
+        } else {
+            // File exists but unlink failed, try with system command
+            char rm_cmd[2048];
+            int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -f '%s' 2>/dev/null", bin_path);
+            if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
+                if (system(rm_cmd) == 0) {
+                    printf("✓ Removed TSI binary: %s\n", bin_path);
+                    binary_removed = true;
+                }
+            }
+        }
+    }
+    
+    if (!binary_removed) {
+        // Binary removal failed, but continue with other cleanup
+        fprintf(stderr, "Warning: Could not remove binary at: %s\n", bin_path);
+        fprintf(stderr, "You may need to remove it manually after uninstall completes.\n");
+    }
+
+    // Remove completion scripts directory
+    char completions_path[2048];
+    int comp_len = snprintf(completions_path, sizeof(completions_path), "%s/share", tsi_prefix);
+    if (comp_len >= 0 && (size_t)comp_len < sizeof(completions_path)) {
+        char rm_cmd[2048];
+        int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf '%s'", completions_path);
+        if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
+            system(rm_cmd);
+        }
+    }
+
+    // Remove bin directory if empty or contains only the binary
+    char bin_dir[2048];
+    int bin_dir_len = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", tsi_prefix);
+    if (bin_dir_len >= 0 && (size_t)bin_dir_len < sizeof(bin_dir)) {
+        char rm_cmd[2048];
+        int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf '%s'", bin_dir);
+        if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
+            system(rm_cmd);
+        }
+    }
+
+    // Remove all remaining TSI directories and data
     char cmd[2048];
     int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
-    if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd) && system(cmd) == 0) {
-        printf("✓ Removed all TSI data: %s\n", tsi_prefix);
+    if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
+        if (system(cmd) == 0) {
+            printf("✓ Removed all TSI data: %s\n", tsi_prefix);
+        } else {
+            // Check if directory still exists
+            struct stat st;
+            if (stat(tsi_prefix, &st) == 0) {
+                fprintf(stderr, "Warning: Some TSI data may still exist at: %s\n", tsi_prefix);
+                fprintf(stderr, "You may need to remove it manually: rm -rf '%s'\n", tsi_prefix);
+            } else {
+                printf("✓ Removed all TSI data: %s\n", tsi_prefix);
+            }
+        }
     } else {
-        fprintf(stderr, "Error: Failed to remove TSI data\n");
+        fprintf(stderr, "Error: Path too long\n");
         return 1;
     }
 

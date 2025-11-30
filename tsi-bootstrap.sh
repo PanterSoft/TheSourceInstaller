@@ -335,6 +335,30 @@ main() {
         log_warn "  Completion scripts not found (optional)"
     fi
 
+    # Initialize package repository (only for fresh installs, not repair mode)
+    if [ "$REPAIR_MODE" != true ]; then
+        log_info ""
+        log_info "Initializing package repository..."
+        # Run update non-interactively (skip TSI self-update prompt by answering 'n')
+        # Temporarily disable set -e to capture exit code properly
+        set +e
+        UPDATE_OUTPUT=$(echo "n" | "$PREFIX/bin/tsi" update 2>&1)
+        UPDATE_EXIT=$?
+        set -e
+
+        if [ $UPDATE_EXIT -eq 0 ] && echo "$UPDATE_OUTPUT" | grep -q "Repository updated successfully"; then
+            log_info "✓ Package repository initialized"
+        else
+            # Check if repository directory was created (might have succeeded but output was different)
+            if [ -d "$PREFIX/repos" ] && [ -n "$(ls -A "$PREFIX/repos" 2>/dev/null)" ]; then
+                log_info "✓ Package repository initialized"
+            else
+                log_warn "Could not initialize package repository automatically"
+                log_warn "You can run 'tsi update' manually to download packages"
+            fi
+        fi
+    fi
+
     log_info ""
     log_info "========================================="
     log_info "TSI installed successfully!"
@@ -356,7 +380,11 @@ main() {
         log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
     fi
     log_info ""
-    log_info "Then run: tsi --help"
+    if [ "$REPAIR_MODE" != true ]; then
+        log_info "Package repository is ready! Try: tsi list"
+    else
+        log_info "Then run: tsi --help"
+    fi
     log_info ""
 }
 
