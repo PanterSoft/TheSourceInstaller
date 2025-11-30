@@ -1,4 +1,5 @@
 #include "resolver.h"
+#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -66,9 +67,14 @@ static int find_package_index(char **packages, size_t count, const char *name) {
 }
 
 DependencyResolver* resolver_new(Repository *repo) {
+    log_developer("resolver_new called");
     DependencyResolver *resolver = malloc(sizeof(DependencyResolver));
-    if (!resolver) return NULL;
+    if (!resolver) {
+        log_error("Failed to allocate memory for DependencyResolver");
+        return NULL;
+    }
     resolver->repository = repo;
+    log_debug("DependencyResolver initialized");
     return resolver;
 }
 
@@ -77,6 +83,7 @@ void resolver_free(DependencyResolver *resolver) {
 }
 
 char** resolver_resolve(DependencyResolver *resolver, const char *package_name, char **installed, size_t installed_count, size_t *result_count) {
+    log_developer("resolver_resolve called for package: %s (installed_count=%zu)", package_name, installed_count);
     *result_count = 0;
     char **result = NULL;
     size_t capacity = 0;
@@ -85,6 +92,7 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     // Check if already installed
     for (size_t i = 0; i < installed_count; i++) {
         if (installed[i] && strcmp(installed[i], package_name) == 0) {
+            log_debug("Package already installed, skipping resolution: %s", package_name);
             return NULL; // Already installed
         }
     }
@@ -92,8 +100,10 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     // Get package
     Package *pkg = repository_get_package(resolver->repository, package_name);
     if (!pkg) {
+        log_error("Package not found in repository: %s", package_name);
         return NULL;
     }
+    log_debug("Package found: %s@%s with %zu dependencies", pkg->name, pkg->version ? pkg->version : "latest", pkg->dependencies_count);
 
     // Resolve dependencies first
     for (size_t i = 0; i < pkg->dependencies_count; i++) {
@@ -151,8 +161,10 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
 
         if (!found) {
             // Recursively resolve (pass the full dependency spec including version)
+            log_developer("Recursively resolving dependency: %s", dep_spec);
             size_t deps_count = 0;
             char **deps = resolver_resolve(resolver, dep_spec, installed, installed_count, &deps_count);
+            log_developer("Dependency resolution returned %zu packages for: %s", deps_count, dep_spec);
 
             // Clean up parsed dependency
             if (dep_name) free(dep_name);
@@ -207,6 +219,7 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
                 Package *dep_pkg = repository_get_package(resolver->repository, pkg->dependencies[i]);
                 if (!dep_pkg) {
                     // Dependency not found in repository - this is an error
+                    log_error("Dependency not found in repository: %s (required by %s)", pkg->dependencies[i], package_name);
                     if (result) {
                         for (size_t k = 0; k < *result_count; k++) {
                             if (result[k]) free(result[k]);
@@ -216,12 +229,16 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
                     *result_count = 0;
                     return NULL;
                 }
+                log_debug("Dependency already installed (skipping): %s", pkg->dependencies[i]);
                 // Dependency exists but was already installed (and not using force) - skip it
             }
         }
     }
 
     // Add build dependencies
+    if (pkg->build_dependencies_count > 0) {
+        log_debug("Resolving %zu build dependencies for package: %s", pkg->build_dependencies_count, package_name);
+    }
     for (size_t i = 0; i < pkg->build_dependencies_count; i++) {
         if (!pkg->build_dependencies[i]) continue; // Skip NULL dependencies
 
@@ -357,13 +374,16 @@ char** resolver_resolve(DependencyResolver *resolver, const char *package_name, 
     }
     (*result_count)++;
 
+    log_debug("Dependency resolution completed for %s: %zu total packages", package_name, *result_count);
     return result;
 }
 
 char** resolver_get_build_order(DependencyResolver *resolver, char **packages, size_t packages_count, size_t *result_count) {
+    log_debug("Calculating build order for %zu packages", packages_count);
     // Simple topological sort
     *result_count = 0;
     if (packages_count == 0) {
+        log_warning("No packages provided for build order calculation");
         return NULL;
     }
 
@@ -468,6 +488,7 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
 
     // Verify all packages were added
     if (*result_count < packages_count) {
+        log_error("Build order calculation incomplete (added %zu of %zu packages)", *result_count, packages_count);
         // Failed to add all packages - free result and return NULL
         for (size_t i = 0; i < *result_count; i++) {
             free(result[i]);
@@ -475,9 +496,11 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
         free(result);
         free(added);
         free(in_degree);
+        *result_count = 0;
         return NULL;
     }
 
+    log_debug("Build order calculated successfully: %zu packages", *result_count);
     free(added);
     free(in_degree);
     return result;
@@ -491,8 +514,12 @@ bool resolver_has_circular_dependency(DependencyResolver *resolver, const char *
 }
 
 Repository* repository_new(const char *repo_dir) {
+    log_developer("repository_new called with repo_dir='%s'", repo_dir);
     Repository *repo = malloc(sizeof(Repository));
-    if (!repo) return NULL;
+    if (!repo) {
+        log_error("Failed to allocate memory for Repository");
+        return NULL;
+    }
 
     repo->packages = NULL;
     repo->packages_count = 0;
@@ -665,6 +692,7 @@ Repository* repository_new(const char *repo_dir) {
         closedir(dir);
     }
 
+    log_debug("Repository loaded: %zu packages from %s", repo->packages_count, repo_dir);
     return repo;
 }
 
@@ -678,6 +706,7 @@ void repository_free(Repository *repo) {
 }
 
 Package* repository_get_package(Repository *repo, const char *name) {
+    log_developer("repository_get_package called for: %s", name);
     // Return the latest version (highest version string, or first found if no version specified)
     Package *latest = NULL;
     for (size_t i = 0; i < repo->packages_count; i++) {
@@ -692,10 +721,16 @@ Package* repository_get_package(Repository *repo, const char *name) {
             }
         }
     }
+    if (latest) {
+        log_debug("Package found: %s@%s", latest->name, latest->version ? latest->version : "latest");
+    } else {
+        log_warning("Package not found in repository: %s", name);
+    }
     return latest;
 }
 
 Package* repository_get_package_version(Repository *repo, const char *name, const char *version) {
+    log_developer("repository_get_package_version called for: %s@%s", name, version ? version : "latest");
     if (!version || strcmp(version, "latest") == 0) {
         return repository_get_package(repo, name);
     }
@@ -703,10 +738,12 @@ Package* repository_get_package_version(Repository *repo, const char *name, cons
     for (size_t i = 0; i < repo->packages_count; i++) {
         if (strcmp(repo->packages[i]->name, name) == 0) {
             if (repo->packages[i]->version && strcmp(repo->packages[i]->version, version) == 0) {
+                log_debug("Package version found: %s@%s", name, version);
                 return repo->packages[i];
             }
         }
     }
+    log_warning("Package version not found in repository: %s@%s", name, version);
     return NULL;
 }
 

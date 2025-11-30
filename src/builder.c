@@ -1,6 +1,7 @@
 #include "builder.h"
 #include "package.h"
 #include "tui.h"
+#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -8,8 +9,12 @@
 #include <unistd.h>
 
 BuilderConfig* builder_config_new(const char *prefix) {
+    log_developer("builder_config_new called with prefix='%s'", prefix);
     BuilderConfig *config = malloc(sizeof(BuilderConfig));
-    if (!config) return NULL;
+    if (!config) {
+        log_error("Failed to allocate memory for BuilderConfig");
+        return NULL;
+    }
 
     config->prefix = strdup(prefix);
 
@@ -21,6 +26,8 @@ BuilderConfig* builder_config_new(const char *prefix) {
     snprintf(build_dir, sizeof(build_dir), "%s/build", prefix);
     config->build_dir = strdup(build_dir);
 
+    log_debug("BuilderConfig initialized: prefix=%s, install_dir=%s, build_dir=%s",
+              prefix, config->install_dir, config->build_dir);
     return config;
 }
 
@@ -65,16 +72,22 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
 
 bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir) {
     if (!config || !pkg || !source_dir) {
+        log_error("builder_build called with invalid parameters");
         return false;
     }
 
+    log_info("Building package: %s@%s (source_dir=%s, build_dir=%s)",
+             pkg->name, pkg->version ? pkg->version : "latest", source_dir, build_dir);
+
     // Create build directory
+    log_developer("Creating build directory: %s", build_dir);
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", build_dir);
     system(cmd);
 
     // Apply patches
     if (pkg->patches_count > 0) {
+        log_debug("Applying %zu patches to source", pkg->patches_count);
         builder_apply_patches(source_dir, pkg->patches, pkg->patches_count);
     }
 
@@ -108,6 +121,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
              main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
+    log_debug("Using build system: %s", build_system);
+    log_developer("Build environment: %s", env);
 
     if (strcmp(build_system, "autotools") == 0) {
         // Check for configure script
@@ -115,30 +130,39 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);
         struct stat st;
         if (stat(configure, &st) != 0) {
+            log_debug("Configure script not found, running autoreconf");
             // Try to generate configure
             snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv 2>/dev/null", source_dir);
             system(cmd);
         }
 
         // Configure
+        log_debug("Running configure for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s' >/dev/null 2>&1", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->configure_args[i]);
         }
+        log_developer("Configure command: %s", cmd);
         if (system(cmd) != 0) {
+            log_error("Configure failed for package: %s", pkg->name);
             return false;
         }
+        log_debug("Configure completed successfully for package: %s", pkg->name);
 
         // Make
+        log_debug("Running make for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s make >/dev/null 2>&1", source_dir, env);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->make_args[i]);
         }
+        log_developer("Make command: %s", cmd);
         if (system(cmd) != 0) {
+            log_error("Make failed for package: %s", pkg->name);
             return false;
         }
+        log_debug("Make completed successfully for package: %s", pkg->name);
 
     } else if (strcmp(build_system, "cmake") == 0) {
         // CMake configure
@@ -274,8 +298,12 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
 bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir) {
     if (!config || !pkg || !source_dir) {
+        log_error("builder_install called with invalid parameters");
         return false;
     }
+
+    log_info("Installing package: %s@%s (install_dir=%s)",
+             pkg->name, pkg->version ? pkg->version : "latest", config->install_dir);
 
     // Set up environment - use main install directory for PATH
     // Package dir is like ~/.tsi/install/package-version, main install dir is ~/.tsi/install
@@ -300,17 +328,28 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
              main_install_dir, main_install_dir, main_install_dir);
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
+    log_debug("Using build system for install: %s", build_system);
+    log_developer("Install environment: %s", env);
     char cmd[1024];
 
     if (strcmp(build_system, "autotools") == 0) {
+        log_debug("Running make install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install >/dev/null 2>&1", source_dir, env);
+        log_developer("Install command: %s", cmd);
     } else if (strcmp(build_system, "cmake") == 0) {
+        log_debug("Running cmake --install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s' >/dev/null 2>&1", build_dir, env, build_dir);
+        log_developer("Install command: %s", cmd);
     } else if (strcmp(build_system, "meson") == 0) {
+        log_debug("Running meson install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s' >/dev/null 2>&1", build_dir, env, build_dir);
+        log_developer("Install command: %s", cmd);
     } else if (strcmp(build_system, "make") == 0) {
+        log_debug("Running make install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s' >/dev/null 2>&1", source_dir, env, config->install_dir);
+        log_developer("Install command: %s", cmd);
     } else if (strcmp(build_system, "custom") == 0) {
+        log_debug("Using custom install method for package: %s", pkg->name);
         // For custom builds, installation is typically handled in build_commands
         // But we can try to copy common directories if they exist
         char install_cmd[2048];
@@ -325,13 +364,22 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
                 source_dir, config->install_dir,
                 source_dir, config->install_dir,
                 source_dir, config->install_dir);
+        log_developer("Custom install command: %s", install_cmd);
         system(install_cmd);
+        log_info("Custom install completed for package: %s", pkg->name);
         return true; // Custom builds might handle installation themselves
     } else {
+        log_error("Unknown build system for install: %s", build_system);
         return false;
     }
 
-    return system(cmd) == 0;
+    int result = system(cmd);
+    if (result == 0) {
+        log_info("Install completed successfully for package: %s", pkg->name);
+    } else {
+        log_error("Install failed for package: %s (exit code: %d)", pkg->name, result);
+    }
+    return result == 0;
 }
 
 bool builder_create_symlinks(const BuilderConfig *config, const char *package_name, const char *package_version) {

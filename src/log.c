@@ -17,13 +17,13 @@ static int create_directory_recursive(const char *path);
 
 // Global log configuration
 static LogConfig g_log_config = {
-    .level = LOG_LEVEL_INFO,
-    .to_console = true,
+    .level = LOG_LEVEL_DEVELOPER,  // Default to developer mode for maximum verbosity
+    .to_console = false,  // Disable console logging - log to file only
     .to_file = true,  // Enable file logging by default
     .log_file_path = NULL,
     .log_file = NULL,
     .use_timestamps = true,
-    .use_colors = true,
+    .use_colors = false,  // No colors needed for file logging
     .rotation_enabled = true,
     .max_file_size = 10 * 1024 * 1024,  // 10MB default
     .max_rotated_files = 5  // Keep 5 rotated files
@@ -247,7 +247,7 @@ int log_init(LogLevel level, bool to_console, bool to_file, const char *log_file
 }
 
 int log_init_from_env(void) {
-    // Get log level from environment
+    // Get log level from environment (defaults to LOG_LEVEL_DEVELOPER if not set)
     const char *level_str = getenv("TSI_LOG_LEVEL");
     if (level_str) {
         LogLevel level = log_level_from_string(level_str);
@@ -255,6 +255,7 @@ int log_init_from_env(void) {
             g_log_config.level = level;
         }
     }
+    // If TSI_LOG_LEVEL not set, keep default LOG_LEVEL_DEVELOPER
 
     // Get console output setting
     const char *console_str = getenv("TSI_LOG_TO_CONSOLE");

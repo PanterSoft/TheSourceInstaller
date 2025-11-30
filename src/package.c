@@ -1,4 +1,5 @@
 #include "package.h"
+#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -160,8 +161,12 @@ void package_free(Package *pkg) {
 }
 
 bool package_load_from_file(Package *pkg, const char *filename) {
+    log_developer("Loading package from file: %s", filename);
     FILE *f = fopen(filename, "r");
-    if (!f) return false;
+    if (!f) {
+        log_error("Failed to open package file: %s", filename);
+        return false;
+    }
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -179,6 +184,12 @@ bool package_load_from_file(Package *pkg, const char *filename) {
 
     bool result = package_load_from_json(pkg, json);
     free(json);
+    if (result) {
+        log_debug("Package loaded successfully from file: %s (name=%s, version=%s)",
+                  filename, pkg->name ? pkg->name : "unknown", pkg->version ? pkg->version : "unknown");
+    } else {
+        log_error("Failed to parse package JSON from file: %s", filename);
+    }
     return result;
 }
 
