@@ -45,10 +45,30 @@ $(TARGET): $(OBJECTS) | $(BINDIR)
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)
 
-# Install
+# Installation prefix (defaults to ~/.tsi for isolated installation)
+PREFIX ?= $(HOME)/.tsi
+
+# Install to local directory (isolated, like bootstrap script)
 install: $(TARGET)
-	install -d $(DESTDIR)/usr/local/bin
-	install -m 755 $(TARGET) $(DESTDIR)/usr/local/bin/
+	@echo "Installing TSI to $(PREFIX)..."
+	@mkdir -p $(PREFIX)/bin
+	@install -m 755 $(TARGET) $(PREFIX)/bin/tsi
+	@echo "✓ Installed binary: $(PREFIX)/bin/tsi"
+	@if [ -d "../completions" ]; then \
+		mkdir -p $(PREFIX)/share/completions; \
+		if [ -f "../completions/tsi.bash" ]; then \
+			install -m 644 ../completions/tsi.bash $(PREFIX)/share/completions/tsi.bash; \
+			echo "✓ Installed bash completion"; \
+		fi; \
+		if [ -f "../completions/tsi.zsh" ]; then \
+			install -m 644 ../completions/tsi.zsh $(PREFIX)/share/completions/tsi.zsh; \
+			echo "✓ Installed zsh completion"; \
+		fi; \
+	fi
+	@echo ""
+	@echo "TSI installed successfully!"
+	@echo "Add to your PATH:"
+	@echo "  export PATH=\"$(PREFIX)/bin:\$$PATH\""
 
 .PHONY: all clean install
 

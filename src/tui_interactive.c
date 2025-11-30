@@ -107,14 +107,17 @@ void tui_disable_raw_mode(void) {
 
 // Clear all pending input from stdin
 static void clear_pending_input(void) {
-    if (!raw_mode) return;
-
-    // Drain all available input
-    char c;
-    while (read(STDIN_FILENO, &c, 1) == 1) {
-        // Discard all pending characters
-    }
+    // Always flush input, even if raw mode isn't enabled yet
     tcflush(STDIN_FILENO, TCIFLUSH);
+
+    if (raw_mode) {
+        // Drain all available input (only works in raw mode)
+        char c;
+        while (read(STDIN_FILENO, &c, 1) == 1) {
+            // Discard all pending characters
+        }
+        tcflush(STDIN_FILENO, TCIFLUSH);
+    }
 }
 
 // Input handling
@@ -351,6 +354,9 @@ void menu_draw(Menu *menu, int x, int y, int width, int height) {
 int menu_show(Menu *menu) {
     if (!menu || menu->item_count == 0) return -1;
 
+    // Clear any pending input BEFORE setting up terminal
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
     tui_setup_terminal();
     tui_enable_raw_mode();
     tui_hide_cursor();
@@ -366,10 +372,55 @@ int menu_show(Menu *menu) {
 
     menu->max_visible = menu_height - (menu->title ? 2 : 1);
 
-    // Draw initial screen before entering input loop
+    // Check if terminal supports Unicode (simple heuristic)
+    const char *lang = getenv("LANG");
+    bool use_unicode = (lang && strstr(lang, "UTF-8")) || getenv("LC_ALL");
+    if (!use_unicode) {
+        // Try to detect UTF-8 support
+        use_unicode = true; // Default to trying Unicode
+    }
+
+    const char *top_left = use_unicode ? "┌" : "+";
+    const char *top_right = use_unicode ? "┐" : "+";
+    const char *bottom_left = use_unicode ? "└" : "+";
+    const char *bottom_right = use_unicode ? "┘" : "+";
+    const char *horizontal = use_unicode ? "─" : "-";
+    const char *vertical = use_unicode ? "│" : "|";
+
+    // Draw complete initial screen (border + content) before entering input loop
     tui_clear_screen();
-    menu_draw(menu, x, y, menu_width, menu_height);
-    fflush(stdout);
+
+    // Draw border
+    if (supports_colors()) {
+        printf("%s", COLOR_BRIGHT_CYAN);
+    }
+    for (int i = 0; i < menu_height; i++) {
+        tui_move_cursor(y + i, x);
+        if (i == 0) {
+            printf("%s", top_left);
+            for (int j = 0; j < menu_width - 2; j++) printf("%s", horizontal);
+            printf("%s", top_right);
+        } else if (i == menu_height - 1) {
+            printf("%s", bottom_left);
+            for (int j = 0; j < menu_width - 2; j++) printf("%s", horizontal);
+            printf("%s", bottom_right);
+        } else {
+            printf("%s", vertical);
+            for (int j = 0; j < menu_width - 2; j++) printf(" ");
+            printf("%s", vertical);
+        }
+    }
+    if (supports_colors()) {
+        printf("%s", COLOR_RESET);
+    }
+    fflush(stdout); // Ensure border is drawn before menu content
+
+    // Draw menu content
+    menu_draw(menu, x + 2, y + 1, menu_width - 4, menu_height - 2);
+    fflush(stdout); // Ensure menu content is drawn
+
+    // Small delay to ensure screen is fully rendered
+    usleep(50000);  // 50ms
 
     // Clear any pending input after initial draw
     clear_pending_input();
@@ -381,22 +432,6 @@ int menu_show(Menu *menu) {
         if (supports_colors()) {
             printf("%s", COLOR_BRIGHT_CYAN);
         }
-
-        // Check if terminal supports Unicode (simple heuristic)
-        const char *lang = getenv("LANG");
-        bool use_unicode = (lang && strstr(lang, "UTF-8")) || getenv("LC_ALL");
-        if (!use_unicode) {
-            // Try to detect UTF-8 support
-            use_unicode = true; // Default to trying Unicode
-        }
-
-        const char *top_left = use_unicode ? "┌" : "+";
-        const char *top_right = use_unicode ? "┐" : "+";
-        const char *bottom_left = use_unicode ? "└" : "+";
-        const char *bottom_right = use_unicode ? "┘" : "+";
-        const char *horizontal = use_unicode ? "─" : "-";
-        const char *vertical = use_unicode ? "│" : "|";
-
         for (int i = 0; i < menu_height; i++) {
             tui_move_cursor(y + i, x);
             if (i == 0) {
@@ -1703,6 +1738,9 @@ __attribute__((unused)) static void draw_box_helper(int x, int y, int w, int box
 void tui_show_dashboard_enhanced(Database *db, const char *repo_dir) {
     if (!db) return;
 
+    // Clear any pending input BEFORE setting up terminal
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
     tui_setup_terminal();
     tui_enable_raw_mode();
     tui_hide_cursor();
@@ -1710,6 +1748,9 @@ void tui_show_dashboard_enhanced(Database *db, const char *repo_dir) {
     // Clear screen and any pending input immediately after setup
     tui_clear_screen();
     clear_pending_input();
+
+    // Small delay to ensure screen is rendered
+    usleep(50000);  // 50ms
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
