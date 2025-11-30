@@ -17,10 +17,26 @@
 
 // Output callback for build/install progress
 static void output_callback(const char *line, void *userdata) {
-    OutputBuffer *buf = (OutputBuffer *)userdata;
-    if (buf) {
-        output_buffer_add(buf, line);
-        output_buffer_display(buf);
+    // Window removed - print output directly
+    (void)userdata;
+    if (line) {
+        // Filter out shell error messages that are just noise
+        if (strstr(line, "sh: -c:") != NULL &&
+            (strstr(line, "unexpected EOF") != NULL ||
+             strstr(line, "syntax error") != NULL ||
+             strstr(line, "unexpected end of file") != NULL)) {
+            // Skip shell syntax error messages
+            return;
+        }
+        // Filter out lines that are just paths ending with quotes (noise from install process)
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\'' &&
+            (strchr(line, '/') != NULL || strstr(line, "man") != NULL)) {
+            // Skip lines that look like paths with trailing quotes
+            return;
+        }
+        printf("%s\n", line);
+        fflush(stdout);
     }
 }
 
@@ -693,13 +709,33 @@ install_package:
     int failed_deps_count = 0;
     char **failed_deps = NULL;
 
+    // Count dependencies (excluding main package)
+    size_t dependency_count = 0;
+    for (size_t i = 0; i < build_order_count; i++) {
+        if (strcmp(build_order[i], package_name) != 0) {
+            dependency_count++;
+        }
+    }
+
     // Install dependencies first
+    if (dependency_count > 0) {
+        print_section("Installing dependencies");
+    }
+
+    size_t current_dep = 0;
     for (size_t i = 0; i < build_order_count; i++) {
         if (strcmp(build_order[i], package_name) == 0) {
             continue; // Install main package last
         }
 
-        print_progress("Installing dependency", build_order[i]);
+        current_dep++;
+        if (dependency_count > 1) {
+            char dep_msg[256];
+            snprintf(dep_msg, sizeof(dep_msg), "Installing dependency %zu of %zu", current_dep, dependency_count);
+            print_progress(dep_msg, build_order[i]);
+        } else {
+            print_progress("Installing dependency", build_order[i]);
+        }
 
         // Parse package@version from build_order if present
         char *dep_name = NULL;
@@ -815,6 +851,10 @@ install_package:
     }
 
     // Install main package
+    if (dependency_count > 0) {
+        printf("\n");  // Add spacing after dependencies
+    }
+    print_section("Installing package");
     print_progress("Installing", package_name);
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {

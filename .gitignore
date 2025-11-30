@@ -39,6 +39,9 @@ Thumbs.db
 src/build/
 src/bin/
 
+# Image files (SD card images, etc.)
+*.img
+
 # MkDocs build output
 site/
 .venv/
