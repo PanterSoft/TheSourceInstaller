@@ -2062,6 +2062,12 @@ static int cmd_uninstall(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    // Check for --version early (before logging initialization to avoid hangs)
+    if (argc >= 2 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
+        printf("TSI 0.2.0 (C implementation)\n");
+        return 0;
+    }
+
     // Initialize logging from environment (must be first)
     // Logging is always active with dev mode enabled by default
     int log_result = log_init_from_env();
@@ -2149,12 +2155,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-        log_debug("Version requested");
-        printf("TSI 0.2.0 (C implementation)\n");
-        log_cleanup();
-        return 0;
-    }
 
     log_developer("Command: %s", argv[1]);
 

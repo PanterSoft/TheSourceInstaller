@@ -2,6 +2,7 @@
 # TSI Local Install Script
 # Builds TSI from source and installs it to ~/.tsi for testing
 # This allows testing changes without pushing to git
+# No make required - compiles directly using C compiler
 
 set -e
 
@@ -44,34 +45,59 @@ if ! command -v "$CC" >/dev/null 2>&1; then
 fi
 
 echo -e "${BLUE}Found C compiler:${RESET} $CC ($($CC --version 2>&1 | head -1))"
-
-# Check for make
-if ! command -v make >/dev/null 2>&1; then
-    echo -e "${RED}Error: make not found${RESET}"
-    exit 1
-fi
-
-echo -e "${BLUE}Found make:${RESET} $(make --version 2>&1 | head -1)"
 echo ""
 
 # Build TSI
 echo -e "${YELLOW}${BOLD}═══>${RESET} ${YELLOW}🔨 Building TSI${RESET}"
 cd src
 
-if make clean >/dev/null 2>&1; then
+# Clean previous build
+if [ -d "build" ]; then
+    rm -rf build
     echo "  Cleaned previous build"
 fi
+if [ -d "bin" ]; then
+    rm -rf bin
+fi
 
-if make; then
-    echo -e "${GREEN}✓ TSI built successfully${RESET}"
+# Create build directories
+mkdir -p build bin
+
+# CFLAGS
+CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L"
+
+# Detect OS for static linking (only works on Linux)
+UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
+if [ "$UNAME_S" = "Linux" ]; then
+    LDFLAGS="-static"
 else
-    echo -e "${RED}✗ Build failed${RESET}"
+    LDFLAGS=""
+fi
+
+# Compile all C source files
+echo "  Compiling source files..."
+OBJECTS=""
+for c_file in *.c; do
+    if [ -f "$c_file" ]; then
+        OBJECTS="$OBJECTS build/${c_file%.c}.o"
+        if ! $CC $CFLAGS -c "$c_file" -o "build/${c_file%.c}.o"; then
+            echo -e "${RED}✗ Compilation failed: $c_file${RESET}"
+            exit 1
+        fi
+    fi
+done
+
+# Link
+echo "  Linking binary..."
+if ! $CC $LDFLAGS $OBJECTS -o bin/tsi; then
+    echo -e "${RED}✗ Linking failed${RESET}"
     exit 1
 fi
 
-# Verify binary was created
-if [ ! -f "bin/tsi" ]; then
-    echo -e "${RED}✗ Binary not found after build: bin/tsi${RESET}"
+if [ -f "bin/tsi" ]; then
+    echo -e "${GREEN}✓ TSI built successfully${RESET}"
+else
+    echo -e "${RED}✗ Binary not created${RESET}"
     exit 1
 fi
 
@@ -123,12 +149,6 @@ echo ""
 if command -v tsi >/dev/null 2>&1; then
     echo -e "${GREEN}✓${RESET} TSI is available in PATH"
     echo -e "  Location: $(command -v tsi)"
-    # Try to get version, but make it non-blocking
-    # Use a simple approach: try to read version, but don't wait if it hangs
-    TSI_VERSION=$( ("$TSI_PREFIX/bin/tsi" --version 2>/dev/null || echo "unknown") | head -1 )
-    if [ "$TSI_VERSION" != "unknown" ] && [ -n "$TSI_VERSION" ]; then
-        echo -e "  Version: $TSI_VERSION"
-    fi
 else
     echo -e "${YELLOW}⚠${RESET} TSI is not in your PATH"
     echo ""
