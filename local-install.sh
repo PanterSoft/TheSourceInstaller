@@ -63,8 +63,59 @@ fi
 # Create build directories
 mkdir -p build bin
 
+# Detect C compiler and include paths
+CC="${CC:-gcc}"
+if ! command -v "$CC" >/dev/null 2>&1; then
+    # Try alternatives
+    for alt_cc in clang cc; do
+        if command -v "$alt_cc" >/dev/null 2>&1; then
+            CC="$alt_cc"
+            echo -e "${BLUE}Using C compiler:${RESET} $CC"
+            break
+        fi
+    done
+    if ! command -v "$CC" >/dev/null 2>&1; then
+        echo -e "${RED}Error: No C compiler found (tried: gcc, clang, cc)${RESET}"
+        exit 1
+    fi
+fi
+
+# Try to find standard include directories
+INCLUDE_FLAGS=""
+if ! echo '#include <stdio.h>' | $CC -E -x c - 2>/dev/null >/dev/null; then
+    echo -e "${YELLOW}⚠${RESET} stdio.h not found in default include path, searching..."
+    # Try common include locations
+    for inc_dir in /usr/include /usr/local/include /opt/include; do
+        if [ -d "$inc_dir" ] && [ -f "$inc_dir/stdio.h" ]; then
+            INCLUDE_FLAGS="-I$inc_dir"
+            echo -e "${GREEN}✓${RESET} Found stdio.h in $inc_dir"
+            break
+        fi
+    done
+    # If still not found, try to get include paths from compiler
+    if [ -z "$INCLUDE_FLAGS" ]; then
+        echo "Querying compiler for include paths..."
+        COMPILER_INCLUDES=$($CC -E -v -x c - 2>&1 | grep -E '^ /' | head -5 | tr '\n' ' ' || true)
+        if [ -n "$COMPILER_INCLUDES" ]; then
+            # Extract first include directory
+            FIRST_INC=$(echo "$COMPILER_INCLUDES" | awk '{print $1}')
+            if [ -n "$FIRST_INC" ] && [ -d "$FIRST_INC" ]; then
+                INCLUDE_FLAGS="-I$FIRST_INC"
+                echo -e "${GREEN}✓${RESET} Using compiler include path: $FIRST_INC"
+            fi
+        fi
+    fi
+    if [ -z "$INCLUDE_FLAGS" ]; then
+        echo -e "${RED}✗${RESET} Cannot find stdio.h. Please install C development headers."
+        echo -e "${RED}  On Debian/Ubuntu:${RESET} apt-get install build-essential"
+        echo -e "${RED}  On RedHat/CentOS:${RESET} yum install gcc glibc-devel"
+        echo -e "${RED}  On Alpine:${RESET} apk add gcc musl-dev"
+        exit 1
+    fi
+fi
+
 # CFLAGS
-CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L"
+CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
 
 # Detect OS for static linking (only works on Linux)
 UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
