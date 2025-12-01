@@ -2065,6 +2065,8 @@ int main(int argc, char **argv) {
     // Check for --version early (before logging initialization to avoid hangs)
     if (argc >= 2 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
         printf("TSI 0.2.0 (C implementation)\n");
+        fflush(stdout);
+        fflush(stderr);
         return 0;
     }
 

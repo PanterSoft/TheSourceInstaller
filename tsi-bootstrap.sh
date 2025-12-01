@@ -304,8 +304,60 @@ main() {
     # Compile TSI directly without make
     log_info "Compiling TSI source files..."
 
+    # Detect C compiler and include paths
+    CC="${CC:-gcc}"
+    if ! command_exists "$CC"; then
+        # Try alternatives
+        for alt_cc in clang cc; do
+            if command_exists "$alt_cc"; then
+                CC="$alt_cc"
+                log_info "Using C compiler: $CC"
+                break
+            fi
+        done
+        if ! command_exists "$CC"; then
+            log_error "No C compiler found (tried: gcc, clang, cc)"
+            exit 1
+        fi
+    fi
+
+    # Try to find standard include directories
+    # Test if stdio.h can be found
+    INCLUDE_FLAGS=""
+    if ! echo '#include <stdio.h>' | $CC -E -x c - 2>/dev/null >/dev/null; then
+        log_warn "stdio.h not found in default include path, searching..."
+        # Try common include locations
+        for inc_dir in /usr/include /usr/local/include /opt/include; do
+            if [ -d "$inc_dir" ] && [ -f "$inc_dir/stdio.h" ]; then
+                INCLUDE_FLAGS="-I$inc_dir"
+                log_info "Found stdio.h in $inc_dir"
+                break
+            fi
+        done
+        # If still not found, try to get include paths from compiler
+        if [ -z "$INCLUDE_FLAGS" ]; then
+            log_info "Querying compiler for include paths..."
+            COMPILER_INCLUDES=$($CC -E -v -x c - 2>&1 | grep -E '^ /' | head -5 | tr '\n' ' ' || true)
+            if [ -n "$COMPILER_INCLUDES" ]; then
+                # Extract first include directory
+                FIRST_INC=$(echo "$COMPILER_INCLUDES" | awk '{print $1}')
+                if [ -n "$FIRST_INC" ] && [ -d "$FIRST_INC" ]; then
+                    INCLUDE_FLAGS="-I$FIRST_INC"
+                    log_info "Using compiler include path: $FIRST_INC"
+                fi
+            fi
+        fi
+        if [ -z "$INCLUDE_FLAGS" ]; then
+            log_error "Cannot find stdio.h. Please install C development headers."
+            log_error "On Debian/Ubuntu: apt-get install build-essential"
+            log_error "On RedHat/CentOS: yum install gcc glibc-devel"
+            log_error "On Alpine: apk add gcc musl-dev"
+            exit 1
+        fi
+    fi
+
     # CFLAGS
-    CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L"
+    CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
 
     # Detect OS for static linking (only works on Linux)
     UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
