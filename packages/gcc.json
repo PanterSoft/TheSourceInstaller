@@ -6,8 +6,15 @@
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz"
   },
-  "dependencies": ["gmp", "mpfr", "mpc"],
-  "build_dependencies": [],
+  "dependencies": [
+    "gmp",
+    "mpfr",
+    "mpc"
+  ],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--enable-languages=c,c++",
@@ -17,4 +24,3 @@
   ],
   "env": {}
 }
-

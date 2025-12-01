@@ -6,12 +6,17 @@
     "type": "tarball",
     "url": "https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.40.tar.xz"
   },
-  "dependencies": ["libxml2"],
-  "build_dependencies": ["pkg-config"],
+  "dependencies": [
+    "libxml2"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--without-python"
   ],
   "env": {}
 }
-

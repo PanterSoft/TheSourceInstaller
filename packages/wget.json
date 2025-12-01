@@ -6,8 +6,20 @@
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/wget/wget-1.21.4.tar.gz"
   },
-  "dependencies": ["openssl", "zlib", "pcre2"],
-  "build_dependencies": ["pkg-config"],
+  "dependencies": [
+    "openssl",
+    "zlib",
+    "pcre2"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "coreutils",
+    "make",
+    "sed",
+    "grep",
+    "gawk",
+    "bash"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-ssl=openssl",
@@ -16,4 +28,3 @@
   ],
   "env": {}
 }
-

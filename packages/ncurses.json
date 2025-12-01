@@ -7,7 +7,10 @@
     "url": "https://ftp.gnu.org/gnu/ncurses/ncurses-6.4.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-shared",
@@ -16,4 +19,3 @@
   ],
   "env": {}
 }
-

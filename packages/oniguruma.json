@@ -9,7 +9,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.10/onig-6.9.10.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -22,7 +25,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.8/onig-6.9.8.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -35,7 +41,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.7.1/onig-6.9.7.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -48,7 +57,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.7/onig-6.9.7.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -61,7 +73,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.7_rc1/onig-6.9.7_rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -74,7 +89,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.6/onig-6.9.6.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -87,7 +105,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.6_rc4/onig-6.9.6_rc4.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -100,7 +121,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.6_rc3/onig-6.9.6_rc3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -113,7 +137,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.6_rc2/onig-6.9.6_rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -126,7 +153,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.6_rc1/onig-6.9.6_rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -139,7 +169,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.5_rev1/onig-6.9.5_rev1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -152,7 +185,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.5/onig-6.9.5.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -165,7 +201,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.5_rc2/onig-6.9.5_rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -178,7 +217,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.5_rc1/onig-6.9.5_rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -191,7 +233,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.4/onig-6.9.4.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -204,7 +249,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.4_rc3/onig-6.9.4_rc3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -217,7 +265,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.4_rc2/onig-6.9.4_rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -230,7 +281,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.4_rc1/onig-6.9.4_rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -243,7 +297,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.3/onig-6.9.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -256,7 +313,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.2/onig-6.9.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -269,7 +329,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.2_rc3/onig-6.9.2_rc3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -282,7 +345,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.2_rc2/onig-6.9.2_rc2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -295,7 +361,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.2_rc1/onig-6.9.2_rc1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -308,7 +377,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.1/onig-6.9.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -321,7 +393,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.0/onig-6.9.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -334,7 +409,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.8.2/onig-6.8.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -347,7 +425,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.8.1/onig-6.8.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -360,7 +441,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.8.0/onig-6.8.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -373,7 +457,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.7.1/onig-6.7.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -386,7 +473,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.7.0/onig-6.7.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -399,7 +489,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.6.1/onig-6.6.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -412,7 +505,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.6.0/onig-6.6.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -425,7 +521,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.5.0/onig-6.5.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -438,7 +537,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.4.0/onig-6.4.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -451,7 +553,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.3.0/onig-6.3.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -464,7 +569,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.2.0/onig-6.2.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -477,7 +585,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v5.9.6_p1/onig-5.9.6_p1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -490,7 +601,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.1.3/onig-6.1.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -503,7 +617,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.1.2/onig-6.1.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -516,7 +633,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.1.1/onig-6.1.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -529,7 +649,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.1.0/onig-6.1.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -542,7 +665,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.0.0/onig-6.0.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -555,7 +681,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v5.9.6/onig-5.9.6.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -568,7 +697,10 @@
         "url": "https://github.com/kkos/oniguruma/releases/download/v6.9.9/onig-6.9.9.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}

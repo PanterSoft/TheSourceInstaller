@@ -7,7 +7,7 @@
     "url": "https://pkg-config.freedesktop.org/releases/pkg-config-0.29.2.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": ["make", "coreutils", "sed", "grep", "gawk", "bash"],
   "build_system": "autotools",
   "configure_args": [
     "--with-internal-glib"

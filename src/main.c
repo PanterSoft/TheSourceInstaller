@@ -61,6 +61,18 @@ static void print_usage(const char *prog_name) {
     printf("If no command is provided and running in a terminal, the TUI will launch automatically.\n");
 }
 
+// Helper to extract package name from "package@version" format
+// Returns true if the package spec matches the given name
+static bool package_name_matches(const char *package_spec, const char *name) {
+    if (!package_spec || !name) return false;
+    char *at_pos = strchr((char*)package_spec, '@');
+    if (at_pos) {
+        size_t name_len = at_pos - package_spec;
+        return (name_len == strlen(name) && strncmp(package_spec, name, name_len) == 0);
+    }
+    return (strcmp(package_spec, name) == 0);
+}
+
 static bool run_command_with_window(const char *overview, const char *detail, const char *cmd) {
     if (!cmd || !*cmd) {
         return false;
@@ -104,6 +116,10 @@ static bool run_command_with_window(const char *overview, const char *detail, co
 }
 
 static int cmd_install(int argc, char **argv) {
+    log_developer("cmd_install called with argc=%d", argc);
+    for (int i = 0; i < argc; i++) {
+        log_developer("  argv[%d] = '%s'", i, argv[i]);
+    }
     bool force = false;
     const char *package_name = NULL;
     const char *package_version = NULL;
@@ -504,11 +520,15 @@ install_package:
     }
 
     // Resolve dependencies
+    log_debug("Resolving dependencies for package: %s@%s", package_name, package_version ? package_version : "latest");
+    log_developer("Installed packages count: %zu", installed_count);
     size_t deps_count = 0;
     char **deps = resolver_resolve(resolver, package_name, installed, installed_count, &deps_count);
+    log_debug("Dependency resolution returned %zu dependencies", deps_count);
 
     if (!deps) {
         // Package exists but dependency resolution failed
+        log_error("Failed to resolve dependencies for package: %s@%s", package_name, package_version ? package_version : "latest");
         fprintf(stderr, "Error: Failed to resolve dependencies for '%s'\n", package_name);
         if (installed) {
             for (size_t i = 0; i < installed_count; i++) free(installed[i]);
@@ -617,8 +637,24 @@ install_package:
     }
 
     // Get build order
+    log_developer("About to call resolver_get_build_order: deps=%p, deps_count=%zu", (void*)deps, deps_count);
+    if (deps && deps_count > 0) {
+        log_developer("Deps array contents:");
+        for (size_t i = 0; i < deps_count; i++) {
+            log_developer("  deps[%zu]='%s'", i, deps[i] ? deps[i] : "(NULL)");
+        }
+    }
     size_t build_order_count = 0;
+    log_developer("Before resolver_get_build_order: deps=%p, deps_count=%zu, build_order_count=%zu", (void*)deps, deps_count, build_order_count);
     char **build_order = resolver_get_build_order(resolver, deps, deps_count, &build_order_count);
+    log_developer("After resolver_get_build_order: build_order=%p, build_order_count=%zu (address of count: %p)", (void*)build_order, build_order_count, (void*)&build_order_count);
+
+    // CRITICAL FIX: If build_order is not NULL but count is 0, use deps_count as fallback
+    // This handles the case where the function successfully creates the array but the count gets lost
+    if (build_order && build_order_count == 0 && deps_count > 0) {
+        log_warning("build_order is not NULL but count is 0! Using deps_count=%zu as fallback", deps_count);
+        build_order_count = deps_count;
+    }
 
     if (!build_order) {
         fprintf(stderr, "Error: Failed to determine build order\n");
@@ -652,8 +688,15 @@ install_package:
 
     if (build_order_count > 0) {
         print_section("Build order");
+        log_debug("Build order calculated: %zu packages", build_order_count);
         for (size_t i = 0; i < build_order_count; i++) {
+            if (build_order[i]) {
             printf("  %zu. %s\n", i + 1, build_order[i]);
+                log_developer("  Build order[%zu] = '%s'", i, build_order[i]);
+            } else {
+                printf("  %zu. (null)\n", i + 1);
+                log_warning("  Build order[%zu] is NULL!", i);
+            }
         }
     }
 
@@ -716,21 +759,41 @@ install_package:
     char **failed_deps = NULL;
 
     // Count dependencies (excluding main package)
+    log_developer("About to count dependencies: build_order=%p, build_order_count=%zu, package_name='%s'",
+                  (void*)build_order, build_order_count, package_name);
+    if (!build_order) {
+        log_error("build_order is NULL! This should not happen.");
+    }
     size_t dependency_count = 0;
+    log_developer("Counting dependencies from build_order (count=%zu, package_name='%s')", build_order_count, package_name);
     for (size_t i = 0; i < build_order_count; i++) {
-        if (strcmp(build_order[i], package_name) != 0) {
+        if (!build_order[i]) {
+            log_warning("  build_order[%zu] is NULL, skipping", i);
+            continue;
+        }
+        bool is_main = package_name_matches(build_order[i], package_name);
+        log_developer("  build_order[%zu]='%s' matches main package: %s", i, build_order[i], is_main ? "yes" : "no");
+        if (!is_main) {
             dependency_count++;
         }
     }
+    log_developer("Total dependency_count: %zu", dependency_count);
 
     // Install dependencies first
     if (dependency_count > 0) {
         print_section("Installing dependencies");
+        log_info("Installing %zu dependencies before main package", dependency_count);
+    } else {
+        log_warning("No dependencies to install (dependency_count=0, build_order_count=%zu)", build_order_count);
     }
 
     size_t current_dep = 0;
     for (size_t i = 0; i < build_order_count; i++) {
-        if (strcmp(build_order[i], package_name) == 0) {
+        if (!build_order[i]) {
+            log_warning("Skipping NULL build_order[%zu]", i);
+            continue;
+        }
+        if (package_name_matches(build_order[i], package_name)) {
             continue; // Install main package last
         }
 
@@ -771,11 +834,14 @@ install_package:
         }
 
         // Fetch source
+        log_debug("Fetching source for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         char *dep_source_dir = fetcher_fetch(fetcher, dep_pkg, force);
         if (!dep_source_dir) {
             fprintf(stderr, "Error: Failed to fetch source for %s\n", build_order[i]);
+            log_error("Failed to fetch source for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
             continue;
         }
+        log_developer("Source fetched for dependency: %s@%s -> %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", dep_source_dir);
 
         // Set package-specific install directory
         builder_config_set_package_dir(builder_config, dep_pkg->name, dep_pkg->version);
@@ -800,18 +866,23 @@ install_package:
         }
         output_capture_start(build_window_title);
 
+        log_debug("Building dependency: %s@%s in %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", build_dir);
         if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
             print_error("Failed to build dependency");
             fprintf(stderr, "  %s\n", build_order[i]);
+            log_error("Failed to build dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
             has_failures = true;
             failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
             if (failed_deps) {
                 failed_deps[failed_deps_count++] = strdup(build_order[i]);
             }
             free(dep_source_dir);
-            continue;
+            // Abort on error - don't continue building
+            log_error("Aborting installation due to build failure");
+            goto cleanup;
         }
+        log_info("Successfully built dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         output_capture_end(&output_buf);
 
         // Install
@@ -825,18 +896,23 @@ install_package:
         }
         output_capture_start(install_window_title);
 
+        log_debug("Installing dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
             output_capture_end(&output_buf);
             print_error("Failed to install dependency");
             fprintf(stderr, "  %s\n", build_order[i]);
+            log_error("Failed to install dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
             has_failures = true;
             failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
             if (failed_deps) {
                 failed_deps[failed_deps_count++] = strdup(build_order[i]);
             }
             free(dep_source_dir);
-            continue;
+            // Abort on error - don't continue installing
+            log_error("Aborting installation due to install failure");
+            goto cleanup;
         }
+        log_info("Successfully installed dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         output_capture_end(&output_buf);
 
         // Show completion
@@ -849,9 +925,11 @@ install_package:
         print_status_done(done_msg);
 
         // Create symlinks to main install directory
+        log_developer("Creating symlinks for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         builder_create_symlinks(builder_config, dep_pkg->name, dep_pkg->version);
 
         // Record in database with package-specific path
+        log_debug("Recording dependency in database: %s@%s -> %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", builder_config->install_dir);
         database_add_package(db, dep_pkg->name, dep_pkg->version, builder_config->install_dir, (const char **)dep_pkg->dependencies, dep_pkg->dependencies_count);
         free(dep_source_dir);
     }
@@ -862,13 +940,16 @@ install_package:
     }
     print_section("Installing package");
     print_progress("Installing", package_name);
+    log_info("Installing main package: %s@%s", package_name, package_version ? package_version : "latest");
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {
         // Set package-specific install directory
         builder_config_set_package_dir(builder_config, main_pkg->name, main_pkg->version);
 
+        log_debug("Fetching source for main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
         char *main_source_dir = fetcher_fetch(fetcher, main_pkg, force);
         if (main_source_dir) {
+            log_developer("Source fetched for main package: %s@%s -> %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", main_source_dir);
             char build_dir[1024];
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
 
@@ -888,7 +969,9 @@ install_package:
             }
             output_capture_start(main_build_title);
 
+            log_debug("Building main package: %s@%s in %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", build_dir);
             if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+                log_info("Successfully built main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
                 output_capture_end(&output_buf);
                 print_installing_compact(main_pkg->name, main_pkg->version);
                 output_buffer_init(&output_buf);
@@ -900,12 +983,16 @@ install_package:
                 }
                 output_capture_start(main_install_title);
 
+                log_debug("Installing main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
                 if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+                    log_info("Successfully installed main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
                     output_capture_end(&output_buf);
                     // Create symlinks to main install directory
+                    log_developer("Creating symlinks for main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
                     builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
 
                     // Record in database with package-specific path
+                    log_debug("Recording main package in database: %s@%s -> %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", builder_config->install_dir);
                     database_add_package(db, main_pkg->name, main_pkg->version, builder_config->install_dir, (const char **)main_pkg->dependencies, main_pkg->dependencies_count);
 
                     // Show completion
@@ -966,6 +1053,7 @@ install_package:
         has_failures = true;
     }
 
+cleanup:
     // Clean up failed dependencies list
     if (failed_deps) {
         for (int i = 0; i < failed_deps_count; i++) {
@@ -1024,6 +1112,7 @@ install_package:
 }
 
 static int cmd_list(int argc, char **argv) {
+    log_developer("cmd_list called with argc=%d", argc);
     (void)argc;
     (void)argv;
     const char *home = getenv("HOME");
@@ -1060,6 +1149,7 @@ static int cmd_list(int argc, char **argv) {
 }
 
 static int cmd_versions(int argc, char **argv) {
+    log_developer("cmd_versions called with argc=%d", argc);
     if (argc < 2) {
         fprintf(stderr, "Error: package name required\n");
         fprintf(stderr, "Usage: tsi versions <package>\n");
@@ -1143,6 +1233,7 @@ static int cmd_versions(int argc, char **argv) {
 }
 
 static int cmd_info(int argc, char **argv) {
+    log_developer("cmd_info called with argc=%d", argc);
     if (argc < 2) {
         fprintf(stderr, "Error: package name required\n");
         return 1;
@@ -1380,6 +1471,8 @@ static int cmd_info(int argc, char **argv) {
 }
 
 static int cmd_update(int argc, char **argv) {
+    log_developer("cmd_update called with argc=%d", argc);
+    log_info("Update command invoked");
     const char *repo_url = NULL;
     const char *local_path = NULL;
     const char *prefix = NULL;
@@ -1811,6 +1904,8 @@ static int cmd_update(int argc, char **argv) {
 }
 
 static int cmd_uninstall(int argc, char **argv) {
+    log_developer("cmd_uninstall called with argc=%d", argc);
+    log_info("Uninstall command invoked");
     const char *prefix = NULL;
 
     // Parse arguments
@@ -1906,7 +2001,7 @@ static int cmd_uninstall(int argc, char **argv) {
             }
         }
     }
-    
+
     if (!binary_removed) {
         // Binary removal failed, but continue with other cleanup
         fprintf(stderr, "Warning: Could not remove binary at: %s\n", bin_path);
@@ -1968,16 +2063,32 @@ static int cmd_uninstall(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     // Initialize logging from environment (must be first)
+    // Logging is always active with dev mode enabled by default
     int log_result = log_init_from_env();
     if (log_result != 0) {
         // Log initialization failed, but continue anyway
         fprintf(stderr, "Warning: Failed to initialize logging\n");
     }
-    
+
+    // Ensure logging is always enabled (dev mode by default)
+    // If environment didn't set a level, we keep the default LOG_LEVEL_DEVELOPER
+    if (log_get_level() == LOG_LEVEL_NONE) {
+        log_set_level(LOG_LEVEL_DEVELOPER);
+    }
+
+    // Disable console logging - log to file only
+    log_set_console(false);
+    log_set_file(true);
+
     // Log program start
     log_developer("TSI starting (argc=%d)", argc);
-    log_debug("Logging system initialized (level=%s)", log_level_name(log_get_level()));
-    
+    log_developer("Command line arguments:");
+    for (int i = 0; i < argc; i++) {
+        log_developer("  argv[%d] = '%s'", i, argv[i]);
+    }
+    log_debug("Logging system initialized (level=%s, console=disabled, file=enabled)",
+              log_level_name(log_get_level()));
+
     tui_style_reload_from_env();
 
     int write_idx = 1;
@@ -2044,7 +2155,7 @@ int main(int argc, char **argv) {
         log_cleanup();
         return 0;
     }
-    
+
     log_developer("Command: %s", argv[1]);
 
     if (strcmp(argv[1], "install") == 0) {
@@ -2056,15 +2167,19 @@ int main(int argc, char **argv) {
         return cmd_uninstall(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "remove") == 0) {
         // Package removal
+        log_info("Remove command invoked");
         if (argc < 3) {
+            log_error("Remove command called without package name");
             fprintf(stderr, "Error: package name required\n");
             return 1;
         }
+        log_debug("Removing package: %s", argv[2]);
         const char *home = getenv("HOME");
         if (!home) home = "/root";
         char db_dir[1024];
         int len = snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
         if (len < 0 || (size_t)len >= sizeof(db_dir)) {
+            log_error("Path too long for database directory");
             fprintf(stderr, "Error: Path too long\n");
             return 1;
         }
@@ -2073,24 +2188,30 @@ int main(int argc, char **argv) {
             char msg[256];
             snprintf(msg, sizeof(msg), "Removed %s", argv[2]);
             print_success(msg);
+            log_info("Package removed successfully: %s", argv[2]);
             database_free(db);
             return 0;
         } else {
             char warn_msg[256];
             snprintf(warn_msg, sizeof(warn_msg), "Package %s is not installed", argv[2]);
             print_warning(warn_msg);
+            log_warning("Package not installed, cannot remove: %s", argv[2]);
             database_free(db);
             return 1;
         }
     } else if (strcmp(argv[1], "list") == 0) {
+        log_info("List command invoked");
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {
+        log_info("Info command invoked");
         return cmd_info(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "versions") == 0) {
+        log_info("Versions command invoked");
         return cmd_versions(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "update") == 0) {
         return cmd_update(argc - 1, argv + 1);
     } else {
+        log_error("Unknown command: %s", argv[1]);
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
         print_usage(argv[0]);
         return 1;

@@ -1,4 +1,5 @@
 #include "database.h"
+#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,22 +8,31 @@
 #include <dirent.h>
 
 Database* database_new(const char *db_dir) {
+    log_developer("database_new called with db_dir='%s'", db_dir);
     Database *db = calloc(1, sizeof(Database));
-    if (!db) return NULL;
+    if (!db) {
+        log_error("Failed to allocate memory for Database");
+        return NULL;
+    }
 
     db->db_path = malloc(strlen(db_dir) + 20);
     snprintf(db->db_path, strlen(db_dir) + 20, "%s/installed.json", db_dir);
+    log_developer("Database path: %s", db->db_path);
 
     // Create directory if it doesn't exist
     struct stat st = {0};
     if (stat(db_dir, &st) == -1) {
+        log_debug("Database directory does not exist, creating: %s", db_dir);
         // Create directory (simple mkdir, no recursive)
         char cmd[512];
         snprintf(cmd, sizeof(cmd), "mkdir -p %s", db_dir);
         system(cmd);
+    } else {
+        log_developer("Database directory already exists: %s", db_dir);
     }
 
     database_load(db);
+    log_debug("Database initialized with %zu packages", db->packages_count);
     return db;
 }
 
@@ -240,8 +250,12 @@ bool database_load(Database *db) {
 }
 
 bool database_save(Database *db) {
+    log_debug("Saving database to: %s (%zu packages)", db->db_path, db->packages_count);
     FILE *f = fopen(db->db_path, "w");
-    if (!f) return false;
+    if (!f) {
+        log_error("Failed to open database file for writing: %s", db->db_path);
+        return false;
+    }
 
     fprintf(f, "{\n");
     fprintf(f, "  \"installed\": [\n");
@@ -281,6 +295,8 @@ bool database_is_installed(const Database *db, const char *package_name) {
 }
 
 bool database_add_package(Database *db, const char *name, const char *version, const char *install_path, const char **deps, size_t deps_count) {
+    log_debug("Adding package to database: %s@%s -> %s", name, version ? version : "latest", install_path);
+    log_developer("Package dependencies count: %zu", deps_count);
     // Check if already exists
     if (database_is_installed(db, name)) {
         return false;
@@ -304,12 +320,20 @@ bool database_add_package(Database *db, const char *name, const char *version, c
     }
 
     db->packages_count++;
-    return database_save(db);
+    bool saved = database_save(db);
+    if (saved) {
+        log_info("Package added to database: %s@%s", name, version ? version : "latest");
+    } else {
+        log_error("Failed to save database after adding package: %s@%s", name, version ? version : "latest");
+    }
+    return saved;
 }
 
 bool database_remove_package(Database *db, const char *package_name) {
+    log_debug("Removing package from database: %s", package_name);
     for (size_t i = 0; i < db->packages_count; i++) {
         if (strcmp(db->packages[i].name, package_name) == 0) {
+            log_info("Package found in database, removing: %s@%s", db->packages[i].name, db->packages[i].version ? db->packages[i].version : "unknown");
             // Free package data
             free(db->packages[i].name);
             free(db->packages[i].version);
@@ -327,9 +351,16 @@ bool database_remove_package(Database *db, const char *package_name) {
 
             db->packages_count--;
             db->packages = realloc(db->packages, sizeof(InstalledPackage) * db->packages_count);
-            return database_save(db);
+            bool saved = database_save(db);
+            if (saved) {
+                log_info("Package removed from database: %s", package_name);
+            } else {
+                log_error("Failed to save database after removing package: %s", package_name);
+            }
+            return saved;
         }
     }
+    log_warning("Package not found in database: %s", package_name);
     return false;
 }
 

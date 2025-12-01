@@ -9,7 +9,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.6.0/libseccomp-2.6.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -22,7 +25,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.6/libseccomp-2.5.6.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -35,7 +41,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.4/libseccomp-2.5.4.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -48,7 +57,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.3/libseccomp-2.5.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -61,7 +73,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.2/libseccomp-2.5.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -74,7 +89,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.1/libseccomp-2.5.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -87,7 +105,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.4.4/libseccomp-2.4.4.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -100,7 +121,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.0/libseccomp-2.5.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -113,7 +137,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.4.3/libseccomp-2.4.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -126,7 +153,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.4.2/libseccomp-2.4.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -139,7 +169,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.4.1/libseccomp-2.4.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -152,7 +185,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.4.0/libseccomp-2.4.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -165,7 +201,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.3.3/libseccomp-2.3.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -178,7 +217,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.3.2/libseccomp-2.3.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -191,7 +233,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.3.1/libseccomp-2.3.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -204,7 +249,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.3.0/libseccomp-2.3.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -217,7 +265,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.2.3/libseccomp-2.2.3.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -230,7 +281,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.2.2/libseccomp-2.2.2.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -243,7 +297,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.2.1/libseccomp-2.2.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -256,7 +313,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.2.0/libseccomp-2.2.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -269,7 +329,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.1.1/libseccomp-2.1.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -282,7 +345,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.1.0/libseccomp-2.1.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -295,7 +361,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.0.0/libseccomp-2.0.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -308,7 +377,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v1.0.1/libseccomp-1.0.1.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -321,7 +393,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v1.0.0/libseccomp-1.0.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -334,7 +409,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v0.1.0/libseccomp-0.1.0.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}
@@ -347,7 +425,10 @@
         "url": "https://github.com/seccomp/libseccomp/releases/download/v2.5.5/libseccomp-2.5.5.tar.gz"
       },
       "dependencies": [],
-      "build_dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
       "build_system": "autotools",
       "configure_args": [],
       "env": {}

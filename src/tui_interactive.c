@@ -3,12 +3,15 @@
 #include "resolver.h"
 #include "fetcher.h"
 #include "builder.h"
+#include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
@@ -20,15 +23,25 @@ static bool raw_mode = false;
 
 // Terminal setup
 void tui_setup_terminal(void) {
-    if (terminal_setup) return;
-
-    if (tcgetattr(STDIN_FILENO, &original_termios) == 0) {
-        terminal_setup = true;
+    if (terminal_setup) {
+        log_developer("Terminal already set up, skipping");
+        return;
     }
 
-    // Enable alternate screen buffer
+    log_debug("Setting up terminal");
+    if (tcgetattr(STDIN_FILENO, &original_termios) == 0) {
+        terminal_setup = true;
+        log_developer("Terminal attributes saved");
+    } else {
+        log_warning("Failed to get terminal attributes");
+    }
+
+    // Enable alternate screen buffer (saves current screen, shows blank)
     printf("\033[?1049h");
+    // Move cursor to home and clear screen
+    printf("\033[H\033[2J");
     fflush(stdout);
+    log_debug("Terminal setup completed");
 }
 
 void tui_restore_terminal(void) {
@@ -75,7 +88,11 @@ void tui_show_cursor(void) {
 }
 
 void tui_enable_raw_mode(void) {
-    if (!terminal_setup || raw_mode) return;
+    if (!terminal_setup || raw_mode) {
+        if (!terminal_setup) log_warning("Cannot enable raw mode: terminal not set up");
+        return;
+    }
+    log_debug("Enabling raw mode");
 
     // First, flush any pending input before changing terminal mode
     tcflush(STDIN_FILENO, TCIFLUSH);
@@ -90,8 +107,24 @@ void tui_enable_raw_mode(void) {
 
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0) {
         raw_mode = true;
-        // Clear any remaining input after enabling raw mode
+        log_debug("Raw mode enabled successfully");
+
+        // Aggressively drain all input after enabling raw mode
+        // This catches any newlines or other characters that were buffered
+        // Do this in a loop with delays to catch all buffered input
+        for (int attempt = 0; attempt < 5; attempt++) {
+            char c;
+            int drained = 0;
+            while (read(STDIN_FILENO, &c, 1) == 1 && drained < 100) {
+                drained++;
+            }
+            if (drained == 0) break;  // No more input to drain
+            usleep(10000);  // 10ms delay between attempts
+        }
+
+        // Final flush
         tcflush(STDIN_FILENO, TCIFLUSH);
+
         // Small delay to ensure terminal is ready
         usleep(50000);  // 50ms
     }
@@ -107,14 +140,157 @@ void tui_disable_raw_mode(void) {
 
 // Clear all pending input from stdin
 static void clear_pending_input(void) {
-    if (!raw_mode) return;
+    tcflush(STDIN_FILENO, TCIFLUSH);
 
-    // Drain all available input
-    char c;
-    while (read(STDIN_FILENO, &c, 1) == 1) {
-        // Discard all pending characters
+    int bytes_available = 0;
+    if (ioctl(STDIN_FILENO, FIONREAD, &bytes_available) == 0 && bytes_available > 0) {
+        char c;
+        int drained = 0;
+        while (read(STDIN_FILENO, &c, 1) == 1 && drained < 200) {
+            drained++;
+            if (ioctl(STDIN_FILENO, FIONREAD, &bytes_available) == 0 && bytes_available == 0) {
+                break;
+            }
+        }
     }
     tcflush(STDIN_FILENO, TCIFLUSH);
+}
+
+// Drain input before entering TUI mode (simplified version)
+static void drain_input_before_tui(void) {
+    struct termios temp_termios;
+    if (tcgetattr(STDIN_FILENO, &temp_termios) == 0) {
+        struct termios noncanon = temp_termios;
+        noncanon.c_lflag &= ~ICANON;
+        noncanon.c_cc[VMIN] = 0;
+        noncanon.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &noncanon);
+        usleep(20000);
+        clear_pending_input();
+        tcsetattr(STDIN_FILENO, TCSANOW, &temp_termios);
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+}
+
+// Get Unicode box drawing characters
+static void get_box_chars(bool *use_unicode, const char **tl, const char **tr,
+                          const char **bl, const char **br, const char **h, const char **v) {
+    const char *lang = getenv("LANG");
+    *use_unicode = (lang && strstr(lang, "UTF-8")) || getenv("LC_ALL");
+    if (!*use_unicode) *use_unicode = true; // Default to Unicode
+
+    *tl = *use_unicode ? "┌" : "+";
+    *tr = *use_unicode ? "┐" : "+";
+    *bl = *use_unicode ? "└" : "+";
+    *br = *use_unicode ? "┘" : "+";
+    *h = *use_unicode ? "─" : "-";
+    *v = *use_unicode ? "│" : "|";
+}
+
+// Draw a simple box border
+static void draw_box(int x, int y, int width, int height, const char *color) {
+    bool use_unicode;
+    const char *tl, *tr, *bl, *br, *h, *v;
+    get_box_chars(&use_unicode, &tl, &tr, &bl, &br, &h, &v);
+
+    if (color && supports_colors()) {
+        printf("%s", color);
+    }
+
+    for (int i = 0; i < height; i++) {
+        tui_move_cursor(y + i, x);
+        if (i == 0) {
+            printf("%s", tl);
+            for (int j = 0; j < width - 2; j++) printf("%s", h);
+            printf("%s", tr);
+        } else if (i == height - 1) {
+            printf("%s", bl);
+            for (int j = 0; j < width - 2; j++) printf("%s", h);
+            printf("%s", br);
+        } else {
+            printf("%s", v);
+            for (int j = 0; j < width - 2; j++) printf(" ");
+            printf("%s", v);
+        }
+    }
+
+    if (color && supports_colors()) {
+        printf("%s", COLOR_RESET);
+    }
+    fflush(stdout);
+}
+
+// Draw a header line
+static void draw_header(const char *icon, const char *title) {
+    tui_move_cursor(0, 0);
+    if (supports_colors()) {
+        printf("%s%s%s %s %s%s\n", COLOR_BRIGHT_MAGENTA, COLOR_BOLD, icon, title, COLOR_RESET, CLEAR_LINE);
+    } else {
+        printf("%s\n", title);
+    }
+}
+
+// Draw a footer line with instructions
+static void draw_footer(int y, const char *instructions) {
+    tui_move_cursor(y, 0);
+    if (supports_colors()) {
+        printf("%s%s%s\n", COLOR_DIM, instructions, COLOR_RESET);
+    } else {
+        printf("%s\n", instructions);
+    }
+}
+
+// Draw package info panel
+static void draw_package_info(Package *pkg, int x, int y) {
+    if (!pkg) return;
+
+    tui_move_cursor(y, x);
+    if (supports_colors()) {
+        if (pkg->name) {
+            printf("%s%s%s %s\n", COLOR_BRIGHT_CYAN, COLOR_BOLD, pkg->name, COLOR_RESET);
+        }
+    } else {
+        printf("%s\n", pkg->name ? pkg->name : "");
+    }
+
+    tui_move_cursor(y + 1, x);
+    if (pkg->version) {
+        if (supports_colors()) {
+            printf("%sVersion:%s %s%s%s\n", COLOR_DIM, COLOR_RESET, COLOR_BRIGHT_GREEN, pkg->version, COLOR_RESET);
+        } else {
+            printf("Version: %s\n", pkg->version);
+        }
+    }
+
+    tui_move_cursor(y + 2, x);
+    if (pkg->description) {
+        if (supports_colors()) {
+            printf("%s%s%s\n", COLOR_INFO, pkg->description, COLOR_RESET);
+        } else {
+            printf("%s\n", pkg->description);
+        }
+    }
+
+    if (pkg->dependencies_count > 0) {
+        tui_move_cursor(y + 4, x);
+        if (supports_colors()) {
+            printf("%sDependencies:%s ", COLOR_DIM, COLOR_RESET);
+        } else {
+            printf("Dependencies: ");
+        }
+        for (size_t i = 0; i < pkg->dependencies_count && i < 5; i++) {
+            if (i > 0) printf(", ");
+            if (supports_colors()) {
+                printf("%s%s%s", COLOR_BRIGHT_BLUE, pkg->dependencies[i], COLOR_RESET);
+            } else {
+                printf("%s", pkg->dependencies[i]);
+            }
+        }
+        if (pkg->dependencies_count > 5) {
+            printf(" ...");
+        }
+        printf("\n");
+    }
 }
 
 // Input handling
@@ -351,6 +527,7 @@ void menu_draw(Menu *menu, int x, int y, int width, int height) {
 int menu_show(Menu *menu) {
     if (!menu || menu->item_count == 0) return -1;
 
+    drain_input_before_tui();
     tui_setup_terminal();
     tui_enable_raw_mode();
     tui_hide_cursor();
@@ -363,68 +540,41 @@ int menu_show(Menu *menu) {
 
     int x = (width - menu_width) / 2;
     int y = (height - menu_height) / 2;
-
     menu->max_visible = menu_height - (menu->title ? 2 : 1);
 
-    // Draw initial screen before entering input loop
+    // Initial draw
     tui_clear_screen();
-    menu_draw(menu, x, y, menu_width, menu_height);
-    fflush(stdout);
+    draw_box(x, y, menu_width, menu_height, COLOR_BRIGHT_CYAN);
+    menu_draw(menu, x + 2, y + 1, menu_width - 4, menu_height - 2);
 
-    // Clear any pending input after initial draw
+    usleep(100000); // Give terminal time to display
+    clear_pending_input();
+    usleep(50000);
     clear_pending_input();
 
+    struct timeval ready_time;
+    gettimeofday(&ready_time, NULL);
+
     while (true) {
-        tui_clear_screen();
-
-        // Draw border
-        if (supports_colors()) {
-            printf("%s", COLOR_BRIGHT_CYAN);
-        }
-
-        // Check if terminal supports Unicode (simple heuristic)
-        const char *lang = getenv("LANG");
-        bool use_unicode = (lang && strstr(lang, "UTF-8")) || getenv("LC_ALL");
-        if (!use_unicode) {
-            // Try to detect UTF-8 support
-            use_unicode = true; // Default to trying Unicode
-        }
-
-        const char *top_left = use_unicode ? "┌" : "+";
-        const char *top_right = use_unicode ? "┐" : "+";
-        const char *bottom_left = use_unicode ? "└" : "+";
-        const char *bottom_right = use_unicode ? "┘" : "+";
-        const char *horizontal = use_unicode ? "─" : "-";
-        const char *vertical = use_unicode ? "│" : "|";
-
-        for (int i = 0; i < menu_height; i++) {
-            tui_move_cursor(y + i, x);
-            if (i == 0) {
-                printf("%s", top_left);
-                for (int j = 0; j < menu_width - 2; j++) printf("%s", horizontal);
-                printf("%s", top_right);
-            } else if (i == menu_height - 1) {
-                printf("%s", bottom_left);
-                for (int j = 0; j < menu_width - 2; j++) printf("%s", horizontal);
-                printf("%s", bottom_right);
-            } else {
-                printf("%s", vertical);
-                for (int j = 0; j < menu_width - 2; j++) printf(" ");
-                printf("%s", vertical);
-            }
-        }
-        if (supports_colors()) {
-            printf("%s", COLOR_RESET);
-        }
-        fflush(stdout); // Ensure border is drawn before menu content
-
+            tui_clear_screen();
+        draw_box(x, y, menu_width, menu_height, COLOR_BRIGHT_CYAN);
         menu_draw(menu, x + 2, y + 1, menu_width - 4, menu_height - 2);
-        fflush(stdout); // Ensure menu content is drawn
 
         KeyEvent key;
         if (!tui_read_key(&key)) {
             usleep(10000);
             continue;
+        }
+
+        // Ignore Enter keys that come too quickly (likely buffered)
+        if (key.code == KEY_ENTER) {
+            struct timeval current_time;
+            gettimeofday(&current_time, NULL);
+            long elapsed_ms = (current_time.tv_sec - ready_time.tv_sec) * 1000 +
+                             (current_time.tv_usec - ready_time.tv_usec) / 1000;
+            if (elapsed_ms < 100) {
+                continue;
+            }
         }
 
         switch (key.code) {
@@ -520,30 +670,8 @@ void panel_set_draw_callback(Panel *panel, void (*draw)(Panel *panel, void *data
 void panel_draw(Panel *panel) {
     if (!panel || !panel->visible) return;
 
-    // Draw border
     if (panel->border) {
-        if (supports_colors()) {
-            printf("%s", COLOR_BRIGHT_BLUE);
-        }
-        for (int i = 0; i < panel->height; i++) {
-            tui_move_cursor(panel->y + i, panel->x);
-            if (i == 0) {
-                printf("┌");
-                for (int j = 0; j < panel->width - 2; j++) printf("─");
-                printf("┐");
-            } else if (i == panel->height - 1) {
-                printf("└");
-                for (int j = 0; j < panel->width - 2; j++) printf("─");
-                printf("┘");
-            } else {
-                printf("│");
-                for (int j = 0; j < panel->width - 2; j++) printf(" ");
-                printf("│");
-            }
-        }
-        if (supports_colors()) {
-            printf("%s", COLOR_RESET);
-        }
+        draw_box(panel->x, panel->y, panel->width, panel->height, COLOR_BRIGHT_BLUE);
 
         // Draw title
         if (panel->title) {
@@ -556,7 +684,6 @@ void panel_draw(Panel *panel) {
         }
     }
 
-    // Call custom draw callback
     if (panel->draw) {
         panel->draw(panel, panel->data);
     }
@@ -594,6 +721,9 @@ void listview_set_filter(ListView *lv, const char *filter) {
     if (!lv) return;
     if (lv->filter) free(lv->filter);
     lv->filter = filter ? strdup(filter) : NULL;
+    // Reset selection and scroll when filter changes
+    lv->selected_index = 0;
+    lv->scroll_offset = 0;
 }
 
 static bool matches_filter(const char *item, const char *filter, bool case_sensitive) {
@@ -630,7 +760,7 @@ void listview_draw(ListView *lv, int x, int y, int width, int height) {
     for (size_t i = 0; i < lv->item_count; i++) {
         if (matches_filter(lv->items[i], lv->filter, lv->case_sensitive)) {
             if (visible_count >= lv->scroll_offset && visible_count < lv->scroll_offset + (size_t)height) {
-                bool is_selected = (visible_count == lv->selected_index - lv->scroll_offset);
+                bool is_selected = (visible_count == lv->selected_index);
 
                 tui_move_cursor(current_y++, x);
 
@@ -881,35 +1011,20 @@ void dropdown_add_item(DropdownMenu *dd, const char *item) {
 void dropdown_draw(DropdownMenu *dd) {
     if (!dd || !dd->visible) return;
 
-    // Draw border
-    if (supports_colors()) {
-        printf("%s", COLOR_BRIGHT_BLUE);
-    }
-
-    const char *lang = getenv("LANG");
-    bool use_unicode = (lang && strstr(lang, "UTF-8")) || getenv("LC_ALL");
-    const char *top_left = use_unicode ? "┌" : "+";
-    const char *top_right = use_unicode ? "┐" : "+";
-    const char *bottom_left = use_unicode ? "└" : "+";
-    const char *bottom_right = use_unicode ? "┘" : "+";
-    const char *horizontal = use_unicode ? "─" : "-";
-    const char *vertical = use_unicode ? "│" : "|";
-
     int max_height = (int)dd->item_count + 2;
     if (max_height > dd->height) max_height = dd->height;
 
-    for (int i = 0; i < max_height; i++) {
+    draw_box(dd->x, dd->y, dd->width, max_height, COLOR_BRIGHT_BLUE);
+
+    // Draw items
+    bool use_unicode;
+    const char *v;
+    get_box_chars(&use_unicode, NULL, NULL, NULL, NULL, NULL, &v);
+
+    for (int i = 1; i < max_height - 1; i++) {
         tui_move_cursor(dd->y + i, dd->x);
-        if (i == 0) {
-            printf("%s", top_left);
-            for (int j = 0; j < dd->width - 2; j++) printf("%s", horizontal);
-            printf("%s", top_right);
-        } else if (i == max_height - 1) {
-            printf("%s", bottom_left);
-            for (int j = 0; j < dd->width - 2; j++) printf("%s", horizontal);
-            printf("%s", bottom_right);
-        } else {
-            printf("%s", vertical);
+        printf("%s", v);
+
             size_t item_idx = (size_t)(i - 1) + dd->scroll_offset;
             bool is_selected = (item_idx == dd->selected_index);
 
@@ -933,11 +1048,7 @@ void dropdown_draw(DropdownMenu *dd) {
             } else {
                 for (int j = 0; j < dd->width - 2; j++) printf(" ");
             }
-            printf("%s", vertical);
-        }
-    }
-    if (supports_colors()) {
-        printf("%s", COLOR_RESET);
+        printf("%s", v);
     }
     fflush(stdout);
 }
@@ -1092,19 +1203,10 @@ void tui_show_dashboard(Database *db, const char *repo_dir) {
 
     while (true) {
         tui_clear_screen();
-
-        // Header
-        tui_move_cursor(0, 0);
-        if (supports_colors()) {
-            printf("%s%s%s TSI Dashboard %s%s\n", COLOR_BRIGHT_MAGENTA, COLOR_BOLD, ICON_ROCKET, COLOR_RESET, CLEAR_LINE);
-        } else {
-            printf("TSI Dashboard\n");
-        }
+        draw_header(ICON_ROCKET, "TSI Dashboard");
 
         // Stats panel
         int panel_y = 2;
-
-        // Installed packages
         size_t installed_count = 0;
         char **installed = database_list_installed(db, &installed_count);
 
@@ -1141,10 +1243,8 @@ void tui_show_dashboard(Database *db, const char *repo_dir) {
             free(installed);
         }
 
-        // Available packages
         size_t available_count = 0;
         char **available = repository_list_packages(repo, &available_count);
-
         tui_move_cursor(panel_y, width / 2 + 2);
         if (supports_colors()) {
             printf("%s%sAvailable Packages%s: %s%zu%s\n",
@@ -1154,20 +1254,12 @@ void tui_show_dashboard(Database *db, const char *repo_dir) {
             printf("Available Packages: %zu\n", available_count);
         }
 
-        // Footer with instructions
-        tui_move_cursor(height - 2, 0);
-        if (supports_colors()) {
-            printf("%sPress 'q' to quit, 'i' to install, 'b' to browse%s\n", COLOR_DIM, COLOR_RESET);
-        } else {
-            printf("Press 'q' to quit, 'i' to install, 'b' to browse\n");
-        }
-
         if (available) {
             for (size_t i = 0; i < available_count; i++) free(available[i]);
             free(available);
         }
 
-        fflush(stdout);
+        draw_footer(height - 2, "Press 'q' to quit, 'i' to install, 'b' to browse");
 
         KeyEvent key;
         if (tui_read_key(&key)) {
@@ -1202,8 +1294,13 @@ void tui_show_dashboard(Database *db, const char *repo_dir) {
 
 // Package browser implementation
 void tui_show_package_browser(const char *repo_dir) {
+    log_info("TUI package browser invoked");
+    log_developer("Opening package browser for repo_dir: %s", repo_dir);
     Repository *repo = repository_new(repo_dir);
-    if (!repo) return;
+    if (!repo) {
+        log_error("Failed to initialize repository for package browser");
+        return;
+    }
 
     tui_setup_terminal();
     tui_enable_raw_mode();
@@ -1237,14 +1334,7 @@ void tui_show_package_browser(const char *repo_dir) {
 
     while (true) {
         tui_clear_screen();
-
-        // Header
-        tui_move_cursor(0, 0);
-        if (supports_colors()) {
-            printf("%s%s%s Package Browser %s%s\n", COLOR_BRIGHT_MAGENTA, COLOR_BOLD, ICON_PACKAGE, COLOR_RESET, CLEAR_LINE);
-        } else {
-            printf("Package Browser\n");
-        }
+        draw_header(ICON_PACKAGE, "Package Browser");
 
         // Search bar
         tui_move_cursor(2, 0);
@@ -1262,7 +1352,6 @@ void tui_show_package_browser(const char *repo_dir) {
             }
         }
 
-        // Package list
         listview_draw(lv, 2, 4, list_width, list_height);
 
         // Package info panel
@@ -1270,66 +1359,11 @@ void tui_show_package_browser(const char *repo_dir) {
         if (selected) {
             Package *pkg = repository_get_package(repo, selected);
             if (pkg) {
-                int info_x = list_width + 4;
-                tui_move_cursor(4, info_x);
-                if (supports_colors()) {
-                    if (pkg->name) {
-                        printf("%s%s%s %s\n", COLOR_BRIGHT_CYAN, COLOR_BOLD, pkg->name, COLOR_RESET);
-                    } else {
-                        printf("\n");
-                    }
-                } else {
-                    printf("%s\n", pkg->name);
-                }
-
-                tui_move_cursor(5, info_x);
-                if (pkg->version) {
-                    if (supports_colors()) {
-                        printf("%sVersion:%s %s%s%s\n", COLOR_DIM, COLOR_RESET, COLOR_BRIGHT_GREEN, pkg->version, COLOR_RESET);
-                    } else {
-                        printf("Version: %s\n", pkg->version);
-                    }
-                }
-
-                tui_move_cursor(6, info_x);
-                if (pkg->description) {
-                    if (supports_colors()) {
-                        printf("%s%s%s\n", COLOR_INFO, pkg->description, COLOR_RESET);
-                    } else {
-                        printf("%s\n", pkg->description);
-                    }
-                }
-
-                if (pkg->dependencies_count > 0) {
-                    tui_move_cursor(8, info_x);
-                    if (supports_colors()) {
-                        printf("%sDependencies:%s ", COLOR_DIM, COLOR_RESET);
-                    } else {
-                        printf("Dependencies: ");
-                    }
-                    for (size_t i = 0; i < pkg->dependencies_count && i < 5; i++) {
-                        if (i > 0) printf(", ");
-                        if (supports_colors()) {
-                            printf("%s%s%s", COLOR_BRIGHT_BLUE, pkg->dependencies[i], COLOR_RESET);
-                        } else {
-                            printf("%s", pkg->dependencies[i]);
-                        }
-                    }
-                    if (pkg->dependencies_count > 5) {
-                        printf(" ...");
-                    }
-                    printf("\n");
-                }
+                draw_package_info(pkg, list_width + 4, 4);
             }
         }
 
-        // Footer
-        tui_move_cursor(height - 2, 0);
-        if (supports_colors()) {
-            printf("%s[Enter] Install  [ESC] Back  [/] Search  [q] Quit%s\n", COLOR_DIM, COLOR_RESET);
-        } else {
-            printf("[Enter] Install  [ESC] Back  [/] Search  [q] Quit\n");
-        }
+        draw_footer(height - 2, "[Enter] Install  [ESC] Back  [/] Search  [q] Quit");
 
         fflush(stdout);
 
@@ -1343,21 +1377,29 @@ void tui_show_package_browser(const char *repo_dir) {
             if (key.code == KEY_ENTER || key.code == KEY_ESC) {
                 searching = false;
                 listview_set_filter(lv, search_filter[0] ? search_filter : NULL);
+                // Continue to redraw immediately
+                continue;
             } else if (key.code == KEY_BACKSPACE) {
                 if (search_pos > 0) {
                     search_filter[--search_pos] = '\0';
                     listview_set_filter(lv, search_filter);
+                    // Continue to redraw immediately with updated filter
+                    continue;
                 }
             } else if (key.code == KEY_CHAR && isprint(key.ch) && search_pos < sizeof(search_filter) - 1) {
                 search_filter[search_pos++] = key.ch;
                 search_filter[search_pos] = '\0';
                 listview_set_filter(lv, search_filter);
+                // Continue to redraw immediately with updated filter
+                continue;
             }
         } else {
             if (key.code == KEY_CHAR && key.ch == '/') {
                 searching = true;
                 search_pos = 0;
                 search_filter[0] = '\0';
+                listview_set_filter(lv, NULL); // Clear filter when starting search
+                continue; // Redraw immediately to show search prompt
             } else if (key.code == KEY_CHAR && (key.ch == 'q' || key.ch == 'Q')) {
                 break;
             } else if (key.code == KEY_ESC) {
@@ -1382,10 +1424,15 @@ void tui_show_package_browser(const char *repo_dir) {
 
 // Interactive install with version selection dropdown
 int tui_interactive_install(const char *repo_dir, const char *db_dir, const char *tsi_prefix) {
+    log_info("TUI interactive install invoked");
+    log_developer("TUI install: repo_dir=%s, db_dir=%s, tsi_prefix=%s", repo_dir, db_dir ? db_dir : "NULL", tsi_prefix ? tsi_prefix : "NULL");
     (void)db_dir;  // Unused parameter
     (void)tsi_prefix;  // Unused parameter
     Repository *repo = repository_new(repo_dir);
-    if (!repo) return 1;
+    if (!repo) {
+        log_error("Failed to initialize repository for TUI install");
+        return 1;
+    }
 
     tui_setup_terminal();
     tui_enable_raw_mode();
@@ -1703,13 +1750,88 @@ __attribute__((unused)) static void draw_box_helper(int x, int y, int w, int box
 void tui_show_dashboard_enhanced(Database *db, const char *repo_dir) {
     if (!db) return;
 
+    // Always drain input before setting up terminal
+    // In canonical mode, input is buffered until newline, so we need to
+    // temporarily disable canonical mode to drain it
+    struct termios temp_termios;
+    if (tcgetattr(STDIN_FILENO, &temp_termios) == 0) {
+        // Temporarily disable canonical mode to drain input
+        struct termios noncanon = temp_termios;
+        noncanon.c_lflag &= ~ICANON;
+        noncanon.c_cc[VMIN] = 0;
+        noncanon.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &noncanon);
+
+        // Small delay to let terminal process mode change
+        usleep(20000);  // 20ms - increased delay
+
+        // Drain all available input (including any newlines)
+        // Use ioctl to check for available bytes
+        int bytes_available = 0;
+        int total_drained = 0;
+        for (int attempt = 0; attempt < 10; attempt++) {
+            if (ioctl(STDIN_FILENO, FIONREAD, &bytes_available) == 0 && bytes_available > 0) {
+                char c;
+                int count = 0;
+                while (read(STDIN_FILENO, &c, 1) == 1 && count < 200) {
+                    count++;
+                    total_drained++;
+                }
+            } else {
+                // No more input available, but try a few more times to catch delayed input
+                if (attempt < 5) {
+                    usleep(10000);  // 10ms delay
+                    continue;
+                }
+                break;
+            }
+            usleep(10000);  // 10ms between attempts
+        }
+
+        // Restore canonical mode and flush
+        tcsetattr(STDIN_FILENO, TCSANOW, &temp_termios);
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
     tui_setup_terminal();
     tui_enable_raw_mode();
     tui_hide_cursor();
 
     // Clear screen and any pending input immediately after setup
     tui_clear_screen();
+
+    // Aggressively clear any pending input after initial draw
+    // Do this multiple times with increasing delays to catch all buffered input
     clear_pending_input();
+    usleep(50000);  // 50ms - give time for any delayed input to arrive
+    clear_pending_input();
+    usleep(50000);  // 50ms
+    clear_pending_input();
+
+    // One more aggressive pass - drain everything
+    char c_drain;
+    int final_drain = 0;
+    while (read(STDIN_FILENO, &c_drain, 1) == 1 && final_drain < 50) {
+        final_drain++;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
+    // Wait a bit before accepting input to ensure any buffered input has been cleared
+    // This gives the terminal time to process all our input clearing
+    usleep(150000);  // 150ms - enough time for any delayed input to arrive
+
+    // One final aggressive drain after the wait
+    clear_pending_input();
+    char c2_drain;
+    int final_count = 0;
+    while (read(STDIN_FILENO, &c2_drain, 1) == 1 && final_count < 50) {
+        final_count++;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
+    // Track when we're ready to accept input
+    struct timeval ready_time;
+    gettimeofday(&ready_time, NULL);
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
@@ -2322,6 +2444,18 @@ void tui_show_dashboard_enhanced(Database *db, const char *repo_dir) {
         KeyEvent key;
         // Read key (non-blocking due to raw mode with VMIN=0, VTIME=1)
         if (tui_read_key(&key)) {
+            // Ignore Enter keys that come within 100ms of being ready (likely buffered)
+            if (key.code == KEY_ENTER) {
+                struct timeval current_time;
+                gettimeofday(&current_time, NULL);
+                long elapsed_ms = (current_time.tv_sec - ready_time.tv_sec) * 1000 +
+                                 (current_time.tv_usec - ready_time.tv_usec) / 1000;
+                if (elapsed_ms < 100) {
+                    // Enter came too quickly - likely buffered input, ignore it
+                    continue;
+                }
+            }
+
             if (searching) {
                 // Handle search input
                 if (key.code == KEY_ENTER || key.code == KEY_ESC) {
@@ -2465,6 +2599,8 @@ void tui_show_dashboard_enhanced(Database *db, const char *repo_dir) {
 
 // Main TUI menu
 int tui_main_menu(void) {
+    log_info("TUI main menu invoked");
+    log_developer("Entering TUI main menu");
     const char *home = getenv("HOME");
     if (!home) home = "/root";
 

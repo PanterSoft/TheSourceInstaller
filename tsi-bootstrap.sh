@@ -1,7 +1,7 @@
 #!/bin/sh
 # TSI One-Line Bootstrap Installer
 # Downloads TSI source and installs it
-# Works on systems with only a C compiler
+# Works on systems with only a C compiler (no make required)
 
 set -e
 
@@ -143,21 +143,13 @@ main() {
 
     log_info "Found C compiler: $CC ($($CC --version 2>&1 | head -1))"
 
-    # Check for make
-    if ! command_exists make; then
-        log_error "make is required but not found"
-        exit 1
-    fi
-
-    log_info "Found make: $(make --version 2>&1 | head -1)"
-
     # Create install directory
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
     # Check if we should update source in repair mode
     UPDATE_SOURCE=false
-    if [ "$REPAIR_MODE" = true ] && [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
+    if [ "$REPAIR_MODE" = true ] && [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
         if command_exists git && [ -d "tsi/.git" ]; then
             log_info "Checking for source updates..."
             cd tsi
@@ -204,7 +196,7 @@ main() {
     fi
 
     # Check if TSI is already downloaded
-    if [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
+    if [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
         if [ "$REPAIR_MODE" = false ]; then
             log_info "TSI source already exists, using existing copy"
         fi
@@ -230,7 +222,7 @@ main() {
 
         # Fallback: Download as tarball (only if git clone didn't succeed)
         if [ "$GIT_CLONE_SUCCESS" = false ]; then
-            if [ ! -d "tsi" ] || [ ! -f "tsi/src/Makefile" ]; then
+            if [ ! -d "tsi" ] || [ ! -f "tsi/src/main.c" ]; then
                 log_info "Downloading TSI as tarball..."
                 tarball_url="https://github.com/PanterSoft/tsi/archive/refs/heads/${TSI_BRANCH}.tar.gz"
                 tarball="tsi-${TSI_BRANCH}.tar.gz"
@@ -258,7 +250,7 @@ main() {
         fi
 
         # Change into tsi directory (after either git clone or tarball extraction)
-        if [ -d "tsi" ] && [ -f "tsi/src/Makefile" ]; then
+        if [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
             cd tsi
         else
             log_error "TSI source directory not found after download"
@@ -267,7 +259,7 @@ main() {
     fi
 
     # Verify source directory exists
-    if [ ! -d "src" ] || [ ! -f "src/Makefile" ]; then
+    if [ ! -d "src" ] || [ ! -f "src/main.c" ]; then
         log_error "TSI source directory not found: src/"
         exit 1
     fi
@@ -282,22 +274,56 @@ main() {
         export CC
     fi
 
-    if make clean 2>/dev/null; then
-        log_info "Cleaned previous build"
+    # Clean previous build
+    log_info "Cleaning previous build..."
+    rm -rf build bin
+    mkdir -p build bin
+
+    # Compile TSI directly without make
+    log_info "Compiling TSI source files..."
+
+    # CFLAGS
+    CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L"
+
+    # Detect OS for static linking (only works on Linux)
+    UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
+    if [ "$UNAME_S" = "Linux" ]; then
+        LDFLAGS="-static"
+    else
+        LDFLAGS=""
     fi
 
-    if make; then
-        log_info "TSI built successfully"
-    else
-        log_error "Build failed"
+    # Compile all C source files
+    OBJECTS=""
+    for c_file in *.c; do
+        if [ -f "$c_file" ]; then
+            obj_file="build/${c_file%.c}.o"
+            log_info "  Compiling $c_file..."
+            if ! $CC $CFLAGS -c "$c_file" -o "$obj_file"; then
+                log_error "Failed to compile $c_file"
+                exit 1
+            fi
+            OBJECTS="$OBJECTS $obj_file"
+        fi
+    done
+
+    # Link
+    log_info "Linking TSI binary..."
+    if ! $CC $OBJECTS -o "bin/tsi" $LDFLAGS; then
+        log_error "Failed to link TSI binary"
         exit 1
     fi
+
+    log_info "TSI built successfully"
 
     # Verify binary was created
     if [ ! -f "bin/tsi" ]; then
         log_error "Binary not found after build: bin/tsi"
         exit 1
     fi
+
+    # Make binary executable
+    chmod +x bin/tsi
 
     # Install
     log_info ""

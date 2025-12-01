@@ -6,8 +6,16 @@
     "type": "tarball",
     "url": "https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz"
   },
-  "dependencies": ["zlib", "libpng", "bzip2"],
-  "build_dependencies": ["pkg-config"],
+  "dependencies": [
+    "zlib",
+    "libpng",
+    "bzip2"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [
     "--with-zlib",
@@ -16,4 +24,3 @@
   ],
   "env": {}
 }
-

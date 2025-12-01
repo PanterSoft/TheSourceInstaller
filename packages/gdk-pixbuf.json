@@ -6,10 +6,19 @@
     "type": "tarball",
     "url": "https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.10.tar.xz"
   },
-  "dependencies": ["glib", "libpng", "libjpeg-turbo"],
-  "build_dependencies": ["pkg-config", "meson"],
+  "dependencies": [
+    "glib",
+    "libpng",
+    "libjpeg-turbo"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "meson",
+    "ninja",
+    "python",
+    "coreutils"
+  ],
   "build_system": "meson",
   "configure_args": [],
   "env": {}
 }
-

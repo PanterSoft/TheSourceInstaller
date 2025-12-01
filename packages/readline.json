@@ -6,10 +6,14 @@
     "type": "tarball",
     "url": "https://ftp.gnu.org/gnu/readline/readline-8.2.tar.gz"
   },
-  "dependencies": ["ncurses"],
-  "build_dependencies": [],
+  "dependencies": [
+    "ncurses"
+  ],
+  "build_dependencies": [
+    "make",
+    "coreutils"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
 }
-

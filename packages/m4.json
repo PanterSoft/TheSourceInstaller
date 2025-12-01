@@ -7,7 +7,11 @@
     "url": "https://ftp.gnu.org/gnu/m4/m4-1.4.19.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": [],
+  "build_dependencies": [
+    "make",
+    "coreutils",
+    "sed"
+  ],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}

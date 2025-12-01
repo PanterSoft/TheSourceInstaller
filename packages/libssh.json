@@ -6,8 +6,16 @@
     "type": "tarball",
     "url": "https://www.libssh.org/files/0.10/libssh-0.10.6.tar.xz"
   },
-  "dependencies": ["openssl", "zlib"],
-  "build_dependencies": ["pkg-config", "cmake"],
+  "dependencies": [
+    "openssl",
+    "zlib"
+  ],
+  "build_dependencies": [
+    "pkg-config",
+    "cmake",
+    "make",
+    "coreutils"
+  ],
   "build_system": "cmake",
   "cmake_args": [
     "-DCMAKE_BUILD_TYPE=Release",
@@ -15,4 +23,3 @@
   ],
   "env": {}
 }
-
