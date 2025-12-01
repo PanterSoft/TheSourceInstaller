@@ -121,10 +121,14 @@ echo ""
 
 # Check if TSI is in PATH
 if command -v tsi >/dev/null 2>&1; then
-    TSI_VERSION=$("$TSI_PREFIX/bin/tsi" --version 2>/dev/null || echo "unknown")
     echo -e "${GREEN}✓${RESET} TSI is available in PATH"
-    echo -e "  Version: $TSI_VERSION"
     echo -e "  Location: $(command -v tsi)"
+    # Try to get version, but make it non-blocking
+    # Use a simple approach: try to read version, but don't wait if it hangs
+    TSI_VERSION=$( ("$TSI_PREFIX/bin/tsi" --version 2>/dev/null || echo "unknown") | head -1 )
+    if [ "$TSI_VERSION" != "unknown" ] && [ -n "$TSI_VERSION" ]; then
+        echo -e "  Version: $TSI_VERSION"
+    fi
 else
     echo -e "${YELLOW}⚠${RESET} TSI is not in your PATH"
     echo ""

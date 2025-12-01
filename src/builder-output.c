@@ -298,15 +298,54 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                      main_install_dir, bootstrap_path, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         } else {
             log_warning("No essential system directories found, using only TSI PATH for bootstrap");
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+        char compiler_dir[512] = "";
+        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+        struct stat st;
+        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+        if (strlen(compiler_dir) > 0 && has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else if (strlen(compiler_dir) > 0) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else if (has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else {
+            // Fallback: use TSI PATH only (shouldn't happen if system has a compiler and /bin)
+            log_warning("C compiler and /bin not found, using only TSI PATH");
             snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                      main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         }
-    } else {
-        // Normal mode: Only use TSI-installed packages and tools
-        // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
-        // Restrict all paths to only TSI to ensure complete isolation from system packages
-        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    }
+
+    // Apply package-specific environment variables
+    if (pkg->env_count > 0) {
+        for (size_t i = 0; i < pkg->env_count; i++) {
+            if (pkg->env_keys[i] && pkg->env_values[i]) {
+                // Append to env string: KEY=VALUE
+                size_t env_len = strlen(env);
+                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 2; // +2 for = and space
+                if (needed < sizeof(env)) {
+                    if (env_len > 0) {
+                        strcat(env, " ");
+                    }
+                    strcat(env, pkg->env_keys[i]);
+                    strcat(env, "=");
+                    strcat(env, pkg->env_values[i]);
+                    log_developer("Added package env: %s=%s", pkg->env_keys[i], pkg->env_values[i]);
+                }
+            }
+        }
     }
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
@@ -552,15 +591,54 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
                      main_install_dir, bootstrap_path, main_install_dir, main_install_dir);
         } else {
             log_warning("No essential system directories found, using only TSI PATH for bootstrap install");
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+             main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+        char compiler_dir[512] = "";
+        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+        struct stat st;
+        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+        if (strlen(compiler_dir) > 0 && has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+        } else if (strlen(compiler_dir) > 0) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+        } else if (has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir);
+        } else {
+            // Fallback: use TSI PATH only
+            log_warning("C compiler and /bin not found, using only TSI PATH for install");
             snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
                      main_install_dir, main_install_dir, main_install_dir);
         }
-    } else {
-        // Normal mode: Only use TSI-installed packages and tools
-        // PATH only includes TSI's bin directory (build tools must be installed via TSI first)
-        // Restrict all paths to only TSI to ensure complete isolation from system packages
-        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                 main_install_dir, main_install_dir, main_install_dir);
+    }
+
+    // Apply package-specific environment variables
+    if (pkg->env_count > 0) {
+        for (size_t i = 0; i < pkg->env_count; i++) {
+            if (pkg->env_keys[i] && pkg->env_values[i]) {
+                // Append to env string: KEY=VALUE
+                size_t env_len = strlen(env);
+                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 2; // +2 for = and space
+                if (needed < sizeof(env)) {
+                    if (env_len > 0) {
+                        strcat(env, " ");
+                    }
+                    strcat(env, pkg->env_keys[i]);
+                    strcat(env, "=");
+                    strcat(env, pkg->env_values[i]);
+                    log_developer("Added package env for install: %s=%s", pkg->env_keys[i], pkg->env_values[i]);
+                }
+            }
+        }
     }
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";

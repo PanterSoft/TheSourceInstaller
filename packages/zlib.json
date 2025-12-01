@@ -12,6 +12,8 @@
   "configure_args": [
     "--static"
   ],
-  "env": {}
+  "env": {
+    "CFLAGS": "-O2 -g -Wno-error"
+  }
 }
 

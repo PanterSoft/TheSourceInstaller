@@ -878,7 +878,9 @@ install_package:
                 failed_deps[failed_deps_count++] = strdup(build_order[i]);
             }
             free(dep_source_dir);
-            continue;
+            // Abort on error - don't continue building
+            log_error("Aborting installation due to build failure");
+            goto cleanup;
         }
         log_info("Successfully built dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         output_capture_end(&output_buf);
@@ -906,7 +908,9 @@ install_package:
                 failed_deps[failed_deps_count++] = strdup(build_order[i]);
             }
             free(dep_source_dir);
-            continue;
+            // Abort on error - don't continue installing
+            log_error("Aborting installation due to install failure");
+            goto cleanup;
         }
         log_info("Successfully installed dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
         output_capture_end(&output_buf);
@@ -1049,6 +1053,7 @@ install_package:
         has_failures = true;
     }
 
+cleanup:
     // Clean up failed dependencies list
     if (failed_deps) {
         for (int i = 0; i < failed_deps_count; i++) {

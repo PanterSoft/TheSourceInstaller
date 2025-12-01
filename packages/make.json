@@ -8,7 +8,10 @@
   },
   "dependencies": [],
   "build_dependencies": [],
-  "build_system": "autotools",
-  "configure_args": [],
+  "build_system": "custom",
+  "build_commands": [
+    "sh build.sh",
+    "./make install prefix=$TSI_INSTALL_DIR"
+  ],
   "env": {}
 }
