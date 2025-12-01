@@ -43,10 +43,9 @@ download_tarball() {
 check_tsi_installed() {
     local tsi_bin="$PREFIX/bin/tsi"
     if [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ]; then
-        # Try to run tsi --version
-        if "$tsi_bin" --version >/dev/null 2>&1; then
-            return 0
-        fi
+        # Just check if file exists and is executable, don't try to run it
+        # (running --version might hang)
+        return 0
     fi
     return 1
 }
@@ -231,9 +230,32 @@ main() {
                     log_info "Extracting tarball..."
                     if command_exists tar; then
                         tar -xzf "$tarball" 2>/dev/null || tar -xf "$tarball" 2>/dev/null
-                        # Rename extracted directory
-                        if [ -d "tsi-${TSI_BRANCH}" ]; then
-                            mv "tsi-${TSI_BRANCH}" tsi
+                        # Find and rename extracted directory (GitHub tarballs can have various names)
+                        # Common patterns: tsi-main, tsi-${TSI_BRANCH}, TheSourceInstaller-main, etc.
+                        EXTRACTED_DIR=""
+                        for possible_name in "tsi-${TSI_BRANCH}" "tsi-main" "TheSourceInstaller-${TSI_BRANCH}" "TheSourceInstaller-main" "tsi"; do
+                            if [ -d "$possible_name" ] && [ -f "$possible_name/src/main.c" ]; then
+                                EXTRACTED_DIR="$possible_name"
+                                break
+                            fi
+                        done
+                        # If no exact match, find any directory that contains src/main.c
+                        if [ -z "$EXTRACTED_DIR" ]; then
+                            for dir in */; do
+                                if [ -d "$dir/src" ] && [ -f "$dir/src/main.c" ]; then
+                                    EXTRACTED_DIR="${dir%/}"
+                                    break
+                                fi
+                            done
+                        fi
+                        if [ -n "$EXTRACTED_DIR" ] && [ "$EXTRACTED_DIR" != "tsi" ]; then
+                            log_info "Renaming extracted directory: $EXTRACTED_DIR -> tsi"
+                            mv "$EXTRACTED_DIR" tsi
+                        elif [ -z "$EXTRACTED_DIR" ]; then
+                            log_error "Could not find TSI source directory after extraction"
+                            log_error "Extracted contents:"
+                            ls -la
+                            exit 1
                         fi
                         rm -f "$tarball"
                         log_info "Tarball extracted successfully"
@@ -362,27 +384,14 @@ main() {
     fi
 
     # Initialize package repository (only for fresh installs, not repair mode)
+    # Skip automatic update to avoid hanging - user can run 'tsi update' manually
     if [ "$REPAIR_MODE" != true ]; then
         log_info ""
-        log_info "Initializing package repository..."
-        # Run update non-interactively (skip TSI self-update prompt by answering 'n')
-        # Temporarily disable set -e to capture exit code properly
-        set +e
-        UPDATE_OUTPUT=$(echo "n" | "$PREFIX/bin/tsi" update 2>&1)
-        UPDATE_EXIT=$?
-        set -e
-
-        if [ $UPDATE_EXIT -eq 0 ] && echo "$UPDATE_OUTPUT" | grep -q "Repository updated successfully"; then
-            log_info "✓ Package repository initialized"
-        else
-            # Check if repository directory was created (might have succeeded but output was different)
-            if [ -d "$PREFIX/repos" ] && [ -n "$(ls -A "$PREFIX/repos" 2>/dev/null)" ]; then
-                log_info "✓ Package repository initialized"
-            else
-                log_warn "Could not initialize package repository automatically"
-                log_warn "You can run 'tsi update' manually to download packages"
-            fi
-        fi
+        log_info "Creating package repository directory..."
+        mkdir -p "$PREFIX/repos"
+        log_info "✓ Package repository directory created"
+        log_info ""
+        log_info "Note: Run 'tsi update' after installation to download package definitions"
     fi
 
     log_info ""
