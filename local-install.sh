@@ -114,28 +114,36 @@ if ! echo '#include <stdio.h>' | $CC -E -x c - 2>/dev/null >/dev/null; then
     fi
 fi
 
-# CFLAGS
-CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
+# CFLAGS (suppress warnings, only show errors)
+CFLAGS="-w -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
 
 # Detect OS for static linking (only works on Linux)
+# Note: We'll try static linking first and fall back to dynamic if it fails
 UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
-if [ "$UNAME_S" = "Linux" ]; then
-    LDFLAGS="-static"
-else
-    LDFLAGS=""
-fi
 
-# Compile all C source files
+# Compile all C source files (exclude TUI components)
 echo "  Compiling source files..."
 OBJECTS=""
 COMPILED_COUNT=0
-TOTAL_FILES=$(ls -1 *.c 2>/dev/null | wc -l | tr -d ' ')
+# Count files excluding tui_interactive.c and tui_style.c
+TOTAL_FILES=0
 for c_file in *.c; do
-    if [ -f "$c_file" ]; then
+    if [ -f "$c_file" ] && [ "$c_file" != "tui_interactive.c" ] && [ "$c_file" != "tui_style.c" ]; then
+        TOTAL_FILES=$((TOTAL_FILES + 1))
+    fi
+done
+
+if [ "$TOTAL_FILES" -eq 0 ]; then
+    echo -e "${RED}✗ No C source files found${RESET}"
+    exit 1
+fi
+
+for c_file in *.c; do
+    if [ -f "$c_file" ] && [ "$c_file" != "tui_interactive.c" ] && [ "$c_file" != "tui_style.c" ]; then
         COMPILED_COUNT=$((COMPILED_COUNT + 1))
         echo -n "    [$COMPILED_COUNT/$TOTAL_FILES] Compiling $c_file... "
         OBJECTS="$OBJECTS build/${c_file%.c}.o"
-        # Capture compiler output
+        # Capture compiler output (warnings suppressed by -w, only errors shown)
         COMPILE_OUTPUT=$($CC $CFLAGS -c "$c_file" -o "build/${c_file%.c}.o" 2>&1)
         COMPILE_EXIT=$?
 
@@ -147,7 +155,7 @@ for c_file in *.c; do
             exit 1
         fi
 
-        # Show warnings if any, otherwise show success
+        # Show errors if any, otherwise show success (warnings are suppressed)
         if echo "$COMPILE_OUTPUT" | grep -q .; then
             echo ""
             echo "$COMPILE_OUTPUT" | head -5 | sed 's/^/      /'
@@ -158,11 +166,27 @@ for c_file in *.c; do
 done
 echo "  Compiled $COMPILED_COUNT source files"
 
-# Link
+# Link (try static first, fall back to dynamic if static fails)
 echo "  Linking binary..."
-if ! $CC $LDFLAGS $OBJECTS -o bin/tsi; then
-    echo -e "${RED}✗ Linking failed${RESET}"
-    exit 1
+UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
+LINK_SUCCESS=false
+if [ "$UNAME_S" = "Linux" ]; then
+    # Try static linking first (suppress warnings, only show errors)
+    if $CC $OBJECTS -o bin/tsi -static -w 2>&1; then
+        LINK_SUCCESS=true
+    else
+        # Static linking failed, try dynamic linking
+        echo "    Static linking failed, trying dynamic linking..."
+        rm -f bin/tsi
+    fi
+fi
+
+# If static linking didn't work or we're not on Linux, try dynamic linking
+if [ "$LINK_SUCCESS" = false ]; then
+    if ! $CC $OBJECTS -o bin/tsi -w 2>&1; then
+        echo -e "${RED}✗ Linking failed${RESET}"
+        exit 1
+    fi
 fi
 
 if [ -f "bin/tsi" ]; then
