@@ -100,6 +100,88 @@ check_tsi_outdated() {
     return 1
 }
 
+# Get the current version/commit of existing source files
+# Returns the commit hash if it's a git repo, empty string otherwise
+get_source_version() {
+    source_dir="$1"
+    if [ ! -d "$source_dir" ] || [ ! -f "$source_dir/src/main.c" ]; then
+        return 1
+    fi
+
+    # Check if it's a git repository
+    if command_exists git && [ -d "$source_dir/.git" ]; then
+        git_cmd=$(get_command_path git)
+        cd "$source_dir"
+        # Get current commit hash
+        COMMIT=$("$git_cmd" rev-parse HEAD 2>/dev/null)
+        cd - >/dev/null 2>&1
+        if [ -n "$COMMIT" ]; then
+            echo "$COMMIT"
+            return 0
+        fi
+    fi
+
+    # Not a git repo or git not available
+    return 1
+}
+
+# Check if existing source matches the target version
+# Returns 0 if source should be used, 1 if it should be re-downloaded
+check_source_version() {
+    source_dir="$1"
+    target_branch="$2"
+
+    if [ ! -d "$source_dir" ] || [ ! -f "$source_dir/src/main.c" ]; then
+        return 1  # No source, need to download
+    fi
+
+    # If it's a git repo, check if it matches the target branch
+    if command_exists git && [ -d "$source_dir/.git" ]; then
+        git_cmd=$(get_command_path git)
+        cd "$source_dir"
+
+        # Check current branch
+        CURRENT_BRANCH=$("$git_cmd" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+        # If we're on the target branch, check if we can fetch and compare
+        if [ "$CURRENT_BRANCH" = "$target_branch" ]; then
+            # Try to fetch latest (non-blocking, don't fail if network is down)
+            "$git_cmd" fetch origin "$target_branch" >/dev/null 2>&1 || true
+
+            # Compare local and remote commits
+            LOCAL_COMMIT=$("$git_cmd" rev-parse HEAD 2>/dev/null)
+            REMOTE_COMMIT=$("$git_cmd" rev-parse "origin/$target_branch" 2>/dev/null || echo "")
+
+            cd - >/dev/null 2>&1
+
+            if [ -n "$LOCAL_COMMIT" ] && [ -n "$REMOTE_COMMIT" ]; then
+                if [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ]; then
+                    # Source matches target version
+                    return 0
+                else
+                    # Source is different from target, need to update
+                    log_info "Source version mismatch (local: ${LOCAL_COMMIT:0:8}, target: ${REMOTE_COMMIT:0:8})"
+                    return 1
+                fi
+            elif [ -n "$LOCAL_COMMIT" ]; then
+                # Can't fetch remote, but we have local source - use it
+                log_info "Using existing source (commit: ${LOCAL_COMMIT:0:8}, cannot verify remote)"
+                return 0
+            fi
+        else
+            # On different branch, need to switch or re-download
+            log_info "Source is on branch '$CURRENT_BRANCH', target is '$target_branch'"
+            cd - >/dev/null 2>&1
+            return 1
+        fi
+    else
+        # Not a git repo - we can't verify version, so be conservative
+        # If it's not a git repo and we want a specific branch, re-download to be safe
+        log_info "Source is not a git repository, cannot verify version"
+        return 1
+    fi
+}
+
 main() {
     # Parse command line arguments
     while [ $# -gt 0 ]; do
@@ -230,13 +312,31 @@ main() {
         rm -rf tsi
     fi
 
-    # Check if TSI is already downloaded
+    # Check if TSI is already downloaded and verify version
     if [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
         if [ "$REPAIR_MODE" = false ]; then
-            log_info "TSI source already exists, using existing copy"
+            log_info "TSI source already exists, checking version..."
+            if check_source_version "tsi" "$TSI_BRANCH"; then
+                CURRENT_VERSION=$(get_source_version "tsi")
+                if [ -n "$CURRENT_VERSION" ]; then
+                    log_info "Using existing source (version: ${CURRENT_VERSION:0:8})"
+                else
+                    log_info "Using existing source"
+                fi
+                cd tsi
+            else
+                log_info "Existing source version doesn't match target, will re-download..."
+                rm -rf tsi
+                # Fall through to download section
+            fi
+        else
+            # In repair mode, we already handled version checking above
+            cd tsi
         fi
-        cd tsi
-    else
+    fi
+
+    # Download source if needed
+    if [ ! -d "tsi" ] || [ ! -f "tsi/src/main.c" ]; then
         log_info "Downloading TSI source code..."
 
         # Try git clone first (if git is available)
@@ -314,6 +414,11 @@ main() {
         # Change into tsi directory (after either git clone or tarball extraction)
         if [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
             cd tsi
+            # Log the version we downloaded
+            DOWNLOADED_VERSION=$(get_source_version ".")
+            if [ -n "$DOWNLOADED_VERSION" ]; then
+                log_info "Downloaded source (version: ${DOWNLOADED_VERSION:0:8})"
+            fi
         else
             log_error "TSI source directory not found after download"
             exit 1
@@ -402,13 +507,13 @@ main() {
     # CFLAGS (suppress warnings, only show errors)
     CFLAGS="-w -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
 
-    # Compile all C source files
+    # Compile all C source files (exclude TUI components)
     OBJECTS=""
     COMPILED_COUNT=0
-    # Count files in a POSIX-compliant way
+    # Count files in a POSIX-compliant way, excluding tui_interactive.c and tui_style.c
     TOTAL_FILES=0
     for c_file in *.c; do
-        if [ -f "$c_file" ]; then
+        if [ -f "$c_file" ] && [ "$c_file" != "tui_interactive.c" ] && [ "$c_file" != "tui_style.c" ]; then
             TOTAL_FILES=$((TOTAL_FILES + 1))
         fi
     done
@@ -419,7 +524,7 @@ main() {
     fi
 
     for c_file in *.c; do
-        if [ -f "$c_file" ]; then
+        if [ -f "$c_file" ] && [ "$c_file" != "tui_interactive.c" ] && [ "$c_file" != "tui_style.c" ]; then
             COMPILED_COUNT=$((COMPILED_COUNT + 1))
             log_info "  [$COMPILED_COUNT/$TOTAL_FILES] Compiling $c_file..."
             # Use POSIX-compliant parameter expansion
@@ -523,10 +628,27 @@ main() {
     log_info "TSI is isolated: it uses its own bin directory ($PREFIX/bin)"
     log_info "and prefers TSI-installed tools over system tools."
     log_info ""
-    log_info "Add to your PATH:"
-    log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
-    log_info ""
-    log_info "Or add to your shell profile:"
+
+    # Automatically add TSI to PATH for current terminal session
+    # Check if we're in an interactive shell (not piped)
+    if [ -t 0 ] && [ -t 1 ]; then
+        # Interactive terminal - export PATH for current session
+        export PATH="$PREFIX/bin:$PATH"
+        log_info "✓ Added TSI to PATH for current terminal session"
+        log_info ""
+        log_info "You can now use 'tsi' command immediately!"
+        log_info ""
+    else
+        # Piped execution (curl ... | sh) - can't modify parent shell
+        # Output export command for user to run
+        log_info "To use TSI in this terminal, run:"
+        log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
+        log_info ""
+        log_info "Or use: eval \"\$(curl -fsSL ... | sh)\" to auto-configure"
+        log_info ""
+    fi
+
+    log_info "To add permanently to your shell profile:"
     if [ -n "$ZSH_VERSION" ]; then
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
         log_info ""
