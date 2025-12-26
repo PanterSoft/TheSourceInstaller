@@ -1,6 +1,5 @@
 #include "builder.h"
 #include "package.h"
-#include "tui.h"
 #include "log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +7,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <sys/wait.h>
 #include <dirent.h>
 
@@ -155,7 +153,7 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
         if (status != 0) {
             char warn_msg[512];
             snprintf(warn_msg, sizeof(warn_msg), "Failed to apply patch: %s (exit code: %d)", patches[i], status);
-            print_warning(warn_msg);
+            fprintf(stderr, "Warning: %s\n", warn_msg);
             log_warning("Patch application failed: %s (exit code: %d)", patches[i], status);
         } else {
             log_debug("Patch applied successfully: %s", patches[i]);
@@ -666,7 +664,7 @@ bool builder_create_symlinks(const BuilderConfig *config, const char *package_na
         char cmd[2048];
         snprintf(cmd, sizeof(cmd), "mkdir -p '%s' '%s' '%s' '%s'",
                  main_bin, main_lib, main_include, main_share);
-        system(cmd);  // TODO: Replace with C-based directory creation
+        system(cmd);
     }
 
     // Create symlinks for binaries

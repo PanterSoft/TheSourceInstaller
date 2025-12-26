@@ -6,21 +6,15 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
 #include "package.h"
 #include "database.h"
 #include "resolver.h"
 #include "fetcher.h"
 #include "builder.h"
-#include "tui.h"
-#include "tui_interactive.h"
 #include "log.h"
 
 // Output callback for build/install progress
 static void output_callback(const char *line, void *userdata) {
-    // Window removed - print output directly
     (void)userdata;
     if (line) {
         // Filter out shell error messages that are just noise
@@ -28,19 +22,22 @@ static void output_callback(const char *line, void *userdata) {
             (strstr(line, "unexpected EOF") != NULL ||
              strstr(line, "syntax error") != NULL ||
              strstr(line, "unexpected end of file") != NULL)) {
-            // Skip shell syntax error messages
             return;
         }
         // Filter out lines that are just paths ending with quotes (noise from install process)
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\'' &&
             (strchr(line, '/') != NULL || strstr(line, "man") != NULL)) {
-            // Skip lines that look like paths with trailing quotes
             return;
         }
         printf("%s\n", line);
         fflush(stdout);
     }
+}
+
+static const char *get_home_dir(void) {
+    const char *home = getenv("HOME");
+    return home ? home : "/root";
 }
 
 static void print_usage(const char *prog_name) {
@@ -52,13 +49,10 @@ static void print_usage(const char *prog_name) {
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
     printf("  versions <package>                           List all available versions\n");
-    printf("  update [--repo URL] [--local PATH]           Update package repository and TSI\n");
-    printf("  uninstall [--prefix PATH]                    Uninstall TSI and all data\n");
-    printf("  --tui, -t                                    Launch interactive TUI\n");
+    printf("  update [--repo URL] [--local PATH]           Update package repository\n");
     printf("  --help                                       Show this help\n");
     printf("  --version                                    Show version\n");
     printf("\n");
-    printf("If no command is provided and running in a terminal, the TUI will launch automatically.\n");
 }
 
 // Helper to extract package name from "package@version" format
@@ -78,58 +72,36 @@ static bool run_command_with_window(const char *overview, const char *detail, co
         return false;
     }
 
-    bool interactive = is_tty();
-
     if (overview && *overview) {
-        print_step_overview(overview, detail);
+        printf("-> %s", overview);
+        if (detail && *detail) {
+            printf(" %s", detail);
+        }
+        printf("\n");
     }
 
-    OutputBuffer buffer;
-    output_buffer_init(&buffer);
-    output_capture_start(cmd);
-    output_buffer_add(&buffer, cmd);
-    if (interactive) {
-        output_buffer_display(&buffer);
-    } else {
-        printf("%s\n", cmd);
-    }
+    printf("%s\n", cmd);
 
     FILE *pipe = popen(cmd, "r");
     if (!pipe) {
-        output_capture_end(&buffer);
         return false;
     }
 
-    char line[OUTPUT_LINE_LENGTH];
+    char line[256];
     int status = -1;
     bool pipe_error = false;
 
     while (fgets(line, sizeof(line), pipe)) {
-        // Check for buffer overflow protection
-        if (strlen(line) >= sizeof(line) - 1 && line[sizeof(line) - 2] != '\n') {
-            // Line was truncated, skip rest
-            int c;
-            while ((c = fgetc(pipe)) != EOF && c != '\n');
-        }
-
-        output_buffer_add(&buffer, line);
-        if (interactive) {
-            output_buffer_display(&buffer);
-        } else {
-            fputs(line, stdout);
-            fflush(stdout);  // Ensure output is flushed
-        }
+        fputs(line, stdout);
+        fflush(stdout);
     }
 
-    // Check if fgets failed due to error (not EOF)
     if (ferror(pipe)) {
         pipe_error = true;
     }
 
     status = pclose(pipe);
-    output_capture_end(&buffer);
 
-    // If pipe had an error, return false
     if (pipe_error) {
         return false;
     }
@@ -138,10 +110,6 @@ static bool run_command_with_window(const char *overview, const char *detail, co
 }
 
 static int cmd_install(int argc, char **argv) {
-    log_developer("cmd_install called with argc=%d", argc);
-    for (int i = 0; i < argc; i++) {
-        log_developer("  argv[%d] = '%s'", i, argv[i]);
-    }
     bool force = false;
     const char *package_name = NULL;
     const char *package_version = NULL;
@@ -186,8 +154,7 @@ static int cmd_install(int argc, char **argv) {
         return 1;
     }
 
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
+    const char *home = get_home_dir();
 
     char tsi_prefix[1024];
     int len;
@@ -321,8 +288,7 @@ static int cmd_install(int argc, char **argv) {
                         // Try to find script relative to repo (assuming we're in a TSI installation)
                         // First try: scripts/discover-versions.py (if running from repo root)
                         // Second try: ~/.tsi/scripts/discover-versions.py (if installed)
-                        const char *home = getenv("HOME");
-                        if (!home) home = "/root";
+                        const char *home = get_home_dir();
 
                         // Try installed location first
                         len = snprintf(script_path, sizeof(script_path), "%s/.tsi/scripts/discover-versions.py", home);
@@ -471,11 +437,11 @@ install_package:
                 if (package_version) {
                     char warn_msg[256];
                     snprintf(warn_msg, sizeof(warn_msg), "%s@%s is already installed", package_name, package_version);
-                    print_warning(warn_msg);
+                    fprintf(stderr, "Warning: %s\n", warn_msg);
                 } else {
                     char warn_msg[256];
                     snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
-                    print_warning(warn_msg);
+                    fprintf(stderr, "Warning: %s\n", warn_msg);
                 }
                 if (installed_pkg->install_path) {
                     printf("  Install path: %s\n", installed_pkg->install_path);
@@ -501,7 +467,7 @@ install_package:
                 // No version specified, but package is installed
                 char warn_msg[256];
                 snprintf(warn_msg, sizeof(warn_msg), "%s is already installed", package_name);
-                print_warning(warn_msg);
+                fprintf(stderr, "Warning: %s\n", warn_msg);
                 if (installed_pkg->version) {
                     printf("  Version: %s\n", installed_pkg->version);
                 }
@@ -562,7 +528,7 @@ install_package:
     }
 
     if (deps_count > 0) {
-        print_section("Resolving dependencies");
+        printf("==> Resolving dependencies\n");
 
         // Count actual dependencies (excluding the main package itself)
         size_t actual_deps_count = 0;
@@ -687,7 +653,7 @@ install_package:
                 if (!pkg) {
                     char warn_msg[256];
                     snprintf(warn_msg, sizeof(warn_msg), "Package '%s' not found in repository", deps[i]);
-                    print_warning(warn_msg);
+                    fprintf(stderr, "Warning: %s\n", warn_msg);
                 }
             }
         }
@@ -704,7 +670,7 @@ install_package:
     }
 
     if (build_order_count > 0) {
-        print_section("Build order");
+        printf("==> Build order\n");
         log_debug("Build order calculated: %zu packages", build_order_count);
         for (size_t i = 0; i < build_order_count; i++) {
             if (build_order[i]) {
@@ -798,7 +764,7 @@ install_package:
 
     // Install dependencies first
     if (dependency_count > 0) {
-        print_section("Installing dependencies");
+        printf("==> Installing dependencies\n");
         log_info("Installing %zu dependencies before main package", dependency_count);
     } else {
         log_warning("No dependencies to install (dependency_count=0, build_order_count=%zu)", build_order_count);
@@ -818,9 +784,9 @@ install_package:
         if (dependency_count > 1) {
             char dep_msg[256];
             snprintf(dep_msg, sizeof(dep_msg), "Installing dependency %zu of %zu", current_dep, dependency_count);
-            print_progress(dep_msg, build_order[i]);
+            printf("Building dependency: %s\n", build_order[i]);
         } else {
-            print_progress("Installing dependency", build_order[i]);
+            printf("Installing dependency: %s\n", build_order[i]);
         }
 
         // Parse package@version from build_order if present
@@ -846,7 +812,7 @@ install_package:
         if (!dep_pkg) {
             char warn_msg[256];
             snprintf(warn_msg, sizeof(warn_msg), "Dependency package not found: %s", build_order[i]);
-            print_warning(warn_msg);
+            fprintf(stderr, "Warning: %s\n", warn_msg);
             continue;
         }
 
@@ -864,7 +830,11 @@ install_package:
         builder_config_set_package_dir(builder_config, dep_pkg->name, dep_pkg->version);
 
         // Build
-        print_building_compact(dep_pkg->name, dep_pkg->version);
+        printf("==> Building %s", dep_pkg->name);
+        if (dep_pkg->version && dep_pkg->version[0]) {
+            printf(" %s", dep_pkg->version);
+        }
+        printf("\n");
         char build_dir[1024];
         if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
             snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, dep_pkg->name, dep_pkg->version);
@@ -872,21 +842,9 @@ install_package:
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
         }
 
-        // Setup output buffer for showing last 5 lines
-        OutputBuffer output_buf;
-        output_buffer_init(&output_buf);
-        char build_window_title[256];
-        if (dep_pkg->version && dep_pkg->version[0]) {
-            snprintf(build_window_title, sizeof(build_window_title), "%s Building %s %s", ICON_BUILD, dep_pkg->name, dep_pkg->version);
-        } else {
-            snprintf(build_window_title, sizeof(build_window_title), "%s Building %s", ICON_BUILD, dep_pkg->name);
-        }
-        output_capture_start(build_window_title);
-
         log_debug("Building dependency: %s@%s in %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", build_dir);
-        if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
-            output_capture_end(&output_buf);
-            print_error("Failed to build dependency");
+        if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, NULL)) {
+            fprintf(stderr, "Error: Failed to build dependency\n");
             fprintf(stderr, "  %s\n", build_order[i]);
             log_error("Failed to build dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
             has_failures = true;
@@ -900,23 +858,17 @@ install_package:
             goto cleanup;
         }
         log_info("Successfully built dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        output_capture_end(&output_buf);
 
         // Install
-        print_installing_compact(dep_pkg->name, dep_pkg->version);
-        output_buffer_init(&output_buf);
-        char install_window_title[256];
+        printf("==> Installing %s", dep_pkg->name);
         if (dep_pkg->version && dep_pkg->version[0]) {
-            snprintf(install_window_title, sizeof(install_window_title), "%s Installing %s %s", ICON_INSTALL, dep_pkg->name, dep_pkg->version);
-        } else {
-            snprintf(install_window_title, sizeof(install_window_title), "%s Installing %s", ICON_INSTALL, dep_pkg->name);
+            printf(" %s", dep_pkg->version);
         }
-        output_capture_start(install_window_title);
+        printf("\n");
 
         log_debug("Installing dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, &output_buf)) {
-            output_capture_end(&output_buf);
-            print_error("Failed to install dependency");
+        if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, NULL)) {
+            fprintf(stderr, "Error: Failed to install dependency\n");
             fprintf(stderr, "  %s\n", build_order[i]);
             log_error("Failed to install dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
             has_failures = true;
@@ -930,16 +882,15 @@ install_package:
             goto cleanup;
         }
         log_info("Successfully installed dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        output_capture_end(&output_buf);
 
         // Show completion
         char done_msg[256];
         if (dep_pkg->version) {
-            snprintf(done_msg, sizeof(done_msg), "%s Installed %s %s", ICON_SUCCESS, dep_pkg->name, dep_pkg->version);
+            snprintf(done_msg, sizeof(done_msg), "Installed %s %s", dep_pkg->name, dep_pkg->version);
         } else {
-            snprintf(done_msg, sizeof(done_msg), "%s Installed %s", ICON_SUCCESS, dep_pkg->name);
+            snprintf(done_msg, sizeof(done_msg), "Installed %s", dep_pkg->name);
         }
-        print_status_done(done_msg);
+        printf("%s\n", done_msg);
 
         // Create symlinks to main install directory
         log_developer("Creating symlinks for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
@@ -955,8 +906,8 @@ install_package:
     if (dependency_count > 0) {
         printf("\n");  // Add spacing after dependencies
     }
-    print_section("Installing package");
-    print_progress("Installing", package_name);
+    printf("==> Installing package\n");
+    printf("Installing: %s\n", package_name);
     log_info("Installing main package: %s@%s", package_name, package_version ? package_version : "latest");
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
     if (main_pkg) {
@@ -970,40 +921,24 @@ install_package:
             char build_dir[1024];
             snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
 
-            print_building_compact(main_pkg->name, main_pkg->version);
-            if (is_tty()) {
-                printf("\n");  // New line for output area
-            }
-
-            // Setup output buffer for showing last 5 lines
-            OutputBuffer output_buf;
-            output_buffer_init(&output_buf);
-            char main_build_title[256];
+            printf("==> Building %s", main_pkg->name);
             if (main_pkg->version && main_pkg->version[0]) {
-                snprintf(main_build_title, sizeof(main_build_title), "%s Building %s %s", ICON_BUILD, main_pkg->name, main_pkg->version);
-            } else {
-                snprintf(main_build_title, sizeof(main_build_title), "%s Building %s", ICON_BUILD, main_pkg->name);
+                printf(" %s", main_pkg->version);
             }
-            output_capture_start(main_build_title);
+            printf("\n");
 
             log_debug("Building main package: %s@%s in %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", build_dir);
-            if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+            if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, NULL)) {
                 log_info("Successfully built main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                output_capture_end(&output_buf);
-                print_installing_compact(main_pkg->name, main_pkg->version);
-                output_buffer_init(&output_buf);
-                char main_install_title[256];
+                printf("==> Installing %s", main_pkg->name);
                 if (main_pkg->version && main_pkg->version[0]) {
-                    snprintf(main_install_title, sizeof(main_install_title), "%s Installing %s %s", ICON_INSTALL, main_pkg->name, main_pkg->version);
-                } else {
-                    snprintf(main_install_title, sizeof(main_install_title), "%s Installing %s", ICON_INSTALL, main_pkg->name);
+                    printf(" %s", main_pkg->version);
                 }
-                output_capture_start(main_install_title);
+                printf("\n");
 
                 log_debug("Installing main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, &output_buf)) {
+                if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, NULL)) {
                     log_info("Successfully installed main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                    output_capture_end(&output_buf);
                     // Create symlinks to main install directory
                     log_developer("Creating symlinks for main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
                     builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
@@ -1015,23 +950,22 @@ install_package:
                     // Show completion
                     char done_msg[256];
                     if (main_pkg->version) {
-                        snprintf(done_msg, sizeof(done_msg), "%s Installed %s %s", ICON_SUCCESS, main_pkg->name, main_pkg->version);
+                        snprintf(done_msg, sizeof(done_msg), "Installed %s %s", main_pkg->name, main_pkg->version);
                     } else {
-                        snprintf(done_msg, sizeof(done_msg), "%s Installed %s", ICON_SUCCESS, main_pkg->name);
+                        snprintf(done_msg, sizeof(done_msg), "Installed %s", main_pkg->name);
                     }
-                    print_status_done(done_msg);
+                    printf("%s\n", done_msg);
                     log_info("Successfully installed package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
 
                     // Show summary
-                    print_summary(builder_config->install_dir, 0, NULL);
+                    printf("Installed to: %s\n", builder_config->install_dir);
 
-                    // Show caveats (if any)
+                    // Show description (if any)
                     if (main_pkg->description) {
-                        print_caveats_start();
-                        print_caveat(main_pkg->description);
+                        printf("Description: %s\n", main_pkg->description);
                     }
                 } else {
-                    print_error("Failed to install package");
+                    fprintf(stderr, "Error: Failed to install package\n");
                     if (package_version) {
                         fprintf(stderr, "  %s@%s\n", package_name, package_version);
                         log_error("Failed to install package: %s@%s", package_name, package_version);
@@ -1042,7 +976,7 @@ install_package:
                     has_failures = true;
                 }
             } else {
-                print_error("Failed to build package");
+                fprintf(stderr, "Error: Failed to build package\n");
                 if (package_version) {
                     fprintf(stderr, "  %s@%s\n", package_name, package_version);
                     log_error("Failed to build package: %s@%s", package_name, package_version);
@@ -1054,7 +988,7 @@ install_package:
             }
             free(main_source_dir);
         } else {
-            print_error("Failed to fetch source");
+            fprintf(stderr, "Error: Failed to fetch source\n");
             if (package_version) {
                 fprintf(stderr, "  %s@%s\n", package_name, package_version);
                 log_error("Failed to fetch source for package: %s@%s", package_name, package_version);
@@ -1065,7 +999,7 @@ install_package:
             has_failures = true;
         }
     } else {
-        print_error("Package not found");
+        fprintf(stderr, "Error: Package not found\n");
         fprintf(stderr, "  %s\n", package_name);
         has_failures = true;
     }
@@ -1082,7 +1016,7 @@ cleanup:
     // Report summary and exit with error code if there were failures
     if (has_failures) {
         printf("\n");
-        print_error("Installation completed with errors");
+        fprintf(stderr, "Error: Installation completed with errors\n");
         if (failed_deps_count > 0) {
             printf("Failed dependencies: %d\n", failed_deps_count);
         }
@@ -1129,11 +1063,9 @@ cleanup:
 }
 
 static int cmd_list(int argc, char **argv) {
-    log_developer("cmd_list called with argc=%d", argc);
     (void)argc;
     (void)argv;
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
+    const char *home = get_home_dir();
 
     char db_dir[1024];
     snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
@@ -1166,7 +1098,6 @@ static int cmd_list(int argc, char **argv) {
 }
 
 static int cmd_versions(int argc, char **argv) {
-    log_developer("cmd_versions called with argc=%d", argc);
     if (argc < 2) {
         fprintf(stderr, "Error: package name required\n");
         fprintf(stderr, "Usage: tsi versions <package>\n");
@@ -1174,8 +1105,7 @@ static int cmd_versions(int argc, char **argv) {
     }
 
     const char *package_name = argv[1];
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
+    const char *home = get_home_dir();
 
     char repo_dir[1024];
     snprintf(repo_dir, sizeof(repo_dir), "%s/.tsi/repos", home);
@@ -1231,7 +1161,7 @@ static int cmd_versions(int argc, char **argv) {
         }
     }
 
-    print_section("Available versions");
+    printf("==> Available versions\n");
     printf("  %s\n", package_name);
     for (size_t i = 0; i < unique_count; i++) {
         printf("  %s\n", unique_versions[i]);
@@ -1250,15 +1180,13 @@ static int cmd_versions(int argc, char **argv) {
 }
 
 static int cmd_info(int argc, char **argv) {
-    log_developer("cmd_info called with argc=%d", argc);
     if (argc < 2) {
         fprintf(stderr, "Error: package name required\n");
         return 1;
     }
 
     const char *package_name = argv[1];
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
+    const char *home = get_home_dir();
 
     char repo_dir[1024];
     snprintf(repo_dir, sizeof(repo_dir), "%s/.tsi/repos", home);
@@ -1414,7 +1342,7 @@ static int cmd_info(int argc, char **argv) {
         return 1;
     }
 
-    print_section("Package Information");
+    printf("==> Package Information\n");
     if (pkg->name) {
         if (pkg->version) {
             printf("  %s %s\n", pkg->name, pkg->version);
@@ -1488,9 +1416,6 @@ static int cmd_info(int argc, char **argv) {
 }
 
 static int cmd_update(int argc, char **argv) {
-    // Use fprintf instead of logging at start to avoid potential crashes
-    // Logging might fail if log file can't be written
-    fprintf(stderr, "[DEBUG] cmd_update called with argc=%d\n", argc);
 
     const char *repo_url = NULL;
     const char *local_path = NULL;
@@ -1507,8 +1432,7 @@ static int cmd_update(int argc, char **argv) {
         }
     }
 
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
+    const char *home = get_home_dir();
 
     char tsi_prefix[1024];
     int len;
@@ -1537,20 +1461,20 @@ static int cmd_update(int argc, char **argv) {
         system(cmd);
     }
 
-    print_section("Updating package repository");
+    printf("==> Updating package repository\n");
     printf("  Repository directory: %s\n", repo_dir);
 
     bool success = false;
 
     // Update from local path
     if (local_path) {
-        print_section("Updating from local path");
+        printf("==> Updating from local path\n");
         printf("  %s\n", local_path);
         char copy_cmd[2048];
         int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", local_path, repo_dir);
         if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd)) {
             if (run_command_with_window("Copying packages", local_path, copy_cmd)) {
-                print_success("Packages copied from local path");
+                printf("Packages copied from local path\n");
                 success = true;
             } else {
                 fprintf(stderr, "Error: Failed to copy packages from local path\n");
@@ -1622,7 +1546,7 @@ static int cmd_update(int argc, char **argv) {
                 return 1;
             }
             if (run_command_with_window("Copying packages", packages_dir, copy_cmd)) {
-                print_success("Packages updated from repository");
+                printf("Packages updated from repository\n");
                 success = true;
             } else {
                 fprintf(stderr, "Error: Failed to copy packages from repository\n");
@@ -1689,7 +1613,7 @@ static int cmd_update(int argc, char **argv) {
             int copy_cmd_len = snprintf(copy_cmd, sizeof(copy_cmd), "cp '%s'/*.json '%s/' 2>/dev/null", packages_dir, repo_dir);
             if (copy_cmd_len >= 0 && (size_t)copy_cmd_len < sizeof(copy_cmd) &&
                 run_command_with_window("Copying packages", packages_dir, copy_cmd)) {
-                print_success("Packages updated from default repository");
+                printf("Packages updated from default repository\n");
                 success = true;
             } else {
                 fprintf(stderr, "Error: Failed to copy packages from repository\n");
@@ -1721,398 +1645,9 @@ static int cmd_update(int argc, char **argv) {
         return 1;
     }
 
-    // Check for TSI self-update
-    printf("\nChecking for TSI updates...\n");
-
-    // Check common TSI source locations (in order of preference)
-    char tsi_source_paths[][1024] = {
-        {0}, // $INSTALL_DIR/tsi (if set)
-        {0}, // $HOME/tsi-install/tsi (default bootstrap location)
-        {0}  // Development mode: find git repo from executable path
-    };
-
-    int path_count = 0;
-
-    // Check $INSTALL_DIR/tsi (from environment)
-    const char *install_dir = getenv("INSTALL_DIR");
-    if (install_dir && install_dir[0] != '\0') {
-        snprintf(tsi_source_paths[path_count], sizeof(tsi_source_paths[path_count]), "%s/tsi", install_dir);
-        path_count++;
-    }
-
-    // Check $HOME/tsi-install/tsi (default bootstrap location)
-    snprintf(tsi_source_paths[path_count], sizeof(tsi_source_paths[path_count]), "%s/tsi-install/tsi", home);
-    path_count++;
-
-    // Check if we're running from a git repo (development mode)
-    char current_exe[1024] = {0};
-    ssize_t exe_len = -1;
-#ifdef __linux__
-    exe_len = readlink("/proc/self/exe", current_exe, sizeof(current_exe) - 1);
-    if (exe_len > 0) {
-        current_exe[exe_len] = '\0';
-    }
-#elif defined(__APPLE__)
-    uint32_t size = sizeof(current_exe);
-    if (_NSGetExecutablePath(current_exe, &size) == 0) {
-        exe_len = strlen(current_exe);
-    }
-#endif
-    if (exe_len > 0) {
-        // Try to find git repo in parent directories
-        char check_path[1024];
-        strncpy(check_path, current_exe, sizeof(check_path) - 1);
-        check_path[sizeof(check_path) - 1] = '\0';
-        for (int i = 0; i < 5; i++) {
-            char *last_slash = strrchr(check_path, '/');
-            if (last_slash) {
-                *last_slash = '\0';
-                char git_path[1024];
-                snprintf(git_path, sizeof(git_path), "%s/.git", check_path);
-                struct stat st;
-                if (stat(git_path, &st) == 0 && S_ISDIR(st.st_mode)) {
-                    // Verify it has src/Makefile (it's the TSI repo)
-                    char makefile_path[1024];
-                    snprintf(makefile_path, sizeof(makefile_path), "%s/src/Makefile", check_path);
-                    if (stat(makefile_path, &st) == 0) {
-                        strncpy(tsi_source_paths[path_count], check_path, sizeof(tsi_source_paths[path_count]) - 1);
-                        path_count++;
-                        break;
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Find TSI source directory
-    char *tsi_source_dir = NULL;
-    for (int i = 0; i < path_count; i++) {
-        if (tsi_source_paths[i][0] == '\0') continue;
-
-        char src_makefile[1024];
-        snprintf(src_makefile, sizeof(src_makefile), "%s/src/Makefile", tsi_source_paths[i]);
-        struct stat st;
-        if (stat(src_makefile, &st) == 0) {
-            tsi_source_dir = tsi_source_paths[i];
-            break;
-        }
-    }
-
-    if (!tsi_source_dir) {
-        printf("TSI source not found. Skipping self-update check.\n");
-        printf("(TSI was likely installed from a tarball or binary)\n");
-        return 0;
-    }
-
-    printf("Found TSI source at: %s\n", tsi_source_dir);
-
-    // Check if it's a git repository
-    char git_dir[1024];
-    snprintf(git_dir, sizeof(git_dir), "%s/.git", tsi_source_dir);
-    struct stat st;
-    bool is_git_repo = (stat(git_dir, &st) == 0 && S_ISDIR(st.st_mode));
-
-    if (!is_git_repo) {
-        printf("TSI source is not a git repository. Skipping update check.\n");
-        return 0;
-    }
-
-    // Check for updates
-    char fetch_cmd[2048];
-    snprintf(fetch_cmd, sizeof(fetch_cmd), "cd '%s' && git fetch origin main 2>&1", tsi_source_dir);
-    FILE *fetch_pipe = popen(fetch_cmd, "r");
-    if (!fetch_pipe) {
-        print_warning("Could not check for TSI updates (git fetch failed)");
-        return 0;
-    }
-
-    // Read output (discard it, we just need the exit code)
-    char buffer[256];
-    while (fgets(buffer, sizeof(buffer), fetch_pipe) != NULL) {
-        // Discard output
-    }
-    int fetch_status = pclose(fetch_pipe);
-
-    if (fetch_status != 0) {
-        print_warning("Could not check for TSI updates (git not available or network error)");
-        return 0;
-    }
-
-    // Compare local and remote commits
-    char local_commit_cmd[2048];
-    snprintf(local_commit_cmd, sizeof(local_commit_cmd), "cd '%s' && git rev-parse HEAD 2>/dev/null", tsi_source_dir);
-    FILE *local_pipe = popen(local_commit_cmd, "r");
-    char local_commit[64] = {0};
-    if (local_pipe) {
-        if (fgets(local_commit, sizeof(local_commit), local_pipe)) {
-            // Remove newline
-            size_t len = strlen(local_commit);
-            if (len > 0 && local_commit[len - 1] == '\n') {
-                local_commit[len - 1] = '\0';
-            }
-        }
-        pclose(local_pipe);
-    }
-
-    char remote_commit_cmd[2048];
-    snprintf(remote_commit_cmd, sizeof(remote_commit_cmd), "cd '%s' && git rev-parse origin/main 2>/dev/null", tsi_source_dir);
-    FILE *remote_pipe = popen(remote_commit_cmd, "r");
-    char remote_commit[64] = {0};
-    if (remote_pipe) {
-        if (fgets(remote_commit, sizeof(remote_commit), remote_pipe)) {
-            // Remove newline
-            size_t len = strlen(remote_commit);
-            if (len > 0 && remote_commit[len - 1] == '\n') {
-                remote_commit[len - 1] = '\0';
-            }
-        }
-        pclose(remote_pipe);
-    }
-
-    if (local_commit[0] == '\0' || remote_commit[0] == '\0') {
-        printf("Could not determine TSI version. Skipping update check.\n");
-        return 0;
-    }
-
-    if (strcmp(local_commit, remote_commit) == 0) {
-        print_success("TSI is up to date");
-        return 0;
-    }
-
-    // Updates available!
-    printf("\n");
-    printf("═══════════════════════════════════════════════════════════\n");
-    printf("TSI update available!\n");
-    printf("═══════════════════════════════════════════════════════════\n");
-    printf("Current version: %s\n", local_commit);
-    printf("Latest version:  %s\n", remote_commit);
-    printf("\n");
-    printf("Would you like to update TSI now? (y/N): ");
-    fflush(stdout);
-
-    char response[16];
-    if (fgets(response, sizeof(response), stdin) == NULL) {
-        printf("\nUpdate cancelled.\n");
-        return 0;
-    }
-
-    // Remove newline
-    size_t response_len = strlen(response);
-    if (response_len > 0 && response[response_len - 1] == '\n') {
-        response[response_len - 1] = '\0';
-    }
-
-    if (response[0] != 'y' && response[0] != 'Y') {
-        printf("Update cancelled.\n");
-        return 0;
-    }
-
-    printf("\nUpdating TSI...\n");
-
-    // Pull latest changes
-    char pull_cmd[2048];
-    snprintf(pull_cmd, sizeof(pull_cmd), "cd '%s' && git pull origin main 2>&1", tsi_source_dir);
-    if (!run_command_with_window("Pulling latest changes", tsi_source_dir, pull_cmd)) {
-        fprintf(stderr, "Error: Failed to pull TSI updates\n");
-        return 1;
-    }
-
-    // Build TSI
-    char build_cmd[2048];
-    snprintf(build_cmd, sizeof(build_cmd), "cd '%s/src' && make clean && make 2>&1", tsi_source_dir);
-    if (!run_command_with_window("Building TSI", tsi_source_dir, build_cmd)) {
-        fprintf(stderr, "Error: Failed to build TSI\n");
-        return 1;
-    }
-
-    // Check if binary was created
-    char binary_path[1024];
-    snprintf(binary_path, sizeof(binary_path), "%s/src/bin/tsi", tsi_source_dir);
-    if (stat(binary_path, &st) != 0) {
-        fprintf(stderr, "Error: TSI binary not found after build\n");
-        return 1;
-    }
-
-    // Install TSI
-    char install_cmd[2048];
-    snprintf(install_cmd, sizeof(install_cmd), "mkdir -p '%s/bin' && cp '%s' '%s/bin/tsi' && chmod +x '%s/bin/tsi'",
-             tsi_prefix, binary_path, tsi_prefix, tsi_prefix);
-    if (!run_command_with_window("Installing TSI", tsi_prefix, install_cmd)) {
-        fprintf(stderr, "Error: Failed to install TSI\n");
-        return 1;
-    }
-
-    printf("\n");
-    printf("═══════════════════════════════════════════════════════════\n");
-    printf("✓ TSI updated successfully!\n");
-    printf("═══════════════════════════════════════════════════════════\n");
-    printf("\n");
-    printf("New version: %s\n", remote_commit);
-    printf("TSI binary: %s/bin/tsi\n", tsi_prefix);
-    printf("\n");
-
     return 0;
 }
 
-static int cmd_uninstall(int argc, char **argv) {
-    log_developer("cmd_uninstall called with argc=%d", argc);
-    log_info("Uninstall command invoked");
-    const char *prefix = NULL;
-
-    // Parse arguments
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
-            prefix = argv[++i];
-        }
-    }
-
-    const char *home = getenv("HOME");
-    if (!home) home = "/root";
-
-    char tsi_prefix[1024];
-    int len;
-    if (prefix) {
-        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
-        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
-    } else {
-        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
-        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
-            fprintf(stderr, "Error: Path too long\n");
-            return 1;
-        }
-    }
-
-    // Display warning and get confirmation FIRST, before any processing
-    print_section("Uninstalling TSI");
-    printf("  Installation path: %s\n", tsi_prefix);
-    printf("\n");
-    printf("  This will PERMANENTLY remove:\n");
-    if (is_tty()) {
-        printf("  %s%s%s TSI binary\n", COLOR_RED, ICON_ERROR, COLOR_RESET);
-        printf("  %s%s%s Completion scripts\n", COLOR_RED, ICON_ERROR, COLOR_RESET);
-        printf("  %s%s%s Installed packages and binaries\n", COLOR_RED, ICON_ERROR, COLOR_RESET);
-        printf("  %s%s%s ALL TSI data (database, sources, builds, repository, etc.)\n", COLOR_RED, ICON_ERROR, COLOR_RESET);
-    } else {
-        printf("  ✗ TSI binary\n");
-        printf("  ✗ Completion scripts\n");
-        printf("  ✗ Installed packages and binaries\n");
-        printf("  ✗ ALL TSI data (database, sources, builds, repository, etc.)\n");
-    }
-    printf("\n");
-    print_warning("This action CANNOT be undone!");
-    printf("\n");
-    printf("Are you sure you want to continue? (yes/no): ");
-    fflush(stdout);
-
-    // Read user confirmation
-    char response[16];
-    if (fgets(response, sizeof(response), stdin) == NULL) {
-        fprintf(stderr, "\nError: Failed to read input\n");
-        return 1;
-    }
-
-    // Remove trailing newline
-    size_t response_len = strlen(response);
-    if (response_len > 0 && response[response_len - 1] == '\n') {
-        response[response_len - 1] = '\0';
-    }
-
-    // Check if user confirmed
-    if (strcmp(response, "yes") != 0 && strcmp(response, "y") != 0) {
-        printf("\nUninstall cancelled.\n");
-        return 0;
-    }
-
-    printf("\n");
-
-    // Remove all TSI data (everything)
-    printf("Removing all TSI data...\n");
-
-    // First, explicitly remove the binary (can't delete itself while running on some systems)
-    char bin_path[2048];
-    int bin_len = snprintf(bin_path, sizeof(bin_path), "%s/bin/tsi", tsi_prefix);
-    bool binary_removed = false;
-    if (bin_len >= 0 && (size_t)bin_len < sizeof(bin_path)) {
-        // Try to remove the binary first using unlink (works on most Unix systems)
-        if (unlink(bin_path) == 0) {
-            printf("✓ Removed TSI binary: %s\n", bin_path);
-            binary_removed = true;
-        } else if (errno == ENOENT) {
-            // File doesn't exist, that's okay
-            binary_removed = true;
-        } else {
-            // File exists but unlink failed, try with system command
-            char rm_cmd[2048];
-            int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -f '%s' 2>/dev/null", bin_path);
-            if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
-                if (system(rm_cmd) == 0) {
-                    printf("✓ Removed TSI binary: %s\n", bin_path);
-                    binary_removed = true;
-                }
-            }
-        }
-    }
-
-    if (!binary_removed) {
-        // Binary removal failed, but continue with other cleanup
-        fprintf(stderr, "Warning: Could not remove binary at: %s\n", bin_path);
-        fprintf(stderr, "You may need to remove it manually after uninstall completes.\n");
-    }
-
-    // Remove completion scripts directory
-    char completions_path[2048];
-    int comp_len = snprintf(completions_path, sizeof(completions_path), "%s/share", tsi_prefix);
-    if (comp_len >= 0 && (size_t)comp_len < sizeof(completions_path)) {
-        char rm_cmd[2048];
-        int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf '%s'", completions_path);
-        if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
-            system(rm_cmd);
-        }
-    }
-
-    // Remove bin directory if empty or contains only the binary
-    char bin_dir[2048];
-    int bin_dir_len = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", tsi_prefix);
-    if (bin_dir_len >= 0 && (size_t)bin_dir_len < sizeof(bin_dir)) {
-        char rm_cmd[2048];
-        int rm_len = snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf '%s'", bin_dir);
-        if (rm_len >= 0 && (size_t)rm_len < sizeof(rm_cmd)) {
-            system(rm_cmd);
-        }
-    }
-
-    // Remove all remaining TSI directories and data
-    char cmd[2048];
-    int cmd_len = snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tsi_prefix);
-    if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
-        if (system(cmd) == 0) {
-            printf("✓ Removed all TSI data: %s\n", tsi_prefix);
-        } else {
-            // Check if directory still exists
-            struct stat st;
-            if (stat(tsi_prefix, &st) == 0) {
-                fprintf(stderr, "Warning: Some TSI data may still exist at: %s\n", tsi_prefix);
-                fprintf(stderr, "You may need to remove it manually: rm -rf '%s'\n", tsi_prefix);
-            } else {
-                printf("✓ Removed all TSI data: %s\n", tsi_prefix);
-            }
-        }
-    } else {
-        fprintf(stderr, "Error: Path too long\n");
-        return 1;
-    }
-
-    printf("\n");
-    print_success("TSI uninstalled successfully");
-    printf("\n");
-    printf("\nNote: You may want to remove TSI from your PATH:\n");
-    printf("  Remove 'export PATH=\"%s/bin:\\$PATH\"' from your shell profile\n", tsi_prefix);
-    printf("  (~/.bashrc, ~/.zshrc, etc.)\n");
-
-    return 0;
-}
 
 int main(int argc, char **argv) {
     // Check for --version early (before logging initialization to avoid hangs)
@@ -2123,143 +1658,37 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Initialize logging from environment (must be first)
-    // CRITICAL: Make logging completely optional to prevent hangs
-    // Check environment variable first - if disabled, skip all logging init
-    const char *disable_file_log = getenv("TSI_DISABLE_FILE_LOG");
+    // Initialize logging (file logging disabled by default to prevent hangs)
     const char *enable_console_log = getenv("TSI_LOG_TO_CONSOLE");
-
-    // Check if file logging should be disabled (case-insensitive)
-    bool disable_logging = false;
-    if (disable_file_log) {
-        if (strcmp(disable_file_log, "1") == 0) {
-            disable_logging = true;
-        } else {
-            // Case-insensitive comparison (manual to avoid strcasecmp dependency)
-            char lower[16] = {0};
-            for (int i = 0; i < 15 && disable_file_log[i]; i++) {
-                char c = disable_file_log[i];
-                lower[i] = (c >= 'A' && c <= 'Z') ? (c + 32) : c;
-            }
-            if (strcmp(lower, "true") == 0 || strcmp(lower, "yes") == 0) {
-                disable_logging = true;
-            }
-        }
-    }
-
-    // Completely skip file logging if disabled
-    if (disable_logging) {
-        // File logging explicitly disabled via environment
-        log_set_file(false);
-        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
-    } else {
-        // Try to initialize logging, but fail fast if it hangs
-        // Don't call log_init_from_env() if it might hang - just disable file logging
-        // Set defaults without trying to open files
-        log_set_file(false);  // Disable by default to prevent hangs
-        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
-    }
-
-    // Set log level (this doesn't require file operations)
+    log_set_file(false);
+    log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
     if (log_get_level() == LOG_LEVEL_NONE) {
         log_set_level(LOG_LEVEL_DEVELOPER);
     }
 
-    // Skip logging calls initially to prevent hangs
-    // Only log if explicitly enabled via environment
-    // log_developer("TSI starting (argc=%d)", argc);
-    // log_developer("Command line arguments:");
-    // for (int i = 0; i < argc; i++) {
-    //     log_developer("  argv[%d] = '%s'", i, argv[i]);
-    // }
-    // log_debug("Logging system initialized (level=%s, console=disabled, file=enabled)",
-    //           log_level_name(log_get_level()));
-
-    tui_style_reload_from_env();
-
-    int write_idx = 1;
-    bool use_tui = false;
-    for (int read_idx = 1; read_idx < argc; read_idx++) {
-        char *arg = argv[read_idx];
-        if (strcmp(arg, "--style") == 0) {
-            if (read_idx + 1 >= argc) {
-                print_error("Missing style name after --style");
-                return 1;
-            }
-            const char *style_name = argv[++read_idx];
-            if (!tui_style_apply(style_name)) {
-                char warn_msg[128];
-                snprintf(warn_msg, sizeof(warn_msg),
-                         "Unknown style '%s'. Using %s",
-                         style_name, tui_style_active_name());
-                print_warning(warn_msg);
-            }
-            continue;
-        }
-        if (strncmp(arg, "--style=", 8) == 0) {
-            const char *style_name = arg + 8;
-            if (!tui_style_apply(style_name)) {
-                char warn_msg[128];
-                snprintf(warn_msg, sizeof(warn_msg),
-                         "Unknown style '%s'. Using %s",
-                         style_name, tui_style_active_name());
-                print_warning(warn_msg);
-            }
-            continue;
-        }
-        if (strcmp(arg, "--tui") == 0 || strcmp(arg, "-t") == 0) {
-            use_tui = true;
-            continue;
-        }
-        argv[write_idx++] = argv[read_idx];
-    }
-    argc = write_idx;
-    argv[argc] = NULL;
-
-    // Launch TUI if requested or no arguments
-    if (use_tui || (argc < 2 && is_tty())) {
-        return tui_main_menu();
-    }
-
     if (argc < 2) {
-        log_debug("No command provided, showing usage");
         print_usage(argv[0]);
         log_cleanup();
         return 1;
     }
 
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
-        log_debug("Help requested");
         print_usage(argv[0]);
         log_cleanup();
         return 0;
     }
 
-
-    log_developer("Command: %s", argv[1]);
-
     if (strcmp(argv[1], "install") == 0) {
-        log_info("Install command invoked");
-        log_developer("Install arguments: argc=%d", argc - 1);
         return cmd_install(argc - 1, argv + 1);
-    } else if (strcmp(argv[1], "uninstall") == 0) {
-        // TSI uninstall (check before package remove)
-        return cmd_uninstall(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "remove") == 0) {
-        // Package removal
-        log_info("Remove command invoked");
         if (argc < 3) {
-            log_error("Remove command called without package name");
             fprintf(stderr, "Error: package name required\n");
             return 1;
         }
-        log_debug("Removing package: %s", argv[2]);
-        const char *home = getenv("HOME");
-        if (!home) home = "/root";
+        const char *home = get_home_dir();
         char db_dir[1024];
         int len = snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
         if (len < 0 || (size_t)len >= sizeof(db_dir)) {
-            log_error("Path too long for database directory");
             fprintf(stderr, "Error: Path too long\n");
             return 1;
         }
@@ -2267,31 +1696,25 @@ int main(int argc, char **argv) {
         if (database_remove_package(db, argv[2])) {
             char msg[256];
             snprintf(msg, sizeof(msg), "Removed %s", argv[2]);
-            print_success(msg);
-            log_info("Package removed successfully: %s", argv[2]);
+            printf("%s\n", msg);
             database_free(db);
             return 0;
         } else {
             char warn_msg[256];
             snprintf(warn_msg, sizeof(warn_msg), "Package %s is not installed", argv[2]);
-            print_warning(warn_msg);
-            log_warning("Package not installed, cannot remove: %s", argv[2]);
+            fprintf(stderr, "Warning: %s\n", warn_msg);
             database_free(db);
             return 1;
         }
     } else if (strcmp(argv[1], "list") == 0) {
-        log_info("List command invoked");
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {
-        log_info("Info command invoked");
         return cmd_info(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "versions") == 0) {
-        log_info("Versions command invoked");
         return cmd_versions(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "update") == 0) {
         return cmd_update(argc - 1, argv + 1);
     } else {
-        log_error("Unknown command: %s", argv[1]);
         fprintf(stderr, "Unknown command: %s\n", argv[1]);
         print_usage(argv[0]);
         return 1;
