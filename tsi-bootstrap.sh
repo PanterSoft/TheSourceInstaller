@@ -559,9 +559,14 @@ main() {
     log_info "Linking TSI binary..."
     UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
     LINK_SUCCESS=false
+    STATIC_ERROR=""
     if [ "$UNAME_S" = "Linux" ]; then
-        # Try static linking first (suppress warnings, only show errors)
-        if $CC $OBJECTS -o "bin/tsi" -static -w 2>&1; then
+        # Try static linking first (suppress error output during attempt)
+        set +e  # Temporarily disable exit on error for static linking attempt
+        STATIC_ERROR=$($CC $OBJECTS -o "bin/tsi" -static -w 2>&1)
+        STATIC_EXIT=$?
+        set -e  # Re-enable exit on error
+        if [ $STATIC_EXIT -eq 0 ] && [ -f "bin/tsi" ]; then
             LINK_SUCCESS=true
         else
             # Static linking failed, try dynamic linking
@@ -572,8 +577,20 @@ main() {
 
     # If static linking didn't work or we're not on Linux, try dynamic linking
     if [ "$LINK_SUCCESS" = false ]; then
-        if ! $CC $OBJECTS -o "bin/tsi" -w 2>&1; then
+        set +e  # Temporarily disable exit on error for dynamic linking attempt
+        DYNAMIC_ERROR=$($CC $OBJECTS -o "bin/tsi" -w 2>&1)
+        DYNAMIC_EXIT=$?
+        set -e  # Re-enable exit on error
+        if [ $DYNAMIC_EXIT -ne 0 ] || [ ! -f "bin/tsi" ]; then
             log_error "Failed to link TSI binary"
+            if [ -n "$STATIC_ERROR" ]; then
+                log_error "Static linking error:"
+                echo "$STATIC_ERROR" | head -5 | sed 's/^/  /' >&2
+            fi
+            if [ -n "$DYNAMIC_ERROR" ]; then
+                log_error "Dynamic linking error:"
+                echo "$DYNAMIC_ERROR" | head -5 | sed 's/^/  /' >&2
+            fi
             exit 1
         fi
     fi
@@ -656,25 +673,39 @@ main() {
         log_info ""
     else
         # Piped execution (curl ... | sh) - can't modify parent shell
-        # Output export command for user to run
-        log_info "To use TSI in this terminal, run:"
+        log_info "To use TSI in this terminal session, run:"
         log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
-        log_info ""
-        log_info "Or use: eval \"\$(curl -fsSL ... | sh)\" to auto-configure"
         log_info ""
     fi
 
-    log_info "To add permanently to your shell profile:"
-    if [ -n "$ZSH_VERSION" ]; then
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info "To add TSI to PATH permanently:"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info ""
+    if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
+        log_info "For zsh, add to ~/.zshrc:"
+        log_info ""
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
+        log_info "  source ~/.zshrc"
         log_info ""
-        log_info "Enable autocomplete (zsh):"
+        log_info "Or manually edit ~/.zshrc and add:"
+        log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
+        log_info ""
+        log_info "To enable autocomplete (zsh):"
         log_info "  echo 'source $PREFIX/share/completions/tsi.zsh' >> ~/.zshrc"
+        log_info "  source ~/.zshrc"
     else
-        log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.bashrc"
+        log_info "For bash, add to ~/.bashrc:"
         log_info ""
-        log_info "Enable autocomplete (bash):"
+        log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.bashrc"
+        log_info "  source ~/.bashrc"
+        log_info ""
+        log_info "Or manually edit ~/.bashrc and add:"
+        log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
+        log_info ""
+        log_info "To enable autocomplete (bash):"
         log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
+        log_info "  source ~/.bashrc"
     fi
     log_info ""
     if [ "$REPAIR_MODE" != true ]; then
