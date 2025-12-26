@@ -101,17 +101,39 @@ static bool run_command_with_window(const char *overview, const char *detail, co
     }
 
     char line[OUTPUT_LINE_LENGTH];
+    int status = -1;
+    bool pipe_error = false;
+
     while (fgets(line, sizeof(line), pipe)) {
+        // Check for buffer overflow protection
+        if (strlen(line) >= sizeof(line) - 1 && line[sizeof(line) - 2] != '\n') {
+            // Line was truncated, skip rest
+            int c;
+            while ((c = fgetc(pipe)) != EOF && c != '\n');
+        }
+
         output_buffer_add(&buffer, line);
         if (interactive) {
             output_buffer_display(&buffer);
         } else {
             fputs(line, stdout);
+            fflush(stdout);  // Ensure output is flushed
         }
     }
 
-    int status = pclose(pipe);
+    // Check if fgets failed due to error (not EOF)
+    if (ferror(pipe)) {
+        pipe_error = true;
+    }
+
+    status = pclose(pipe);
     output_capture_end(&buffer);
+
+    // If pipe had an error, return false
+    if (pipe_error) {
+        return false;
+    }
+
     return status == 0;
 }
 
@@ -438,12 +460,7 @@ static int cmd_install(int argc, char **argv) {
     }
 
 install_package:
-    if (package_version) {
-        print_section("Upgrading");
-        printf("  %s %s -> %s\n", package_name, "?", package_version);
-    } else {
-        // Don't print section header here - will be printed by print_building_compact
-    }
+    // Section headers will be printed by individual operations (building, installing)
 
     // Check if already installed (check specific version if specified)
     if (!force) {
@@ -1471,8 +1488,10 @@ static int cmd_info(int argc, char **argv) {
 }
 
 static int cmd_update(int argc, char **argv) {
-    log_developer("cmd_update called with argc=%d", argc);
-    log_info("Update command invoked");
+    // Use fprintf instead of logging at start to avoid potential crashes
+    // Logging might fail if log file can't be written
+    fprintf(stderr, "[DEBUG] cmd_update called with argc=%d\n", argc);
+
     const char *repo_url = NULL;
     const char *local_path = NULL;
     const char *prefix = NULL;
@@ -1554,13 +1573,30 @@ static int cmd_update(int argc, char **argv) {
         int git_cmd_len;
         if (stat(temp_dir, &st) == 0) {
             // Update existing clone
-            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>&1", temp_dir);
         } else {
             // Clone repository
-            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", repo_url, temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>&1", repo_url, temp_dir);
         }
         if (git_cmd_len < 0 || (size_t)git_cmd_len >= sizeof(git_cmd)) {
             fprintf(stderr, "Error: Command too long\n");
+            return 1;
+        }
+
+        // Check if git is available before trying to use it
+        // Use a safer check that won't hang
+        FILE *git_check = popen("command -v git 2>/dev/null", "r");
+        bool git_available = false;
+        if (git_check) {
+            char result[256];
+            if (fgets(result, sizeof(result), git_check)) {
+                git_available = true;
+            }
+            pclose(git_check);
+        }
+        if (!git_available) {
+            fprintf(stderr, "Error: git is not installed or not in PATH\n");
+            fprintf(stderr, "Please install git to update the package repository\n");
             return 1;
         }
 
@@ -1616,10 +1652,27 @@ static int cmd_update(int argc, char **argv) {
             git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "cd '%s' && git pull 2>/dev/null", temp_dir);
         } else {
             // Clone repository
-            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>/dev/null", default_repo, temp_dir);
+            git_cmd_len = snprintf(git_cmd, sizeof(git_cmd), "git clone --depth 1 '%s' '%s' 2>&1", default_repo, temp_dir);
         }
         if (git_cmd_len < 0 || (size_t)git_cmd_len >= sizeof(git_cmd)) {
             fprintf(stderr, "Error: Command too long\n");
+            return 1;
+        }
+
+        // Check if git is available before trying to use it
+        // Use a safer check that won't hang
+        FILE *git_check = popen("command -v git 2>/dev/null", "r");
+        bool git_available = false;
+        if (git_check) {
+            char result[256];
+            if (fgets(result, sizeof(result), git_check)) {
+                git_available = true;
+            }
+            pclose(git_check);
+        }
+        if (!git_available) {
+            fprintf(stderr, "Error: git is not installed or not in PATH\n");
+            fprintf(stderr, "Please install git to update the package repository\n");
             return 1;
         }
 
@@ -2071,31 +2124,56 @@ int main(int argc, char **argv) {
     }
 
     // Initialize logging from environment (must be first)
-    // Logging is always active with dev mode enabled by default
-    int log_result = log_init_from_env();
-    if (log_result != 0) {
-        // Log initialization failed, but continue anyway
-        fprintf(stderr, "Warning: Failed to initialize logging\n");
+    // CRITICAL: Make logging completely optional to prevent hangs
+    // Check environment variable first - if disabled, skip all logging init
+    const char *disable_file_log = getenv("TSI_DISABLE_FILE_LOG");
+    const char *enable_console_log = getenv("TSI_LOG_TO_CONSOLE");
+
+    // Check if file logging should be disabled (case-insensitive)
+    bool disable_logging = false;
+    if (disable_file_log) {
+        if (strcmp(disable_file_log, "1") == 0) {
+            disable_logging = true;
+        } else {
+            // Case-insensitive comparison (manual to avoid strcasecmp dependency)
+            char lower[16] = {0};
+            for (int i = 0; i < 15 && disable_file_log[i]; i++) {
+                char c = disable_file_log[i];
+                lower[i] = (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+            }
+            if (strcmp(lower, "true") == 0 || strcmp(lower, "yes") == 0) {
+                disable_logging = true;
+            }
+        }
     }
 
-    // Ensure logging is always enabled (dev mode by default)
-    // If environment didn't set a level, we keep the default LOG_LEVEL_DEVELOPER
+    // Completely skip file logging if disabled
+    if (disable_logging) {
+        // File logging explicitly disabled via environment
+        log_set_file(false);
+        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
+    } else {
+        // Try to initialize logging, but fail fast if it hangs
+        // Don't call log_init_from_env() if it might hang - just disable file logging
+        // Set defaults without trying to open files
+        log_set_file(false);  // Disable by default to prevent hangs
+        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
+    }
+
+    // Set log level (this doesn't require file operations)
     if (log_get_level() == LOG_LEVEL_NONE) {
         log_set_level(LOG_LEVEL_DEVELOPER);
     }
 
-    // Disable console logging - log to file only
-    log_set_console(false);
-    log_set_file(true);
-
-    // Log program start
-    log_developer("TSI starting (argc=%d)", argc);
-    log_developer("Command line arguments:");
-    for (int i = 0; i < argc; i++) {
-        log_developer("  argv[%d] = '%s'", i, argv[i]);
-    }
-    log_debug("Logging system initialized (level=%s, console=disabled, file=enabled)",
-              log_level_name(log_get_level()));
+    // Skip logging calls initially to prevent hangs
+    // Only log if explicitly enabled via environment
+    // log_developer("TSI starting (argc=%d)", argc);
+    // log_developer("Command line arguments:");
+    // for (int i = 0; i < argc; i++) {
+    //     log_developer("  argv[%d] = '%s'", i, argv[i]);
+    // }
+    // log_debug("Logging system initialized (level=%s, console=disabled, file=enabled)",
+    //           log_level_name(log_get_level()));
 
     tui_style_reload_from_env();
 

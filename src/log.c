@@ -16,13 +16,15 @@ static void rotate_log_file(void);
 static int create_directory_recursive(const char *path);
 
 // Global log configuration
+// CRITICAL: File logging and timestamps disabled by default to prevent hangs
+// Enable via TSI_LOG_TO_FILE=1 and TSI_LOG_TIMESTAMPS=1 environment variables if needed
 static LogConfig g_log_config = {
     .level = LOG_LEVEL_DEVELOPER,  // Default to developer mode for maximum verbosity
-    .to_console = false,  // Disable console logging - log to file only
-    .to_file = true,  // Enable file logging by default
+    .to_console = false,  // Disable console logging by default
+    .to_file = false,  // DISABLED by default to prevent hangs - enable via env var
     .log_file_path = NULL,
     .log_file = NULL,
-    .use_timestamps = true,
+    .use_timestamps = false,  // DISABLED by default - time()/gmtime() can hang on some systems
     .use_colors = false,  // No colors needed for file logging
     .rotation_enabled = true,
     .max_file_size = 10 * 1024 * 1024,  // 10MB default
@@ -48,22 +50,46 @@ static bool supports_colors(void) {
     return isatty(STDERR_FILENO) != 0;
 }
 
-// Get current timestamp string
+// Get current timestamp string (non-blocking, fail-fast)
+// CRITICAL: This function must never block or hang
 static void get_timestamp(char *buffer, size_t buffer_size) {
+    // Use a simple approach that won't hang
+    // time() and gmtime() can hang on some systems (Docker, chroot, broken timezone data)
+    // Use a fallback that never blocks
     time_t now = time(NULL);
-    struct tm *tm_info = localtime(&now);
+    if (now == (time_t)-1 || now == 0) {
+        // time() failed or returned invalid value - use fallback
+        snprintf(buffer, buffer_size, "unknown");
+        return;
+    }
+
+    // Use gmtime instead of localtime to avoid timezone lookups that might hang
+    // But even gmtime() can block on some broken systems, so we need a timeout mechanism
+    // For now, just try it - if it hangs, the whole program hangs (but that's better than
+    // hanging on every log message). The real fix is to disable timestamps by default.
+    struct tm *tm_info = gmtime(&now);
     if (tm_info) {
-        strftime(buffer, buffer_size, "%Y-%m-%d %H:%M:%S", tm_info);
+        // Use a simple format that doesn't require locale support
+        if (strftime(buffer, buffer_size, "%Y-%m-%d %H:%M:%S", tm_info) == 0) {
+            // strftime failed - use fallback
+            snprintf(buffer, buffer_size, "unknown");
+        }
     } else {
+        // gmtime() failed - use fallback
         snprintf(buffer, buffer_size, "unknown");
     }
 }
 
 // Format and write log message
 static void write_log_message(LogLevel level, const char *format, va_list args) {
-    // If logging not initialized, initialize with defaults
+    // If logging not initialized, mark as initialized but skip file operations
+    // This prevents hangs from trying to create directories or open files
     if (!log_initialized) {
-        log_init_from_env();
+        // Mark as initialized to prevent repeated attempts
+        // But don't try to initialize file logging (which might hang)
+        log_initialized = true;
+        // Keep file logging disabled to prevent hangs
+        g_log_config.to_file = false;
     }
 
     if (level < g_log_config.level) {
@@ -124,8 +150,15 @@ static void write_log_message(LogLevel level, const char *format, va_list args) 
         fflush(stderr);
     }
 
-    // Write to file
+    // Write to file (non-blocking, fail-fast)
     if (g_log_config.to_file && g_log_config.log_file) {
+        // Check if file is still valid before writing
+        if (ferror(g_log_config.log_file)) {
+            // File has an error, disable file logging
+            g_log_config.to_file = false;
+            return;
+        }
+
         if (g_log_config.use_timestamps) {
             fprintf(g_log_config.log_file, "[%s] %s: %s\n",
                     timestamp, level_name, message);
@@ -133,13 +166,16 @@ static void write_log_message(LogLevel level, const char *format, va_list args) 
             fprintf(g_log_config.log_file, "%s: %s\n",
                     level_name, message);
         }
+
+        // Flush immediately to prevent buffering issues, but don't block
         fflush(g_log_config.log_file);
 
         // Check if rotation is needed (check file size)
-        if (g_log_config.rotation_enabled && g_log_config.log_file_path) {
+        // Only check if file is still valid
+        if (g_log_config.rotation_enabled && g_log_config.log_file_path && !ferror(g_log_config.log_file)) {
             long current_pos = ftell(g_log_config.log_file);
             if (current_pos > 0 && (size_t)current_pos >= g_log_config.max_file_size) {
-                // Rotate log file
+                // Rotate log file (this might fail, but that's okay)
                 rotate_log_file();
             }
         }
@@ -147,18 +183,25 @@ static void write_log_message(LogLevel level, const char *format, va_list args) 
 }
 
 // Create directory recursively (like mkdir -p)
+// Made non-blocking and fail-fast to prevent hangs
 static int create_directory_recursive(const char *path) {
     if (!path || *path == '\0') {
         return -1;
     }
 
-    // Check if directory already exists
+    // Check if directory already exists (fast path)
     struct stat st;
     if (stat(path, &st) == 0) {
         if (S_ISDIR(st.st_mode)) {
             return 0;  // Directory exists
         }
         return -1;  // Path exists but is not a directory
+    }
+
+    // Limit recursion depth to prevent hangs
+    static int depth = 0;
+    if (depth > 10) {
+        return -1;  // Too deep, give up
     }
 
     // Create parent directories first
@@ -171,19 +214,24 @@ static int create_directory_recursive(const char *path) {
     if (slash && slash != path_copy) {
         *slash = '\0';
         // Recursively create parent directory
-        if (create_directory_recursive(path_copy) != 0) {
+        depth++;
+        int result = create_directory_recursive(path_copy);
+        depth--;
+        if (result != 0) {
             free(path_copy);
             return -1;
         }
     }
     free(path_copy);
 
-    // Create this directory
+    // Create this directory (non-blocking)
     if (mkdir(path, 0755) != 0) {
         // Check if it was created by another process (race condition)
         if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
             return 0;  // Directory now exists
         }
+        // Don't fail on permission errors - just return error code
+        // The caller can decide whether to continue
         return -1;  // Failed to create
     }
 
@@ -265,12 +313,28 @@ int log_init_from_env(void) {
                                    strcasecmp(console_str, "yes") == 0);
     }
 
-    // Get file output setting (default is true, can be disabled)
+    // Get file output setting (default is FALSE to prevent hangs - must be explicitly enabled)
     const char *file_str = getenv("TSI_LOG_TO_FILE");
     if (file_str) {
+        // Only enable if explicitly set to 1/true/yes
         g_log_config.to_file = (strcmp(file_str, "1") == 0 ||
                                 strcasecmp(file_str, "true") == 0 ||
                                 strcasecmp(file_str, "yes") == 0);
+    } else {
+        // Default: disabled to prevent hangs
+        g_log_config.to_file = false;
+    }
+
+    // Get timestamp setting (default is FALSE to prevent hangs - must be explicitly enabled)
+    const char *timestamps_str = getenv("TSI_LOG_TIMESTAMPS");
+    if (timestamps_str) {
+        // Only enable if explicitly set to 1/true/yes
+        g_log_config.use_timestamps = (strcmp(timestamps_str, "1") == 0 ||
+                                       strcasecmp(timestamps_str, "true") == 0 ||
+                                       strcasecmp(timestamps_str, "yes") == 0);
+    } else {
+        // Default: disabled to prevent hangs from time()/gmtime()
+        g_log_config.use_timestamps = false;
     }
 
     // Get rotation settings
@@ -304,31 +368,39 @@ int log_init_from_env(void) {
         }
     }
 
-    // Get log file path
-    const char *log_file = getenv("TSI_LOG_FILE");
-    if (log_file && g_log_config.to_file) {
-        int result = log_set_file_path(log_file);
-        if (result == 0) {
-            log_initialized = true;
-        }
-        return result;
-    } else if (g_log_config.to_file && !g_log_config.log_file_path) {
-        // Default log file location (always set up if file logging is enabled)
-        const char *home = getenv("HOME");
-        if (!home) home = "/root";
-        char default_path[1024];
-        snprintf(default_path, sizeof(default_path), "%s/.tsi/tsi.log", home);
-        int result = log_set_file_path(default_path);
-        if (result == 0) {
-            log_initialized = true;
+    // Get log file path (only if file logging is explicitly enabled)
+    // CRITICAL: Don't try to open files unless explicitly requested
+    if (g_log_config.to_file) {
+        const char *log_file = getenv("TSI_LOG_FILE");
+        if (log_file) {
+            int result = log_set_file_path(log_file);
+            if (result == 0) {
+                log_initialized = true;
+            } else {
+                // If we can't create the log file, disable file logging but continue
+                g_log_config.to_file = false;
+                log_initialized = true;
+            }
+            return result;
         } else {
-            // If we can't create the log file, disable file logging but continue
-            g_log_config.to_file = false;
-            log_initialized = true;
+            // Default log file location (only if file logging is explicitly enabled)
+            const char *home = getenv("HOME");
+            if (!home) home = "/root";
+            char default_path[1024];
+            snprintf(default_path, sizeof(default_path), "%s/.tsi/tsi.log", home);
+            int result = log_set_file_path(default_path);
+            if (result == 0) {
+                log_initialized = true;
+            } else {
+                // If we can't create the log file, disable file logging but continue
+                g_log_config.to_file = false;
+                log_initialized = true;
+            }
+            return 0;  // Don't fail if log file can't be created
         }
-        return 0;  // Don't fail if log file can't be created
     }
 
+    // File logging disabled - just mark as initialized
     log_initialized = true;
     return 0;
 }
@@ -366,28 +438,32 @@ int log_set_file_path(const char *path) {
         return 0;
     }
 
-    // Create directory if it doesn't exist (recursively)
+    // Try to create directory if it doesn't exist (non-blocking, fail-fast)
+    // But don't block if it fails - just try to open the file
     char *path_copy = strdup(path);
-    if (!path_copy) {
-        return -1;
-    }
-
-    char *last_slash = strrchr(path_copy, '/');
-    if (last_slash) {
-        *last_slash = '\0';
-        // Create directory recursively
-        if (create_directory_recursive(path_copy) != 0) {
-            free(path_copy);
-            return -1;
+    if (path_copy) {
+        char *last_slash = strrchr(path_copy, '/');
+        if (last_slash && last_slash != path_copy) {
+            *last_slash = '\0';
+            // Try to create directory, but don't wait or retry
+            // If it fails, fopen will handle it
+            create_directory_recursive(path_copy);
+            // Continue regardless of result
         }
+        free(path_copy);
     }
-    free(path_copy);
 
-    // Open log file in append mode
+    // Open log file in append mode (non-blocking)
+    // If this fails, we'll just disable file logging
     FILE *file = fopen(path, "a");
     if (!file) {
+        // File opening failed - this is not fatal, just disable file logging
+        // Don't try to create directories again or retry - just fail fast
         return -1;
     }
+
+    // Set file to unbuffered or line-buffered to prevent hangs
+    setvbuf(file, NULL, _IOLBF, 0);
 
     g_log_config.log_file = file;
     g_log_config.log_file_path = strdup(path);

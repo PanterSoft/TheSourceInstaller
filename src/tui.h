@@ -103,14 +103,14 @@ static inline bool supports_colors(void) {
 #define ICON_BUILD          tui_style_icon(TUI_ICON_BUILD)
 #define ICON_INSTALL        tui_style_icon(TUI_ICON_INSTALL)
 
-// Vibrant section header with colorful styling
+// Homebrew-style section header
 static inline void print_section(const char *title) {
     if (supports_colors()) {
-        printf("%s%s═══>%s %s%s%s%s\n",
-               COLOR_BRIGHT_CYAN, COLOR_BOLD, COLOR_RESET,
-               COLOR_BRIGHT_MAGENTA, COLOR_BOLD, title, COLOR_RESET);
+        printf("%s%s==>%s %s%s%s%s\n",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, title, COLOR_RESET);
     } else {
-    printf("==> %s\n", title);
+        printf("==> %s\n", title);
     }
 }
 
@@ -180,61 +180,147 @@ static inline void print_package(const char *name, const char *version) {
     }
 }
 
-// Print package with version change (colorful with arrow)
+// Homebrew-style package update listing (package old -> new)
+// Format: "  package old -> new" (plain text, no colors for the list)
 static inline void print_package_update(const char *name, const char *old_version, const char *new_version) {
-    if (supports_colors()) {
-        if (old_version && new_version) {
-            printf("  %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s\n",
-                   COLOR_BRIGHT_BLUE, ICON_PACKAGE, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, name, COLOR_RESET,
-                   COLOR_DIM, old_version, COLOR_RESET,
-                   COLOR_BRIGHT_MAGENTA, ICON_ARROW, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, new_version, COLOR_RESET);
-        } else if (new_version) {
-            printf("  %s%s%s %s%s%s %s%s%s %s%s%s\n",
-                   COLOR_BRIGHT_BLUE, ICON_PACKAGE, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, name, COLOR_RESET,
-                   COLOR_BRIGHT_MAGENTA, ICON_ARROW, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, new_version, COLOR_RESET);
-        } else {
-            printf("  %s%s%s %s%s%s\n",
-                   COLOR_BRIGHT_BLUE, ICON_PACKAGE, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, name, COLOR_RESET);
-        }
-    } else {
     if (old_version && new_version) {
         printf("  %s %s -> %s\n", name, old_version, new_version);
     } else if (new_version) {
         printf("  %s -> %s\n", name, new_version);
     } else {
         printf("  %s\n", name);
-        }
     }
 }
 
-// Print download progress (colorful with download icon)
+// Homebrew-style upgrade header: "==> Upgrading X outdated packages:"
+static inline void print_upgrading_header(size_t count) {
+    if (supports_colors()) {
+        printf("%s%s==>%s %s%sUpgrading %zu outdated package%s:%s\n",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, count, count == 1 ? "" : "s", COLOR_RESET);
+    } else {
+        printf("==> Upgrading %zu outdated package%s:\n", count, count == 1 ? "" : "s");
+    }
+}
+
+// Homebrew-style fetching header: "==> Fetching downloads for: package1, package2, ..."
+static inline void print_fetching_header(const char **packages, size_t count) {
+    if (supports_colors()) {
+        printf("%s%s==>%s %s%sFetching downloads for:%s",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET);
+    } else {
+        printf("==> Fetching downloads for:");
+    }
+
+    if (packages && count > 0) {
+        // Print comma-separated list with bright green package names
+        for (size_t i = 0; i < count; i++) {
+            if (i == 0) {
+                printf(" ");
+            } else {
+                printf(", ");
+            }
+            if (supports_colors() && packages[i]) {
+                printf("%s%s%s", COLOR_BRIGHT_GREEN, packages[i], COLOR_RESET);
+            } else if (packages[i]) {
+                printf("%s", packages[i]);
+            }
+        }
+    }
+    printf("\n");
+}
+
+// Homebrew-style version change line: "old -> new" (shown after "==> Upgrading package")
+static inline void print_version_change(const char *old_version, const char *new_version) {
+    if (old_version && new_version) {
+        printf("%s -> %s\n", old_version, new_version);
+    } else if (new_version) {
+        printf("-> %s\n", new_version);
+    }
+}
+
+// Homebrew-style "Pouring" message: "==> Pouring package--version.bottle.tar.gz"
+static inline void print_pouring(const char *bottle_file) {
+    if (supports_colors()) {
+        printf("%s%s==>%s %s%sPouring%s %s%s%s\n",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_CYAN, bottle_file ? bottle_file : "", COLOR_RESET);
+    } else {
+        printf("==> Pouring %s\n", bottle_file ? bottle_file : "");
+    }
+}
+
+// Homebrew-style download progress with right-aligned status
+// Format: "✓ Bottle package-name (version)" with right-aligned "[Downloaded X/Y]"
 static inline void print_download(const char *icon, const char *package, const char *version,
                                   const char *size_info) {
-    if (supports_colors()) {
-        const char *use_icon = icon ? icon : ICON_DOWNLOAD;
+    const char *use_icon = icon ? icon : ICON_CHECK;
+
+    // Try to detect terminal width, default to 80
+    int terminal_width = 80;
+    if (is_tty()) {
+        const char *cols = getenv("COLUMNS");
+        if (cols) {
+            int w = atoi(cols);
+            if (w > 0) terminal_width = w;
+        }
+    }
+
+    // Calculate widths for right-alignment
+    int package_len = (int)strlen(package);
+    int version_len = version ? (int)strlen(version) : 0;
+    int icon_len = (int)strlen(use_icon);
+    int size_len = size_info ? (int)strlen(size_info) : 0;
+
+    // Calculate label width: "✓ Bottle package (version)"
+    // icon + space + "Bottle" + space + package + space + ( + version + )
+    int label_width = icon_len + 1 + 6 + 1 + package_len; // "✓ Bottle package"
     if (version) {
-            printf("%s%s%s %s%s%s %s%s%s: %s%s%s\n",
-                   COLOR_BRIGHT_CYAN, use_icon, COLOR_RESET,
-                   COLOR_BRIGHT_BLUE, package, COLOR_RESET,
-                   COLOR_DIM, version, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, size_info, COLOR_RESET);
+        label_width += 1 + version_len + 1; // " (version)"
+    }
+
+    if (supports_colors()) {
+        // Green checkmark
+        printf("%s%s%s", COLOR_BRIGHT_GREEN, use_icon, COLOR_RESET);
+        // Plain "Bottle" text (not colored)
+        printf(" Bottle ");
+        // Bright cyan package name
+        printf("%s%s%s", COLOR_BRIGHT_CYAN, package, COLOR_RESET);
+        // Dim version in parentheses
+        if (version) {
+            printf(" %s(%s)%s", COLOR_DIM, version, COLOR_RESET);
+        }
+
+        // Right-align the size info (Homebrew style)
+        if (size_info) {
+            // Calculate padding: terminal_width - label_width - "[Downloaded " - size - "]"
+            int downloaded_text_len = 11; // "Downloaded "
+            int total_right_width = downloaded_text_len + size_len + 1; // +1 for closing bracket
+            int padding = terminal_width - label_width - total_right_width;
+            if (padding < 1) padding = 1;
+            for (int i = 0; i < padding; i++) printf(" ");
+            // Dim brackets and "Downloaded " text, bright green for size
+            printf("%s[Downloaded %s%s%s]%s\n",
+                   COLOR_DIM, COLOR_BRIGHT_GREEN, size_info, COLOR_DIM, COLOR_RESET);
         } else {
-            printf("%s%s%s %s%s%s: %s%s%s\n",
-                   COLOR_BRIGHT_CYAN, use_icon, COLOR_RESET,
-                   COLOR_BRIGHT_BLUE, package, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, size_info, COLOR_RESET);
+            printf("\n");
         }
     } else {
-        const char *use_icon = icon ? icon : ICON_DOWNLOAD;
+        printf("%s Bottle %s", use_icon, package);
         if (version) {
-            printf("%s %s (%s): %s\n", use_icon, package, version, size_info);
+            printf(" (%s)", version);
+        }
+        if (size_info) {
+            int downloaded_text_len = 11;
+            int total_right_width = downloaded_text_len + size_len + 1;
+            int padding = terminal_width - label_width - total_right_width;
+            if (padding < 1) padding = 1;
+            for (int i = 0; i < padding; i++) printf(" ");
+            printf("[Downloaded %s]\n", size_info);
         } else {
-            printf("%s %s: %s\n", use_icon, package, size_info);
+            printf("\n");
         }
     }
 }
@@ -277,61 +363,61 @@ static inline void print_step_overview(const char *label, const char *detail) {
     }
 }
 
-// Print "Building" message (colorful with build icon)
+// Homebrew-style "Building" message
 static inline void print_building(const char *package, const char *version) {
     if (supports_colors()) {
         if (version) {
-            printf("%s%s═══>%s %s%s%s %s%s%s %s%s%s%s\n",
-                   COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_YELLOW, ICON_BUILD, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package,
-                   COLOR_RESET, COLOR_DIM, version, COLOR_RESET);
+            printf("%s%s==>%s %s%s%s %s%s%s %s%s%s%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Building", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET,
+                   COLOR_DIM, version, COLOR_RESET);
         } else {
-            printf("%s%s═══>%s %s%s%s %s%s%s%s\n",
-                   COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_YELLOW, ICON_BUILD, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package, COLOR_RESET);
+            printf("%s%s==>%s %s%s%s %s%s%s%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Building", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET);
         }
     } else {
-    if (version) {
-        printf("==> Building %s %s\n", package, version);
-    } else {
-        printf("==> Building %s\n", package);
+        if (version) {
+            printf("==> Building %s %s\n", package, version);
+        } else {
+            printf("==> Building %s\n", package);
         }
     }
 }
 
-// Print "Installing" message (colorful with install icon)
+// Homebrew-style "Installing" message
 static inline void print_installing(const char *package, const char *version) {
     if (supports_colors()) {
         if (version) {
-            printf("%s%s═══>%s %s%s%s %s%s%s %s%s%s%s\n",
+            printf("%s%s==>%s %s%s%s %s%s%s %s%s%s%s\n",
                    COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, ICON_INSTALL, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package,
-                   COLOR_RESET, COLOR_DIM, version, COLOR_RESET);
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Installing", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET,
+                   COLOR_DIM, version, COLOR_RESET);
         } else {
-            printf("%s%s═══>%s %s%s%s %s%s%s%s\n",
+            printf("%s%s==>%s %s%s%s %s%s%s%s\n",
                    COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, ICON_INSTALL, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package, COLOR_RESET);
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Installing", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET);
         }
     } else {
-    if (version) {
-        printf("==> Installing %s %s\n", package, version);
-    } else {
-        printf("==> Installing %s\n", package);
+        if (version) {
+            printf("==> Installing %s %s\n", package, version);
+        } else {
+            printf("==> Installing %s\n", package);
         }
     }
 }
 
-// Print installation summary (colorful)
+// Homebrew-style installation summary
 static inline void print_summary(const char *install_path, int file_count, const char *size) {
     if (supports_colors()) {
         if (file_count > 0 && size) {
-            printf("%s%s═══>%s %s%sSummary%s\n",
-                   COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET);
+            printf("%s%s==>%s %s%sSummary%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET);
             printf("  %s%s%s %s(%d files, %s%s%s%s)\n",
                    COLOR_BRIGHT_CYAN, install_path, COLOR_RESET,
                    COLOR_DIM,
@@ -339,30 +425,30 @@ static inline void print_summary(const char *install_path, int file_count, const
                    COLOR_BRIGHT_GREEN, size, COLOR_RESET,
                    COLOR_DIM);
         } else if (install_path) {
-            printf("%s%s═══>%s %s%sSummary%s\n",
-                   COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET);
+            printf("%s%s==>%s %s%sSummary%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET);
             printf("  %s%s%s\n", COLOR_BRIGHT_CYAN, install_path, COLOR_RESET);
         }
     } else {
-    if (file_count > 0 && size) {
-        printf("==> Summary\n");
-        printf("  %s (%d files, %s)\n", install_path, file_count, size);
-    } else if (install_path) {
-        printf("==> Summary\n");
-        printf("  %s\n", install_path);
+        if (file_count > 0 && size) {
+            printf("==> Summary\n");
+            printf("  %s (%d files, %s)\n", install_path, file_count, size);
+        } else if (install_path) {
+            printf("==> Summary\n");
+            printf("  %s\n", install_path);
         }
     }
 }
 
-// Print caveats section (colorful)
+// Homebrew-style caveats section
 static inline void print_caveats_start(void) {
     if (supports_colors()) {
-        printf("%s%s═══>%s %s%sCaveats%s\n",
-               COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET,
-               COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET);
+        printf("%s%s==>%s %s%sCaveats%s\n",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET);
     } else {
-    printf("==> Caveats\n");
+        printf("==> Caveats\n");
     }
 }
 
@@ -377,12 +463,12 @@ static inline void print_caveat(const char *caveat) {
     }
 }
 
-// Print cleanup message (colorful)
+// Homebrew-style cleanup message
 static inline void print_cleanup(const char *package, const char *old_version, int file_count, const char *size) {
     if (supports_colors()) {
-        printf("%s%s═══>%s %s%sCleaning up%s %s%s%s\n",
-               COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET,
-               COLOR_BRIGHT_MAGENTA, COLOR_BOLD, COLOR_RESET,
+        printf("%s%s==>%s %s%sCleaning up%s %s%s%s\n",
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+               COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
                COLOR_BRIGHT_CYAN, package, COLOR_RESET);
         if (old_version) {
             if (file_count > 0 && size) {
@@ -400,12 +486,12 @@ static inline void print_cleanup(const char *package, const char *old_version, i
             }
         }
     } else {
-    printf("==> Cleaning up %s\n", package);
-    if (old_version) {
-        if (file_count > 0 && size) {
-            printf("  Removed %s (%d files, %s)\n", old_version, file_count, size);
-        } else {
-            printf("  Removed %s\n", old_version);
+        printf("==> Cleaning up %s\n", package);
+        if (old_version) {
+            if (file_count > 0 && size) {
+                printf("  Removed %s (%d files, %s)\n", old_version, file_count, size);
+            } else {
+                printf("  Removed %s\n", old_version);
             }
         }
     }
@@ -548,51 +634,51 @@ static inline void print_status_inline(const char *status) {
     }
 }
 
-// Print compact building status (colorful, prints on new line)
+// Homebrew-style compact building status
 static inline void print_building_compact(const char *package, const char *version) {
     if (supports_colors()) {
         if (version) {
-            printf("%s%s═══>%s %s%s%s %s%s%s %s%s%s%s\n",
-                   COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_YELLOW, ICON_BUILD, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package,
+            printf("%s%s==>%s %s%s%s %s%s%s %s%s%s%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Building", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package,
                    COLOR_RESET, COLOR_DIM, version, COLOR_RESET);
         } else {
-            printf("%s%s═══>%s %s%s%s %s%s%s%s\n",
-                   COLOR_BRIGHT_YELLOW, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_YELLOW, ICON_BUILD, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package, COLOR_RESET);
+            printf("%s%s==>%s %s%s%s %s%s%s%s\n",
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Building", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET);
         }
     } else {
-    if (version) {
-        printf("==> Building %s %s\n", package, version);
-    } else {
-        printf("==> Building %s\n", package);
+        if (version) {
+            printf("==> Building %s %s\n", package, version);
+        } else {
+            printf("==> Building %s\n", package);
         }
     }
     fflush(stdout);
 }
 
-// Print compact installing status (colorful, prints on new line)
+// Homebrew-style compact installing status
 static inline void print_installing_compact(const char *package, const char *version) {
     if (supports_colors()) {
         if (version) {
-            printf("%s%s═══>%s %s%s%s %s%s%s %s%s%s%s\n",
+            printf("%s%s==>%s %s%s%s %s%s%s %s%s%s%s\n",
                    COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, ICON_INSTALL, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package,
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Installing", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package,
                    COLOR_RESET, COLOR_DIM, version, COLOR_RESET);
         } else {
-            printf("%s%s═══>%s %s%s%s %s%s%s%s\n",
+            printf("%s%s==>%s %s%s%s %s%s%s%s\n",
                    COLOR_BRIGHT_GREEN, COLOR_BOLD, COLOR_RESET,
-                   COLOR_BRIGHT_GREEN, ICON_INSTALL, COLOR_RESET,
-                   COLOR_BRIGHT_CYAN, COLOR_BOLD, package, COLOR_RESET);
+                   COLOR_BRIGHT_GREEN, COLOR_BOLD, "Installing", COLOR_RESET,
+                   COLOR_BRIGHT_CYAN, package, COLOR_RESET);
         }
     } else {
-    if (version) {
-        printf("==> Installing %s %s\n", package, version);
-    } else {
-        printf("==> Installing %s\n", package);
+        if (version) {
+            printf("==> Installing %s %s\n", package, version);
+        } else {
+            printf("==> Installing %s\n", package);
         }
     }
     fflush(stdout);
@@ -682,13 +768,18 @@ static inline void output_buffer_add(OutputBuffer *buf, const char *line) {
         len = OUTPUT_LINE_LENGTH - 1;
     }
 
-    // Copy line (handle newline)
-    strncpy(buf->lines[buf->current_index], line, len);
-    // Remove trailing newline if present
-    if (buf->lines[buf->current_index][len - 1] == '\n') {
-        buf->lines[buf->current_index][len - 1] = '\0';
+    // Safety check: ensure len is valid
+    if (len == 0) {
+        buf->lines[buf->current_index][0] = '\0';
     } else {
+        // Copy line (handle newline)
+        strncpy(buf->lines[buf->current_index], line, len);
         buf->lines[buf->current_index][len] = '\0';
+
+        // Remove trailing newline if present
+        if (len > 0 && buf->lines[buf->current_index][len - 1] == '\n') {
+            buf->lines[buf->current_index][len - 1] = '\0';
+        }
     }
 
     buf->current_index = (buf->current_index + 1) % OUTPUT_BUFFER_LINES;

@@ -15,20 +15,37 @@ Database* database_new(const char *db_dir) {
         return NULL;
     }
 
-    db->db_path = malloc(strlen(db_dir) + 20);
-    snprintf(db->db_path, strlen(db_dir) + 20, "%s/installed.json", db_dir);
+    size_t db_path_len = strlen(db_dir) + 20;
+    db->db_path = malloc(db_path_len);
+    if (!db->db_path) {
+        log_error("Failed to allocate memory for database path");
+        free(db);
+        return NULL;
+    }
+    snprintf(db->db_path, db_path_len, "%s/installed.json", db_dir);
     log_developer("Database path: %s", db->db_path);
 
-    // Create directory if it doesn't exist
+    // Create directory if it doesn't exist (use POSIX mkdir instead of system())
     struct stat st = {0};
     if (stat(db_dir, &st) == -1) {
-        log_debug("Database directory does not exist, creating: %s", db_dir);
-        // Create directory (simple mkdir, no recursive)
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "mkdir -p %s", db_dir);
-        system(cmd);
-    } else {
-        log_developer("Database directory already exists: %s", db_dir);
+        // Try to create directory using mkdir (POSIX-compliant, non-blocking)
+        // Create parent directories manually to avoid system() call
+        char *path_copy = strdup(db_dir);
+        if (path_copy) {
+            char *slash = path_copy;
+            while ((slash = strchr(slash + 1, '/')) != NULL) {
+                *slash = '\0';
+                if (stat(path_copy, &st) == -1) {
+                    mkdir(path_copy, 0755);
+                }
+                *slash = '/';
+            }
+            // Create final directory
+            if (stat(db_dir, &st) == -1) {
+                mkdir(db_dir, 0755);
+            }
+            free(path_copy);
+        }
     }
 
     database_load(db);
@@ -228,7 +245,14 @@ bool database_load(Database *db) {
 
                                         if (current_pkg->dependencies_count >= deps_capacity) {
                                             deps_capacity *= 2;
-                                            current_pkg->dependencies = realloc(current_pkg->dependencies, sizeof(char*) * deps_capacity);
+                                            char **new_deps = realloc(current_pkg->dependencies, sizeof(char*) * deps_capacity);
+                                            if (!new_deps) {
+                                                log_error("Failed to reallocate memory for dependencies");
+                                                free(dep);
+                                                // Continue with existing capacity
+                                                continue;
+                                            }
+                                            current_pkg->dependencies = new_deps;
                                         }
                                         current_pkg->dependencies[current_pkg->dependencies_count++] = dep;
                                     }
