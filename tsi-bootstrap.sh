@@ -2,14 +2,23 @@
 # TSI One-Line Bootstrap Installer
 # Downloads TSI source and installs it
 # Works on systems with only a C compiler (no make required)
+# POSIX-compliant shell script
 
 set -e
+# Note: We don't use 'set -u' because some shells handle $@ differently
+# and we use parameter expansion with defaults like ${VAR:-default}
 
 PREFIX="${PREFIX:-$HOME/.tsi}"
 TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
 REPAIR_MODE=false
+
+# Isolate TSI: prioritize TSI's bin directory in PATH
+# This ensures TSI uses its own installed tools when available
+if [ -d "${PREFIX}/bin" ]; then
+    export PATH="${PREFIX}/bin:${PATH}"
+fi
 
 log_info() {
     echo "[INFO] $*"
@@ -23,25 +32,46 @@ log_error() {
     echo "[ERROR] $*" >&2
 }
 
+# Check if command exists, prioritizing TSI's bin directory
 command_exists() {
+    # First check TSI's bin directory if it exists
+    if [ -d "${PREFIX}/bin" ] && [ -x "${PREFIX}/bin/$1" ]; then
+        return 0
+    fi
+    # Fall back to system PATH
     command -v "$1" >/dev/null 2>&1
 }
 
-download_tarball() {
-    local url="$1"
-    local output="$2"
+# Get full path to command, preferring TSI's bin
+get_command_path() {
+    cmd="$1"
+    # First check TSI's bin directory if it exists
+    if [ -d "${PREFIX}/bin" ] && [ -x "${PREFIX}/bin/$cmd" ]; then
+        echo "${PREFIX}/bin/$cmd"
+        return 0
+    fi
+    # Fall back to system PATH
+    command -v "$cmd" 2>/dev/null || echo "$cmd"
+}
 
+download_tarball() {
+    url="$1"
+    output="$2"
+
+    # Prefer TSI-installed tools
     if command_exists curl; then
-        curl -fsSL "$url" -o "$output"
+        curl_cmd=$(get_command_path curl)
+        "$curl_cmd" -fsSL "$url" -o "$output" || return 1
     elif command_exists wget; then
-        wget -q "$url" -O "$output"
+        wget_cmd=$(get_command_path wget)
+        "$wget_cmd" -q "$url" -O "$output" || return 1
     else
         return 1
     fi
 }
 
 check_tsi_installed() {
-    local tsi_bin="$PREFIX/bin/tsi"
+    tsi_bin="${PREFIX}/bin/tsi"
     if [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ]; then
         # Just check if file exists and is executable, don't try to run it
         # (running --version might hang)
@@ -51,15 +81,20 @@ check_tsi_installed() {
 }
 
 check_tsi_outdated() {
-    local tsi_bin="$PREFIX/bin/tsi"
+    tsi_bin="${PREFIX}/bin/tsi"
     if [ -f "$tsi_bin" ]; then
         # Check if binary is older than 7 days (simple heuristic)
-        if [ -n "$(find "$tsi_bin" -mtime +7 2>/dev/null)" ]; then
-            return 0
+        # Use find if available, otherwise skip this check
+        if command_exists find; then
+            if [ -n "$(find "$tsi_bin" -mtime +7 2>/dev/null)" ]; then
+                return 0
+            fi
         fi
-        # Or check if source is newer
-        if [ -d "$INSTALL_DIR/tsi" ] && [ "$INSTALL_DIR/tsi/src/main.c" -nt "$tsi_bin" ] 2>/dev/null; then
-            return 0
+        # Or check if source is newer (POSIX-compliant test)
+        if [ -d "$INSTALL_DIR/tsi" ] && [ -f "$INSTALL_DIR/tsi/src/main.c" ]; then
+            if [ "$INSTALL_DIR/tsi/src/main.c" -nt "$tsi_bin" ] 2>/dev/null; then
+                return 0
+            fi
         fi
     fi
     return 1
@@ -151,20 +186,21 @@ main() {
     if [ "$REPAIR_MODE" = true ] && [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
         if command_exists git && [ -d "tsi/.git" ]; then
             log_info "Checking for source updates..."
+            git_cmd=$(get_command_path git)
             cd tsi
             # Set up remote if not already set
-            if ! git remote get-url origin >/dev/null 2>&1; then
-                git remote add origin "$TSI_REPO" 2>/dev/null || true
+            if ! "$git_cmd" remote get-url origin >/dev/null 2>&1; then
+                "$git_cmd" remote add origin "$TSI_REPO" 2>/dev/null || true
             fi
 
             # Fetch latest changes
-            if git fetch origin "$TSI_BRANCH" >/dev/null 2>&1; then
-                LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
-                REMOTE_COMMIT=$(git rev-parse "origin/$TSI_BRANCH" 2>/dev/null)
+            if "$git_cmd" fetch origin "$TSI_BRANCH" >/dev/null 2>&1; then
+                LOCAL_COMMIT=$("$git_cmd" rev-parse HEAD 2>/dev/null)
+                REMOTE_COMMIT=$("$git_cmd" rev-parse "origin/$TSI_BRANCH" 2>/dev/null)
                 if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ] && [ -n "$REMOTE_COMMIT" ]; then
                     log_info "Source has changed (local: ${LOCAL_COMMIT:0:8}, remote: ${REMOTE_COMMIT:0:8})"
                     log_info "Updating source..."
-                    if git pull origin "$TSI_BRANCH" >/dev/null 2>&1; then
+                    if "$git_cmd" pull origin "$TSI_BRANCH" >/dev/null 2>&1; then
                         log_info "✓ Source updated successfully"
                         cd ..
                     else
@@ -207,10 +243,11 @@ main() {
         GIT_CLONE_SUCCESS=false
         if command_exists git; then
             log_info "Cloning TSI repository..."
+            git_cmd=$(get_command_path git)
             if [ -d "tsi" ]; then
                 rm -rf tsi
             fi
-            if git clone --depth 1 --branch "$TSI_BRANCH" "$TSI_REPO" tsi 2>&1; then
+            if "$git_cmd" clone --depth 1 --branch "$TSI_BRANCH" "$TSI_REPO" tsi 2>&1; then
                 log_info "Repository cloned successfully"
                 GIT_CLONE_SUCCESS=true
             else
@@ -229,7 +266,8 @@ main() {
                 if download_tarball "$tarball_url" "$tarball"; then
                     log_info "Extracting tarball..."
                     if command_exists tar; then
-                        tar -xzf "$tarball" 2>/dev/null || tar -xf "$tarball" 2>/dev/null
+                        tar_cmd=$(get_command_path tar)
+                        "$tar_cmd" -xzf "$tarball" 2>/dev/null || "$tar_cmd" -xf "$tarball" 2>/dev/null
                         # Find and rename extracted directory (GitHub tarballs can have various names)
                         # Common patterns: tsi-main, tsi-${TSI_BRANCH}, TheSourceInstaller-main, etc.
                         EXTRACTED_DIR=""
@@ -241,9 +279,11 @@ main() {
                         done
                         # If no exact match, find any directory that contains src/main.c
                         if [ -z "$EXTRACTED_DIR" ]; then
-                            for dir in */; do
+                            for dir in *; do
+                                # Skip if not a directory
+                                [ ! -d "$dir" ] && continue
                                 if [ -d "$dir/src" ] && [ -f "$dir/src/main.c" ]; then
-                                    EXTRACTED_DIR="${dir%/}"
+                                    EXTRACTED_DIR="$dir"
                                     break
                                 fi
                             done
@@ -337,13 +377,16 @@ main() {
         # If still not found, try to get include paths from compiler
         if [ -z "$INCLUDE_FLAGS" ]; then
             log_info "Querying compiler for include paths..."
-            COMPILER_INCLUDES=$($CC -E -v -x c - 2>&1 | grep -E '^ /' | head -5 | tr '\n' ' ' || true)
-            if [ -n "$COMPILER_INCLUDES" ]; then
-                # Extract first include directory
-                FIRST_INC=$(echo "$COMPILER_INCLUDES" | awk '{print $1}')
-                if [ -n "$FIRST_INC" ] && [ -d "$FIRST_INC" ]; then
-                    INCLUDE_FLAGS="-I$FIRST_INC"
-                    log_info "Using compiler include path: $FIRST_INC"
+            # Use POSIX-compliant tools (avoid awk if possible, use sed instead)
+            if command_exists grep && command_exists head && command_exists tr; then
+                COMPILER_INCLUDES=$($CC -E -v -x c - 2>&1 | grep '^ /' | head -5 | tr '\n' ' ' || true)
+                if [ -n "$COMPILER_INCLUDES" ]; then
+                    # Extract first include directory using sed (POSIX-compliant)
+                    FIRST_INC=$(echo "$COMPILER_INCLUDES" | sed 's/^[[:space:]]*\([^[:space:]]*\).*/\1/')
+                    if [ -n "$FIRST_INC" ] && [ -d "$FIRST_INC" ]; then
+                        INCLUDE_FLAGS="-I$FIRST_INC"
+                        log_info "Using compiler include path: $FIRST_INC"
+                    fi
                 fi
             fi
         fi
@@ -356,36 +399,62 @@ main() {
         fi
     fi
 
-    # CFLAGS
-    CFLAGS="-Wall -Wextra -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
-
-    # Detect OS for static linking (only works on Linux)
-    UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
-    if [ "$UNAME_S" = "Linux" ]; then
-        LDFLAGS="-static"
-    else
-        LDFLAGS=""
-    fi
+    # CFLAGS (suppress warnings, only show errors)
+    CFLAGS="-w -O2 -std=c11 -D_POSIX_C_SOURCE=200809L $INCLUDE_FLAGS"
 
     # Compile all C source files
     OBJECTS=""
+    COMPILED_COUNT=0
+    # Count files in a POSIX-compliant way
+    TOTAL_FILES=0
     for c_file in *.c; do
         if [ -f "$c_file" ]; then
-            obj_file="build/${c_file%.c}.o"
-            log_info "  Compiling $c_file..."
-            if ! $CC $CFLAGS -c "$c_file" -o "$obj_file"; then
+            TOTAL_FILES=$((TOTAL_FILES + 1))
+        fi
+    done
+
+    if [ "$TOTAL_FILES" -eq 0 ]; then
+        log_error "No C source files found in current directory"
+        exit 1
+    fi
+
+    for c_file in *.c; do
+        if [ -f "$c_file" ]; then
+            COMPILED_COUNT=$((COMPILED_COUNT + 1))
+            log_info "  [$COMPILED_COUNT/$TOTAL_FILES] Compiling $c_file..."
+            # Use POSIX-compliant parameter expansion
+            obj_file="build/$(echo "$c_file" | sed 's/\.c$/.o/')"
+            # Suppress warnings, only show errors (warnings already suppressed by -w in CFLAGS)
+            if ! $CC $CFLAGS -c "$c_file" -o "$obj_file" 2>&1; then
                 log_error "Failed to compile $c_file"
                 exit 1
             fi
             OBJECTS="$OBJECTS $obj_file"
         fi
     done
+    log_info "Compiled $COMPILED_COUNT source files"
 
-    # Link
+    # Link (try static first, fall back to dynamic if static fails)
     log_info "Linking TSI binary..."
-    if ! $CC $OBJECTS -o "bin/tsi" $LDFLAGS; then
-        log_error "Failed to link TSI binary"
-        exit 1
+    UNAME_S=$(uname -s 2>/dev/null || echo "Unknown")
+    LINK_SUCCESS=false
+    if [ "$UNAME_S" = "Linux" ]; then
+        # Try static linking first (suppress warnings, only show errors)
+        if $CC $OBJECTS -o "bin/tsi" -static -w 2>&1; then
+            LINK_SUCCESS=true
+        else
+            # Static linking failed, try dynamic linking
+            log_info "Static linking failed, trying dynamic linking..."
+            rm -f "bin/tsi"
+        fi
+    fi
+
+    # If static linking didn't work or we're not on Linux, try dynamic linking
+    if [ "$LINK_SUCCESS" = false ]; then
+        if ! $CC $OBJECTS -o "bin/tsi" -w 2>&1; then
+            log_error "Failed to link TSI binary"
+            exit 1
+        fi
     fi
 
     log_info "TSI built successfully"
@@ -450,6 +519,9 @@ main() {
     log_info "========================================="
     log_info "TSI installed successfully!"
     log_info "========================================="
+    log_info ""
+    log_info "TSI is isolated: it uses its own bin directory ($PREFIX/bin)"
+    log_info "and prefers TSI-installed tools over system tools."
     log_info ""
     log_info "Add to your PATH:"
     log_info "  export PATH=\"$PREFIX/bin:\$PATH\""

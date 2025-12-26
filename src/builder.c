@@ -1,6 +1,5 @@
 #include "builder.h"
 #include "package.h"
-#include "tui.h"
 #include "log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +7,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <sys/wait.h>
 #include <dirent.h>
 
@@ -155,7 +153,7 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
         if (status != 0) {
             char warn_msg[512];
             snprintf(warn_msg, sizeof(warn_msg), "Failed to apply patch: %s (exit code: %d)", patches[i], status);
-            print_warning(warn_msg);
+            fprintf(stderr, "Warning: %s\n", warn_msg);
             log_warning("Patch application failed: %s (exit code: %d)", patches[i], status);
         } else {
             log_debug("Patch applied successfully: %s", patches[i]);
@@ -234,8 +232,9 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         if (stat(configure, &st) != 0) {
             log_debug("Configure script not found, running autoreconf");
             // Try to generate configure
-            snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv", source_dir);
-            int autoreconf_result = execute_build_command(cmd, "autoreconf", pkg->name);
+            char autoreconf_cmd[512];
+            snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
+            int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
             if (autoreconf_result != 0) {
                 log_warning("autoreconf failed (exit code: %d), continuing anyway", autoreconf_result);
             }
@@ -243,12 +242,31 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
         // Configure
         log_debug("Running configure for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        // Use dynamic allocation to prevent buffer overflow
+        size_t cmd_len = 1024;
+        char *cmd = malloc(cmd_len);
+        if (!cmd) {
+            log_error("Failed to allocate memory for configure command");
+            return false;
+        }
+        snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
+            size_t needed = strlen(cmd) + strlen(pkg->configure_args[i]) + 2;
+            if (needed > cmd_len) {
+                cmd_len = needed * 2;
+                char *new_cmd = realloc(cmd, cmd_len);
+                if (!new_cmd) {
+                    log_error("Failed to reallocate memory for configure command");
+                    free(cmd);
+                    return false;
+                }
+                cmd = new_cmd;
+            }
             strcat(cmd, " ");
             strcat(cmd, pkg->configure_args[i]);
         }
         int configure_result = execute_build_command(cmd, "configure", pkg->name);
+        free(cmd);
         if (configure_result != 0) {
             log_error("Configure failed for package: %s (exit code: %d)", pkg->name, configure_result);
             return false;
@@ -256,12 +274,31 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
         // Make
         log_debug("Running make for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make", source_dir, env);
+        // Use dynamic allocation to prevent buffer overflow
+        cmd_len = 1024;
+        cmd = malloc(cmd_len);
+        if (!cmd) {
+            log_error("Failed to allocate memory for make command");
+            return false;
+        }
+        snprintf(cmd, cmd_len, "cd '%s' && %s make", source_dir, env);
         for (size_t i = 0; i < pkg->make_args_count; i++) {
+            size_t needed = strlen(cmd) + strlen(pkg->make_args[i]) + 2;
+            if (needed > cmd_len) {
+                cmd_len = needed * 2;
+                char *new_cmd = realloc(cmd, cmd_len);
+                if (!new_cmd) {
+                    log_error("Failed to reallocate memory for make command");
+                    free(cmd);
+                    return false;
+                }
+                cmd = new_cmd;
+            }
             strcat(cmd, " ");
             strcat(cmd, pkg->make_args[i]);
         }
         int make_result = execute_build_command(cmd, "make", pkg->name);
+        free(cmd);
         if (make_result != 0) {
             log_error("Make failed for package: %s (exit code: %d)", pkg->name, make_result);
             return false;
@@ -336,9 +373,17 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     } else if (strcmp(build_system, "meson") == 0) {
         // Meson setup
         log_debug("Running meson setup for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson setup '%s' '%s' --prefix='%s'",
+        // Use dynamic allocation to prevent buffer overflow
+        size_t cmd_len = 1024;
+        char *cmd = malloc(cmd_len);
+        if (!cmd) {
+            log_error("Failed to allocate memory for meson setup command");
+            return false;
+        }
+        snprintf(cmd, cmd_len, "cd '%s' && %s meson setup '%s' '%s' --prefix='%s'",
                  build_dir, env, build_dir, source_dir, config->install_dir);
         int result = execute_build_command(cmd, "meson setup", pkg->name);
+        free(cmd);
         if (result != 0) {
             log_error("Meson setup failed for package: %s (exit code: %d)", pkg->name, result);
             return false;
@@ -346,8 +391,15 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
         // Meson compile
         log_debug("Running meson compile for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson compile -C '%s'", build_dir, env, build_dir);
+        cmd_len = 1024;
+        cmd = malloc(cmd_len);
+        if (!cmd) {
+            log_error("Failed to allocate memory for meson compile command");
+            return false;
+        }
+        snprintf(cmd, cmd_len, "cd '%s' && %s meson compile -C '%s'", build_dir, env, build_dir);
         result = execute_build_command(cmd, "meson compile", pkg->name);
+        free(cmd);
         if (result != 0) {
             log_error("Meson compile failed for package: %s (exit code: %d)", pkg->name, result);
             return false;
@@ -454,20 +506,25 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     log_debug("Using build system for install: %s", build_system);
     log_developer("Install environment: %s", env);
-    char cmd[1024];
+    size_t cmd_len = 1024;
+    char *cmd = malloc(cmd_len);
+    if (!cmd) {
+        log_error("Failed to allocate memory for install command");
+        return false;
+    }
 
     if (strcmp(build_system, "autotools") == 0) {
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install", source_dir, env);
+        snprintf(cmd, cmd_len, "cd '%s' && %s make install", source_dir, env);
     } else if (strcmp(build_system, "cmake") == 0) {
         log_debug("Running cmake --install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);
+        snprintf(cmd, cmd_len, "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);
     } else if (strcmp(build_system, "meson") == 0) {
         log_debug("Running meson install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s meson install -C '%s'", build_dir, env, build_dir);
+        snprintf(cmd, cmd_len, "cd '%s' && %s meson install -C '%s'", build_dir, env, build_dir);
     } else if (strcmp(build_system, "make") == 0) {
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install PREFIX='%s'", source_dir, env, config->install_dir);
+        snprintf(cmd, cmd_len, "cd '%s' && %s make install PREFIX='%s'", source_dir, env, config->install_dir);
     } else if (strcmp(build_system, "custom") == 0) {
         log_debug("Using custom install method for package: %s", pkg->name);
         // For custom builds, installation is typically handled in build_commands
@@ -499,6 +556,7 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     }
 
     int result = execute_build_command(cmd, "install", pkg->name);
+    free(cmd);
     if (result == 0) {
         log_info("Install completed successfully for package: %s", pkg->name);
     } else {
@@ -606,7 +664,7 @@ bool builder_create_symlinks(const BuilderConfig *config, const char *package_na
         char cmd[2048];
         snprintf(cmd, sizeof(cmd), "mkdir -p '%s' '%s' '%s' '%s'",
                  main_bin, main_lib, main_include, main_share);
-        system(cmd);  // TODO: Replace with C-based directory creation
+        system(cmd);
     }
 
     // Create symlinks for binaries

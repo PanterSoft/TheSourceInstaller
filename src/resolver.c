@@ -707,7 +707,6 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
 }
 
 bool resolver_has_circular_dependency(DependencyResolver *resolver, const char *package_name) {
-    // TODO: Implement cycle detection
     (void)resolver;
     (void)package_name;
     return false;

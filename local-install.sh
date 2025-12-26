@@ -128,15 +128,35 @@ fi
 # Compile all C source files
 echo "  Compiling source files..."
 OBJECTS=""
+COMPILED_COUNT=0
+TOTAL_FILES=$(ls -1 *.c 2>/dev/null | wc -l | tr -d ' ')
 for c_file in *.c; do
     if [ -f "$c_file" ]; then
+        COMPILED_COUNT=$((COMPILED_COUNT + 1))
+        echo -n "    [$COMPILED_COUNT/$TOTAL_FILES] Compiling $c_file... "
         OBJECTS="$OBJECTS build/${c_file%.c}.o"
-        if ! $CC $CFLAGS -c "$c_file" -o "build/${c_file%.c}.o"; then
+        # Capture compiler output
+        COMPILE_OUTPUT=$($CC $CFLAGS -c "$c_file" -o "build/${c_file%.c}.o" 2>&1)
+        COMPILE_EXIT=$?
+
+        # Check if compilation actually succeeded
+        if [ $COMPILE_EXIT -ne 0 ] || [ ! -f "build/${c_file%.c}.o" ]; then
+            echo -e "${RED}✗${RESET}"
+            echo "$COMPILE_OUTPUT" | head -10
             echo -e "${RED}✗ Compilation failed: $c_file${RESET}"
             exit 1
         fi
+
+        # Show warnings if any, otherwise show success
+        if echo "$COMPILE_OUTPUT" | grep -q .; then
+            echo ""
+            echo "$COMPILE_OUTPUT" | head -5 | sed 's/^/      /'
+        else
+            echo -e "${GREEN}✓${RESET}"
+        fi
     fi
 done
+echo "  Compiled $COMPILED_COUNT source files"
 
 # Link
 echo "  Linking binary..."
