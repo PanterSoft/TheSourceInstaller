@@ -2,6 +2,48 @@
   "name": "llvm",
   "versions": [
     {
+      "version": "21.1.8",
+      "description": "LLVM compiler infrastructure",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/llvm-21.1.8.src.tar.xz"
+      },
+      "dependencies": [],
+      "build_dependencies": [
+        "cmake",
+        "make",
+        "coreutils"
+      ],
+      "build_system": "cmake",
+      "cmake_args": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DLLVM_ENABLE_PROJECTS=clang",
+        "-DLLVM_TARGETS_TO_BUILD=all"
+      ],
+      "env": {}
+    },
+    {
+      "version": "21.1.7",
+      "description": "LLVM compiler infrastructure",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.7/llvm-21.1.7.src.tar.xz"
+      },
+      "dependencies": [],
+      "build_dependencies": [
+        "cmake",
+        "make",
+        "coreutils"
+      ],
+      "build_system": "cmake",
+      "cmake_args": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DLLVM_ENABLE_PROJECTS=clang",
+        "-DLLVM_TARGETS_TO_BUILD=all"
+      ],
+      "env": {}
+    },
+    {
       "version": "21.1.6",
       "description": "LLVM compiler infrastructure",
       "source": {

@@ -2,6 +2,28 @@
   "name": "protobuf",
   "versions": [
     {
+      "version": "33.2",
+      "description": "Protocol Buffers data serialization",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/protocolbuffers/protobuf/releases/download/v33.2/protobuf-33.2.tar.gz"
+      },
+      "dependencies": [
+        "zlib"
+      ],
+      "build_dependencies": [
+        "cmake",
+        "make",
+        "coreutils"
+      ],
+      "build_system": "cmake",
+      "cmake_args": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-Dprotobuf_BUILD_TESTS=OFF"
+      ],
+      "env": {}
+    },
+    {
       "version": "33.1",
       "description": "Protocol Buffers data serialization",
       "source": {

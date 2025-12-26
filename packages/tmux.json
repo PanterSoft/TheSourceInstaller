@@ -2,6 +2,44 @@
   "name": "tmux",
   "versions": [
     {
+      "version": "3.6a",
+      "description": "Terminal multiplexer",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/tmux/tmux/releases/download/3.6a/tmux-3.6a.tar.gz"
+      },
+      "dependencies": [
+        "ncurses",
+        "libevent"
+      ],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
+      "build_system": "autotools",
+      "configure_args": [],
+      "env": {}
+    },
+    {
+      "version": "3.6",
+      "description": "Terminal multiplexer",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/tmux/tmux/releases/download/3.6/tmux-3.6.tar.gz"
+      },
+      "dependencies": [
+        "ncurses",
+        "libevent"
+      ],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
+      "build_system": "autotools",
+      "configure_args": [],
+      "env": {}
+    },
+    {
       "version": "3.5a",
       "description": "Terminal multiplexer",
       "source": {

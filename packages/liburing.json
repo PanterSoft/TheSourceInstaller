@@ -2,6 +2,22 @@
   "name": "liburing",
   "versions": [
     {
+      "version": "2.13",
+      "description": "Linux io_uring library",
+      "source": {
+        "type": "tarball",
+        "url": "https://github.com/axboe/liburing/releases/download/liburing-2.13/liburing-2.13.tar.gz"
+      },
+      "dependencies": [],
+      "build_dependencies": [
+        "make",
+        "coreutils"
+      ],
+      "build_system": "autotools",
+      "configure_args": [],
+      "env": {}
+    },
+    {
       "version": "2.12",
       "description": "Linux io_uring library",
       "source": {
