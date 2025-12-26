@@ -102,31 +102,32 @@ check_tsi_outdated() {
 
 # Get the current version/commit of existing source files
 # Returns the commit hash if it's a git repo, empty string otherwise
+# Never fails - always returns 0 to avoid breaking script with set -e
 get_source_version() {
     source_dir="$1"
     if [ ! -d "$source_dir" ] || [ ! -f "$source_dir/src/main.c" ]; then
-        return 1
+        return 0  # Return 0 to avoid breaking script with set -e
     fi
 
     # Check if it's a git repository
     if command_exists git && [ -d "$source_dir/.git" ]; then
         git_cmd=$(get_command_path git)
-        cd "$source_dir"
+        cd "$source_dir" 2>/dev/null || return 0
         # Get current commit hash
-        COMMIT=$("$git_cmd" rev-parse HEAD 2>/dev/null)
-        cd - >/dev/null 2>&1
+        COMMIT=$("$git_cmd" rev-parse HEAD 2>/dev/null || echo "")
+        cd - >/dev/null 2>&1 || true
         if [ -n "$COMMIT" ]; then
             echo "$COMMIT"
-            return 0
         fi
     fi
 
-    # Not a git repo or git not available
-    return 1
+    # Not a git repo or git not available - return 0 (success) to avoid breaking script
+    return 0
 }
 
 # Check if existing source matches the target version
 # Returns 0 if source should be used, 1 if it should be re-downloaded
+# Always returns 1 (re-download) if git is not available, since we can't verify version
 check_source_version() {
     source_dir="$1"
     target_branch="$2"
@@ -135,8 +136,14 @@ check_source_version() {
         return 1  # No source, need to download
     fi
 
+    # Without git, we cannot verify version - always re-download to be safe
+    if ! command_exists git; then
+        log_info "Git not available, cannot verify source version - will re-download"
+        return 1
+    fi
+
     # If it's a git repo, check if it matches the target branch
-    if command_exists git && [ -d "$source_dir/.git" ]; then
+    if [ -d "$source_dir/.git" ]; then
         git_cmd=$(get_command_path git)
         cd "$source_dir"
 
@@ -175,9 +182,8 @@ check_source_version() {
             return 1
         fi
     else
-        # Not a git repo - we can't verify version, so be conservative
-        # If it's not a git repo and we want a specific branch, re-download to be safe
-        log_info "Source is not a git repository, cannot verify version"
+        # Not a git repo - we can't verify version, so re-download to be safe
+        log_info "Source is not a git repository, cannot verify version - will re-download"
         return 1
     fi
 }
@@ -413,14 +419,21 @@ main() {
 
         # Change into tsi directory (after either git clone or tarball extraction)
         if [ -d "tsi" ] && [ -f "tsi/src/main.c" ]; then
-            cd tsi
-            # Log the version we downloaded
-            DOWNLOADED_VERSION=$(get_source_version ".")
+            cd tsi || {
+                log_error "Failed to change into tsi directory"
+                exit 1
+            }
+            # Log the version we downloaded (non-fatal if git not available)
+            DOWNLOADED_VERSION=$(get_source_version "." 2>/dev/null || echo "")
             if [ -n "$DOWNLOADED_VERSION" ]; then
                 log_info "Downloaded source (version: ${DOWNLOADED_VERSION:0:8})"
             fi
         else
             log_error "TSI source directory not found after download"
+            log_error "Expected: tsi/ directory with tsi/src/main.c"
+            log_error "Current directory: $(pwd)"
+            log_error "Contents:"
+            ls -la 2>&1 || true
             exit 1
         fi
     fi
@@ -428,6 +441,9 @@ main() {
     # Verify source directory exists
     if [ ! -d "src" ] || [ ! -f "src/main.c" ]; then
         log_error "TSI source directory not found: src/"
+        log_error "Current directory: $(pwd)"
+        log_error "Contents:"
+        ls -la 2>&1 || true
         exit 1
     fi
 
