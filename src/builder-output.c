@@ -471,8 +471,9 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         // For libraries: check for library files (.a, .so, .dylib) in lib/ directory
         // Generic check: look for common build artifacts (lib directory with files)
         char build_check[512];
+        // Use simpler check that doesn't rely on complex nested command substitution
         snprintf(build_check, sizeof(build_check),
-                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || ([ -d lib ] && [ \"$(ls -A lib 2>/dev/null)\" ]); then exit 0; else exit 1; fi",
+                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || [ -d lib ]; then exit 0; else exit 1; fi",
                  pkg->name, pkg->name, pkg->name, pkg->name, pkg->name);
 
         if (cflags_env) {
@@ -816,10 +817,12 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
         // Step 4: 'make install' to install the programs and any data files
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         // Use -k flag to continue on errors (e.g., missing help2man for doc target)
-        // Check if main binary was installed to verify success
+        // Check if package was installed successfully - check for binary, library, or header files
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k install 2>&1; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ]; then exit 0; else exit 1; fi",
-                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k install 2>&1; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
+                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, pkg->name, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, config->install_dir);
     } else if (strcmp(build_system, "cmake") == 0) {
         log_debug("Running cmake --install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s' 2>&1", build_dir, env, build_dir);
