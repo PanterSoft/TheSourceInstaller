@@ -271,12 +271,12 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     char *install_pos = strstr(config->install_dir, "/install/");
     if (install_pos) {
         size_t len = install_pos - config->install_dir + strlen("/install");
-        strncpy(main_install_dir, config->install_dir, len);
-        main_install_dir[len] = '\0';
-    } else {
-        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-    }
+            strncpy(main_install_dir, config->install_dir, len);
+            main_install_dir[len] = '\0';
+        } else {
+            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+        }
 
     // For all autotools packages, we need ls -t for configure scripts
     // Create minimal ls binary/wrapper if coreutils is not available
@@ -338,18 +338,32 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 fprintf(ls_source, "\n");
                 fprintf(ls_source, "int main(int argc, char **argv) {\n");
                 fprintf(ls_source, "    int sort_by_time = 0;\n");
-                fprintf(ls_source, "    char *dir = \".\";\n");
+                fprintf(ls_source, "    char *target = \".\";\n");
                 fprintf(ls_source, "    \n");
                 fprintf(ls_source, "    for (int i = 1; i < argc; i++) {\n");
                 fprintf(ls_source, "        if (strcmp(argv[i], \"-t\") == 0) {\n");
                 fprintf(ls_source, "            sort_by_time = 1;\n");
                 fprintf(ls_source, "        } else if (argv[i][0] != '-') {\n");
-                fprintf(ls_source, "            dir = argv[i];\n");
+                fprintf(ls_source, "            target = argv[i];\n");
                 fprintf(ls_source, "            break;\n");
                 fprintf(ls_source, "        }\n");
                 fprintf(ls_source, "    }\n");
                 fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    DIR *d = opendir(dir);\n");
+                fprintf(ls_source, "    // Check if target is a file or directory\n");
+                fprintf(ls_source, "    struct stat st;\n");
+                fprintf(ls_source, "    if (stat(target, &st) != 0) {\n");
+                fprintf(ls_source, "        perror(\"ls\");\n");
+                fprintf(ls_source, "        return 1;\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    // If it's a file, just print the filename\n");
+                fprintf(ls_source, "    if (S_ISREG(st.st_mode)) {\n");
+                fprintf(ls_source, "        printf(\"%%s\\n\", target);\n");
+                fprintf(ls_source, "        return 0;\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    // It's a directory, list its contents\n");
+                fprintf(ls_source, "    DIR *d = opendir(target);\n");
                 fprintf(ls_source, "    if (!d) {\n");
                 fprintf(ls_source, "        perror(\"ls\");\n");
                 fprintf(ls_source, "        return 1;\n");
@@ -366,7 +380,7 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 fprintf(ls_source, "            continue;\n");
                 fprintf(ls_source, "        \n");
                 fprintf(ls_source, "        char path[1024];\n");
-                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%%s/%%s\", dir, entry->d_name);\n");
+                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%%s/%%s\", target, entry->d_name);\n");
                 fprintf(ls_source, "        \n");
                 fprintf(ls_source, "        struct stat st;\n");
                 fprintf(ls_source, "        if (stat(path, &st) == 0) {\n");
@@ -408,7 +422,7 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 if (compile_result == 0 && stat(ls_binary_path, &st) == 0) {
                     log_info("Successfully compiled minimal ls binary: %s", ls_binary_path);
                     ls_binary_exists = true;
-                } else {
+    } else {
                     log_warning("Failed to compile ls binary, falling back to wrapper script");
                     unlink(ls_source_path);
                 }
