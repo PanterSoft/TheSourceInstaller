@@ -113,6 +113,44 @@ static bool tool_available(const char *tool_name) {
     return system(cmd) == 0;
 }
 
+// Check if wget is BusyBox version (doesn't support --progress option)
+// Uses cached result to avoid repeated checks
+static bool is_busybox_wget(const char *wget_path) {
+    static bool cached_result = false;
+    static bool has_cache = false;
+    static char cached_path[1024] = {0};
+
+    if (!wget_path) return false;
+
+    // Check cache first
+    if (has_cache && strcmp(cached_path, wget_path) == 0) {
+        return cached_result;
+    }
+
+    // Check version output for "BusyBox" string (fastest method)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s --version 2>&1 | head -1 | grep -q 'BusyBox'", wget_path);
+    bool is_busybox = (system(cmd) == 0);
+
+    // If version check didn't work, try help output
+    if (!is_busybox) {
+        snprintf(cmd, sizeof(cmd), "%s --help 2>&1 | head -1 | grep -q 'BusyBox'", wget_path);
+        is_busybox = (system(cmd) == 0);
+    }
+
+    // Cache the result
+    strncpy(cached_path, wget_path, sizeof(cached_path) - 1);
+    cached_path[sizeof(cached_path) - 1] = '\0';
+    cached_result = is_busybox;
+    has_cache = true;
+
+    if (is_busybox) {
+        log_debug("Detected BusyBox wget: %s", wget_path);
+    }
+
+    return is_busybox;
+}
+
 // Download tool preference enum
 typedef enum {
     DOWNLOAD_TOOL_NONE = 0,
@@ -287,9 +325,16 @@ bool fetcher_download_file(const char *url, const char *dest) {
     if (tool == DOWNLOAD_TOOL_WGET) {
         tool_path = find_tool("wget");
         tool_name = "wget";
-        if (show_progress) {
-            // wget with progress bar
+
+        // Check if this is BusyBox wget (doesn't support --progress)
+        bool busybox_wget = is_busybox_wget(tool_path);
+
+        if (show_progress && !busybox_wget) {
+            // GNU wget with progress bar
             snprintf(cmd, sizeof(cmd), "%s --progress=bar:force -O '%s' '%s' 2>&1", tool_path, dest, url);
+        } else if (show_progress && busybox_wget) {
+            // BusyBox wget - use verbose mode instead (shows progress)
+            snprintf(cmd, sizeof(cmd), "%s -O '%s' '%s' 2>&1", tool_path, dest, url);
         } else {
             // wget quiet mode
             snprintf(cmd, sizeof(cmd), "%s -q -O '%s' '%s' 2>/dev/null", tool_path, dest, url);

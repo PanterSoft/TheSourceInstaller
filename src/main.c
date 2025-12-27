@@ -17,6 +17,7 @@
 #include "fetcher.h"
 #include "builder.h"
 #include "log.h"
+#include "config.h"
 
 // Output callback for build/install progress
 static void output_callback(const char *line, void *userdata) {

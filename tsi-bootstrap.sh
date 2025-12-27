@@ -740,10 +740,29 @@ main() {
         log_warn "  Completion scripts not found (optional)"
     fi
 
+    # Create default config file
+    log_info ""
+    log_info "Creating default configuration..."
+    if [ ! -f "$PREFIX/tsi.cfg" ]; then
+        cat > "$PREFIX/tsi.cfg" << 'EOF'
+# TSI Configuration File
+# This file controls TSI behavior
+#
+# Strict Isolation Mode
+# When enabled, TSI will only use TSI-installed packages after bootstrap
+# During bootstrap, minimal system tools (gcc, /bin/sh) are still used
+# Set to 'true' to enable strict isolation, 'false' to disable (default)
+strict_isolation=false
+EOF
+        log_info "  Created default config file: $PREFIX/tsi.cfg"
+    else
+        log_info "  Config file already exists: $PREFIX/tsi.cfg"
+    fi
+
     # Initialize package repository
     # Copy basic set of packages so TSI works immediately without git
     # Do this for both fresh installs and repairs (to ensure packages are available)
-        log_info ""
+    log_info ""
     log_info "Setting up package repository..."
     mkdir -p "$PREFIX/packages"
 

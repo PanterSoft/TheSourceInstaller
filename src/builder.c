@@ -171,27 +171,61 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     log_info("Building package: %s@%s (source_dir=%s, build_dir=%s)",
              pkg->name, pkg->version ? pkg->version : "latest", source_dir, build_dir);
 
-    // Verify source directory exists and list contents for debugging
+    // Verify source directory exists and check if extraction succeeded
     struct stat source_st;
     if (stat(source_dir, &source_st) != 0) {
         log_error("Source directory does not exist: %s", source_dir);
+        log_error("This usually indicates that source fetching or extraction failed");
         return false;
     }
     log_developer("Source directory exists: %s", source_dir);
 
-    // List a few files in source directory for debugging
+    // Check if source directory is empty (indicates extraction failure)
     DIR *source_dir_handle = opendir(source_dir);
+    int file_count = 0;
+    bool has_expected_files = false;
+    const char *expected_files[] = {"configure", "configure.ac", "configure.in", "Makefile", "Makefile.in", "README", "README.md", "INSTALL", "src", "lib", "include"};
+
     if (source_dir_handle) {
         struct dirent *entry;
-        int file_count = 0;
-        log_developer("Source directory contents (first 10 files):");
-        while ((entry = readdir(source_dir_handle)) != NULL && file_count < 10) {
+        log_developer("Source directory contents:");
+        while ((entry = readdir(source_dir_handle)) != NULL) {
             if (entry->d_name[0] != '.') {
                 log_developer("  - %s", entry->d_name);
                 file_count++;
+
+                // Check if any expected files exist
+                for (size_t i = 0; i < sizeof(expected_files) / sizeof(expected_files[0]); i++) {
+                    if (strcmp(entry->d_name, expected_files[i]) == 0) {
+                        has_expected_files = true;
+                        break;
+                    }
+                }
             }
         }
         closedir(source_dir_handle);
+    } else {
+        log_error("Failed to open source directory: %s", source_dir);
+        return false;
+    }
+
+    // If directory is empty or has no expected files, extraction likely failed
+    if (file_count == 0) {
+        log_error("Source directory is empty: %s", source_dir);
+        log_error("This indicates that archive extraction failed");
+        log_error("Possible causes:");
+        log_error("  - Archive file is corrupted or incomplete");
+        log_error("  - Archive format is not supported (check if tar/gzip/xz are available)");
+        log_error("  - Insufficient disk space");
+        log_error("  - Download was incomplete");
+        log_error("Please check the extraction logs and verify the archive file");
+        return false;
+    }
+
+    if (!has_expected_files && file_count < 3) {
+        log_warning("Source directory has very few files (%d) and no expected build files", file_count);
+        log_warning("This may indicate that extraction failed or was incomplete");
+        log_warning("Expected files like configure, Makefile, README, or src/ directory are missing");
     }
 
     // Create build directory
@@ -512,7 +546,26 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 if (bootstrap_ran) {
                     log_warning("Bootstrap scripts ran but configure script was not generated");
                 }
-                log_info("Configure script still not found, trying autoreconf");
+
+                // Before trying autoreconf, check if source files exist (might be extraction issue)
+                char configure_ac[512], configure_in[512];
+                snprintf(configure_ac, sizeof(configure_ac), "%s/configure.ac", source_dir);
+                snprintf(configure_in, sizeof(configure_in), "%s/configure.in", source_dir);
+                bool has_configure_ac = (stat(configure_ac, &st) == 0);
+                bool has_configure_in = (stat(configure_in, &st) == 0);
+
+                if (!has_configure_ac && !has_configure_in) {
+                    log_error("No configure script found and no configure.ac or configure.in found in source directory");
+                    log_error("This strongly suggests that archive extraction failed or was incomplete");
+                    log_error("Source directory: %s", source_dir);
+                    log_error("Please verify:");
+                    log_error("  1. The archive was downloaded completely");
+                    log_error("  2. The archive extraction succeeded (check for errors above)");
+                    log_error("  3. The source directory contains the expected files");
+                    return false;
+                }
+
+                log_info("Configure script not found, but configure.ac or configure.in exists - trying autoreconf");
                 // Try to generate configure
                 char autoreconf_cmd[512];
                 snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
@@ -526,6 +579,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                     // Re-check if configure was generated
                     if (stat(configure, &st) != 0) {
                         log_error("autoreconf completed but configure script was not generated");
+                        log_error("This may indicate that autotools are incomplete or the source is corrupted");
                         return false;
                     }
                     log_info("Configure script generated successfully by autoreconf");

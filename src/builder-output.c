@@ -1,6 +1,7 @@
 #include "builder.h"
 #include "package.h"
 #include "log.h"
+#include "config.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -282,50 +283,76 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     }
 
     char env[4096] = "";
+    bool strict_isolation = config_is_strict_isolation();
+
     // Bootstrap handling: For essential bootstrap tools, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent builds use only TSI packages (completely isolated)
     // Bootstrap packages: make, coreutils, tar, sed, grep, gawk, bash, m4
-    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 || strcmp(pkg->name, "tar") == 0 ||
-        strcmp(pkg->name, "sed") == 0 || strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 ||
-        strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0) {
+    bool is_bootstrap_pkg = (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 ||
+                             strcmp(pkg->name, "tar") == 0 || strcmp(pkg->name, "sed") == 0 ||
+                             strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 ||
+                             strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0);
+
+    if (is_bootstrap_pkg) {
         // Bootstrap: Use only essential system directories + TSI PATH
         char bootstrap_path[512] = "";
         get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));
 
         if (bootstrap_path[0] != '\0') {
             log_developer("Bootstrap mode: Building %s, using minimal essential system directories for bootstrap", pkg->name);
+            if (strict_isolation) {
+                log_info("Strict isolation: Bootstrap phase - using minimal system tools (gcc, /bin/sh) only");
+            }
             snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                      main_install_dir, bootstrap_path, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         } else {
             log_warning("No essential system directories found, using only TSI PATH for bootstrap");
-    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-        }
-    } else {
-        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
-        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
-        char compiler_dir[512] = "";
-        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
-
-        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
-        struct stat st;
-        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
-
-        if (strlen(compiler_dir) > 0 && has_bin) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-        } else if (strlen(compiler_dir) > 0) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-        } else if (has_bin) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                     main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-        } else {
-            // Fallback: use TSI PATH only (shouldn't happen if system has a compiler and /bin)
-            log_warning("C compiler and /bin not found, using only TSI PATH");
             snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                      main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Check strict isolation setting
+        if (strict_isolation) {
+            // Strict isolation: Only use TSI packages, no system tools (except /bin/sh if needed)
+            log_info("Strict isolation: Building %s - using only TSI-installed packages", pkg->name);
+            struct stat st;
+            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+            // In strict mode, only include /bin for sh (POSIX requirement)
+            // All other tools must come from TSI
+            if (has_bin) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else {
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            }
+        } else {
+            // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+            // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+            char compiler_dir[512] = "";
+            get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+            // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+            struct stat st;
+            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+            if (strlen(compiler_dir) > 0 && has_bin) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else if (strlen(compiler_dir) > 0) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else if (has_bin) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else {
+                // Fallback: use TSI PATH only (shouldn't happen if system has a compiler and /bin)
+                log_warning("C compiler and /bin not found, using only TSI PATH");
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            }
         }
     }
 
