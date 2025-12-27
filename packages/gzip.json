@@ -7,10 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/gzip/gzip-1.13.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": [
-    "make",
-    "coreutils"
-  ],
+  "build_dependencies": ["m4", "bash", "coreutils", "make"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}

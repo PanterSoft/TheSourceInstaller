@@ -7,11 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/gawk/gawk-5.3.0.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": [
-    "make",
-    "coreutils",
-    "sed"
-  ],
+  "build_dependencies": ["m4", "bash", "coreutils"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}

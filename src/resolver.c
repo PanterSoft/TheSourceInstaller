@@ -619,31 +619,14 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
     while (*result_count < packages_count) {
         log_developer("Topological sort iteration: *result_count=%zu, packages_count=%zu", *result_count, packages_count);
         bool found = false;
-        // First pass: look for coreutils (bootstrap priority - provides ls needed by make)
         size_t selected_idx = SIZE_MAX;
+
+        // Pick first available package with in_degree == 0
+        // Dependencies in package definitions ensure correct build order
         for (size_t i = 0; i < packages_count; i++) {
             if (!added[i] && in_degree[i] == 0) {
-                char *pkg_name = NULL;
-                char *pkg_version = NULL;
-                parse_package_version(packages[i], &pkg_name, &pkg_version);
-                const char *actual_name = pkg_name ? pkg_name : packages[i];
-                if (strcmp(actual_name, "coreutils") == 0) {
-                    selected_idx = i;
-                    if (pkg_name) free(pkg_name);
-                    if (pkg_version) free(pkg_version);
-                    break;
-                }
-                if (pkg_name) free(pkg_name);
-                if (pkg_version) free(pkg_version);
-            }
-        }
-        // Second pass: if coreutils not found, pick first available
-        if (selected_idx == SIZE_MAX) {
-            for (size_t i = 0; i < packages_count; i++) {
-                if (!added[i] && in_degree[i] == 0) {
-                    selected_idx = i;
-                    break;
-                }
+                selected_idx = i;
+                break;
             }
         }
         // Add selected package

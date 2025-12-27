@@ -288,11 +288,14 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     // Bootstrap handling: For essential bootstrap tools, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent builds use only TSI packages (completely isolated)
-    // Bootstrap packages: make, coreutils, tar, sed, grep, gawk, bash, m4
-    bool is_bootstrap_pkg = (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 ||
-                             strcmp(pkg->name, "tar") == 0 || strcmp(pkg->name, "sed") == 0 ||
-                             strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 ||
-                             strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0);
+    // Bootstrap packages in order: m4, ncurses, bash, coreutils, diffutils, gawk, grep, sed, make, patch, tar, gzip, xz
+    bool is_bootstrap_pkg = (strcmp(pkg->name, "m4") == 0 || strcmp(pkg->name, "ncurses") == 0 ||
+                             strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "coreutils") == 0 ||
+                             strcmp(pkg->name, "diffutils") == 0 || strcmp(pkg->name, "gawk") == 0 ||
+                             strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "sed") == 0 ||
+                             strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "patch") == 0 ||
+                             strcmp(pkg->name, "tar") == 0 || strcmp(pkg->name, "gzip") == 0 ||
+                             strcmp(pkg->name, "xz") == 0);
 
     if (is_bootstrap_pkg) {
         // Bootstrap: Use only essential system directories + TSI PATH

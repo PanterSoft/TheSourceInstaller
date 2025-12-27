@@ -7,10 +7,7 @@
     "url": "https://tukaani.org/xz/xz-5.6.2.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": [
-    "make",
-    "coreutils"
-  ],
+  "build_dependencies": ["m4", "bash", "coreutils", "make"],
   "build_system": "autotools",
   "configure_args": [
     "--disable-debug",
