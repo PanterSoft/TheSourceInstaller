@@ -1062,8 +1062,9 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         // Use -k flag to continue on errors (e.g., missing help2man for doc target)
         // Check if package was installed successfully - check for binary, library, or header files
+        // For packages like coreutils that install multiple binaries, check if bin directory has any files
         log_debug("Running make install for package: %s", pkg->name);
-        size_t install_check_len = strlen(cmd) + 512;
+        size_t install_check_len = strlen(cmd) + 1024;
         char *install_check_cmd = realloc(cmd, install_check_len);
         if (!install_check_cmd) {
             log_error("Failed to allocate memory for install check command");
@@ -1072,8 +1073,10 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         }
         cmd = install_check_cmd;
         cmd_len = install_check_len;
-        snprintf(cmd, cmd_len, "cd '%s' && %s make -k install; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
+        // Check for: specific binary, any binary in bin/, library files, or lib/include directories
+        snprintf(cmd, cmd_len, "cd '%s' && %s make -k install; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || [ -d '%s/bin' ] && [ \"$(ls -A '%s/bin' 2>/dev/null)\" ] || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
                  source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, config->install_dir,
                  config->install_dir, pkg->name, config->install_dir, pkg->name, config->install_dir, pkg->name,
                  config->install_dir, config->install_dir);
     } else if (strcmp(build_system, "cmake") == 0) {

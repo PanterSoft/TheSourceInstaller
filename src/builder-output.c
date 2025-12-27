@@ -818,9 +818,12 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         // Use -k flag to continue on errors (e.g., missing help2man for doc target)
         // Check if package was installed successfully - check for binary, library, or header files
+        // For packages like coreutils that install multiple binaries, check if bin directory has any files
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k install 2>&1; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
+        // Check for: specific binary, any binary in bin/, library files, or lib/include directories
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k install 2>&1; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || ([ -d '%s/bin' ] && [ \"$(ls -A '%s/bin' 2>/dev/null)\" ]) || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
                  source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, config->install_dir,
                  config->install_dir, pkg->name, config->install_dir, pkg->name, config->install_dir, pkg->name,
                  config->install_dir, config->install_dir);
     } else if (strcmp(build_system, "cmake") == 0) {
