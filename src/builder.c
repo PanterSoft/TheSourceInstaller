@@ -273,14 +273,139 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin_dir);
         system(mkdir_cmd); // Ignore errors - directory might already exist
 
-        // Create a minimal ls wrapper script that supports -t
-        char ls_wrapper_path[1024];
-        snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
-
-        // Check if wrapper already exists
+        // First, check if coreutils ls is already available (best option)
+        char coreutils_ls[1024];
+        snprintf(coreutils_ls, sizeof(coreutils_ls), "%s/bin/ls", main_install_dir);
         struct stat st;
-        if (stat(ls_wrapper_path, &st) != 0) {
-            FILE *fp = fopen(ls_wrapper_path, "w");
+        bool coreutils_ls_exists = (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode));
+
+        // Try to create a minimal ls binary only if coreutils ls doesn't exist
+        char ls_binary_path[1024];
+        snprintf(ls_binary_path, sizeof(ls_binary_path), "%s/ls", tsi_bin_dir);
+
+        // Check if minimal ls binary already exists
+        bool ls_binary_exists = false;
+        if (!coreutils_ls_exists) {
+            ls_binary_exists = (stat(ls_binary_path, &st) == 0 && S_ISREG(st.st_mode));
+        }
+
+        if (!coreutils_ls_exists && !ls_binary_exists) {
+            // Try to compile a minimal ls binary from C source
+            log_info("Attempting to compile minimal ls binary for bootstrap");
+            char ls_source_path[1024];
+            snprintf(ls_source_path, sizeof(ls_source_path), "%s/ls.c", tsi_bin_dir);
+
+            // Create minimal ls C source code
+            FILE *ls_source = fopen(ls_source_path, "w");
+            if (ls_source) {
+                fprintf(ls_source, "#include <stdio.h>\n");
+                fprintf(ls_source, "#include <stdlib.h>\n");
+                fprintf(ls_source, "#include <string.h>\n");
+                fprintf(ls_source, "#include <dirent.h>\n");
+                fprintf(ls_source, "#include <sys/stat.h>\n");
+                fprintf(ls_source, "#include <time.h>\n");
+                fprintf(ls_source, "#include <unistd.h>\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "struct file_entry {\n");
+                fprintf(ls_source, "    char *name;\n");
+                fprintf(ls_source, "    time_t mtime;\n");
+                fprintf(ls_source, "};\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "int compare_mtime(const void *a, const void *b) {\n");
+                fprintf(ls_source, "    const struct file_entry *fa = (const struct file_entry *)a;\n");
+                fprintf(ls_source, "    const struct file_entry *fb = (const struct file_entry *)b;\n");
+                fprintf(ls_source, "    return (int)(fb->mtime - fa->mtime);\n");
+                fprintf(ls_source, "}\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "int main(int argc, char **argv) {\n");
+                fprintf(ls_source, "    int sort_by_time = 0;\n");
+                fprintf(ls_source, "    char *dir = \".\";\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    // Parse arguments\n");
+                fprintf(ls_source, "    for (int i = 1; i < argc; i++) {\n");
+                fprintf(ls_source, "        if (strcmp(argv[i], \"-t\") == 0) {\n");
+                fprintf(ls_source, "            sort_by_time = 1;\n");
+                fprintf(ls_source, "        } else if (argv[i][0] != '-') {\n");
+                fprintf(ls_source, "            dir = argv[i];\n");
+                fprintf(ls_source, "            break;\n");
+                fprintf(ls_source, "        }\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    DIR *d = opendir(dir);\n");
+                fprintf(ls_source, "    if (!d) {\n");
+                fprintf(ls_source, "        perror(\"ls\");\n");
+                fprintf(ls_source, "        return 1;\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    struct file_entry *entries = NULL;\n");
+                fprintf(ls_source, "    size_t count = 0;\n");
+                fprintf(ls_source, "    size_t capacity = 64;\n");
+                fprintf(ls_source, "    entries = malloc(capacity * sizeof(struct file_entry));\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    struct dirent *entry;\n");
+                fprintf(ls_source, "    while ((entry = readdir(d)) != NULL) {\n");
+                fprintf(ls_source, "        if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0)\n");
+                fprintf(ls_source, "            continue;\n");
+                fprintf(ls_source, "        \n");
+                fprintf(ls_source, "        char path[1024];\n");
+                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%s/%s\", dir, entry->d_name);\n");
+                fprintf(ls_source, "        \n");
+                fprintf(ls_source, "        struct stat st;\n");
+                fprintf(ls_source, "        if (stat(path, &st) == 0) {\n");
+                fprintf(ls_source, "            if (count >= capacity) {\n");
+                fprintf(ls_source, "                capacity *= 2;\n");
+                fprintf(ls_source, "                entries = realloc(entries, capacity * sizeof(struct file_entry));\n");
+                fprintf(ls_source, "            }\n");
+                fprintf(ls_source, "            entries[count].name = strdup(entry->d_name);\n");
+                fprintf(ls_source, "            entries[count].mtime = st.st_mtime;\n");
+                fprintf(ls_source, "            count++;\n");
+                fprintf(ls_source, "        }\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    closedir(d);\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    if (sort_by_time) {\n");
+                fprintf(ls_source, "        qsort(entries, count, sizeof(struct file_entry), compare_mtime);\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    for (size_t i = 0; i < count; i++) {\n");
+                fprintf(ls_source, "        printf(\"%%s\\n\", entries[i].name);\n");
+                fprintf(ls_source, "        free(entries[i].name);\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    free(entries);\n");
+                fprintf(ls_source, "    return 0;\n");
+                fprintf(ls_source, "}\n");
+                fclose(ls_source);
+
+                // Try to compile it
+                char compile_cmd[2048];
+                snprintf(compile_cmd, sizeof(compile_cmd),
+                    "(gcc -o '%s' '%s' -O2 2>&1 || "
+                    "cc -o '%s' '%s' -O2 2>&1) && "
+                    "rm -f '%s'",
+                    ls_binary_path, ls_source_path,
+                    ls_binary_path, ls_source_path,
+                    ls_source_path);
+
+                int compile_result = system(compile_cmd);
+                if (compile_result == 0 && stat(ls_binary_path, &st) == 0) {
+                    log_info("Successfully compiled minimal ls binary: %s", ls_binary_path);
+                    ls_binary_exists = true;
+    } else {
+                    log_warning("Failed to compile ls binary, falling back to wrapper script");
+                    // Remove source file if compilation failed
+                    unlink(ls_source_path);
+                }
+            }
+        }
+
+        // If binary compilation failed or doesn't exist, create wrapper script as fallback
+        if (!ls_binary_exists) {
+            char ls_wrapper_path[1024];
+            snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
+
+            // Check if wrapper already exists
+            if (stat(ls_wrapper_path, &st) != 0) {
+                FILE *fp = fopen(ls_wrapper_path, "w");
             if (fp) {
                 fprintf(fp, "#!/bin/sh\n");
                 fprintf(fp, "# Minimal ls wrapper for bootstrap builds\n");
@@ -341,7 +466,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 int chmod_result = system(chmod_cmd);
                 if (chmod_result != 0) {
                     log_warning("Failed to make ls wrapper executable: %s (exit code: %d)", ls_wrapper_path, WEXITSTATUS(chmod_result));
-    } else {
+                } else {
                     log_info("Created bootstrap ls wrapper: %s", ls_wrapper_path);
                     log_developer("ls wrapper is executable and ready for use");
                 }
@@ -357,6 +482,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 system(chmod_cmd);
             }
             log_developer("ls wrapper already exists: %s", ls_wrapper_path);
+            }
         }
     }
 
@@ -377,9 +503,9 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     // Note: We may have just created the bin directory and ls wrapper above, so ensure it's in PATH
     char tsi_bin[1024];
     snprintf(tsi_bin, sizeof(tsi_bin), "%s/bin", main_install_dir);
-    struct stat st;
+    struct stat st_bin;
     bool tsi_bin_exists = false;
-    if (stat(tsi_bin, &st) == 0 && S_ISDIR(st.st_mode)) {
+    if (stat(tsi_bin, &st_bin) == 0 && S_ISDIR(st_bin.st_mode)) {
         tsi_bin_exists = true;
     } else {
         // Directory might not exist yet, but we may have created it for the ls wrapper
@@ -404,9 +530,9 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     // Include /usr/bin before /bin to prefer GNU coreutils over BusyBox when available
     // This is critical for autotools configure scripts that need `ls -t`
     // ALWAYS include TSI bin if it exists (even if empty) - bootstrap wrappers are created during build
-    struct stat st_usr_bin, st_bin;
+    struct stat st_usr_bin, st_sys_bin;
     bool has_usr_bin = (stat("/usr/bin", &st_usr_bin) == 0 && S_ISDIR(st_usr_bin.st_mode));
-    bool has_bin = (stat("/bin", &st_bin) == 0 && S_ISDIR(st_bin.st_mode));
+    bool has_bin = (stat("/bin", &st_sys_bin) == 0 && S_ISDIR(st_sys_bin.st_mode));
 
     // If we created an ls wrapper, we MUST include TSI bin in PATH even if it doesn't exist yet
     if (needs_ls_wrapper && !tsi_bin_exists) {
