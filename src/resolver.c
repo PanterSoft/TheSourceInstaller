@@ -652,8 +652,16 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
             log_developer("Adding package %zu: '%s' (in_degree=0)", *result_count, packages[i]);
             char *dup_str = strdup(packages[i]);
             if (!dup_str) {
-                log_error("strdup failed for '%s'", packages[i]);
-                // Continue to next iteration
+                log_error("strdup failed for '%s' - out of memory", packages[i]);
+                // Free resources and return NULL
+                for (size_t k = 0; k < *result_count; k++) {
+                    if (result[k]) free(result[k]);
+                }
+                free(result);
+                free(added);
+                free(in_degree);
+                *result_count = 0;
+                return NULL;
             } else {
                 result[*result_count] = dup_str;
                 log_developer("  Assigned result[%zu] = '%s' (pointer: %p)", *result_count, result[*result_count], (void*)result[*result_count]);
@@ -681,7 +689,38 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
 
                             Package *other = repository_get_package(resolver->repository, other_name);
                             if (other) {
-                                if (package_has_dependency(other, added_name)) {
+                                // Check if other package depends on added package
+                                // Need to check both dependencies and build_dependencies, handling package@version format
+                                bool has_dep = false;
+                                for (size_t k = 0; k < other->dependencies_count; k++) {
+                                    if (!other->dependencies[k]) continue;
+                                    char *dep_name = NULL;
+                                    char *dep_version = NULL;
+                                    parse_package_version(other->dependencies[k], &dep_name, &dep_version);
+                                    const char *dep_name_str = dep_name ? dep_name : other->dependencies[k];
+                                    if (strcmp(dep_name_str, added_name) == 0) {
+                                        has_dep = true;
+                                    }
+                                    if (dep_name) free(dep_name);
+                                    if (dep_version) free(dep_version);
+                                    if (has_dep) break;
+                                }
+                                if (!has_dep) {
+                                    for (size_t k = 0; k < other->build_dependencies_count; k++) {
+                                        if (!other->build_dependencies[k]) continue;
+                                        char *build_dep_name = NULL;
+                                        char *build_dep_version = NULL;
+                                        parse_package_version(other->build_dependencies[k], &build_dep_name, &build_dep_version);
+                                        const char *build_dep_name_str = build_dep_name ? build_dep_name : other->build_dependencies[k];
+                                        if (strcmp(build_dep_name_str, added_name) == 0) {
+                                            has_dep = true;
+                                        }
+                                        if (build_dep_name) free(build_dep_name);
+                                        if (build_dep_version) free(build_dep_version);
+                                        if (has_dep) break;
+                                    }
+                                }
+                                if (has_dep) {
                                     log_developer("  Package '%s' depends on '%s', decreasing in_degree[%zu] from %d to %d",
                                                   other_name, added_name, j, in_degree[j], in_degree[j] - 1);
                                     in_degree[j]--;
@@ -694,7 +733,6 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
                 }
                 if (added_pkg_name) free(added_pkg_name);
                 if (added_pkg_version) free(added_pkg_version);
-                break;  // Break inner for loop, continue while loop
             }
         }
         if (!found) {

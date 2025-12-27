@@ -374,27 +374,52 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     log_developer("Install directory: %s", config->install_dir);
 
     if (strcmp(build_system, "autotools") == 0) {
-        // Special bootstrap handling for make: if no system make available, try direct compilation
+        // Special bootstrap handling for make: if no system make available, try build.sh or direct compilation
         if (strcmp(pkg->name, "make") == 0) {
             int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
             if (!has_system_make) {
-                log_info("Bootstrap mode: No system make found, attempting direct compilation from C source");
-                // Try to compile make directly - GNU Make can be built this way
-                char bootstrap_cmd[2048];
-                snprintf(bootstrap_cmd, sizeof(bootstrap_cmd),
-                    "cd '%s' && "
-                    "(gcc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
-                    "cc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
-                    "gcc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1 || "
-                    "cc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1) && "
-                    "mkdir -p '%s/bin' && cp make '%s/bin/make'",
-                    source_dir, main_install_dir, main_install_dir);
-                int bootstrap_result = execute_build_command(bootstrap_cmd, "bootstrap make", pkg->name);
-                if (bootstrap_result == 0) {
-                    log_info("Bootstrap make compiled successfully - installed to %s/bin", main_install_dir);
-                    // Now we have make, continue with normal autotools build
-                } else {
-                    log_warning("Direct bootstrap compilation failed, will try configure approach");
+                log_info("Bootstrap mode: No system make found, checking for build.sh script");
+
+                // First, check for build.sh script (GNU Make includes this for bootstrap)
+                char build_sh[512];
+                snprintf(build_sh, sizeof(build_sh), "%s/build.sh", source_dir);
+                struct stat st_build;
+                if (stat(build_sh, &st_build) == 0) {
+                    log_info("Found build.sh script, using it to bootstrap make");
+                    char build_sh_cmd[1024];
+                    snprintf(build_sh_cmd, sizeof(build_sh_cmd),
+                        "cd '%s' && sh build.sh && "
+                        "mkdir -p '%s/bin' && cp make '%s/bin/make'",
+                        source_dir, main_install_dir, main_install_dir);
+                    int build_sh_result = execute_build_command(build_sh_cmd, "build.sh", pkg->name);
+                    if (build_sh_result == 0) {
+                        log_info("Bootstrap make built successfully using build.sh - installed to %s/bin", main_install_dir);
+                        // Now we have make, continue with normal autotools build
+                    } else {
+                        log_warning("build.sh failed (exit code: %d), trying direct compilation", build_sh_result);
+                    }
+                }
+
+                // If build.sh didn't work or wasn't found, try direct compilation
+                if (!has_system_make && system("command -v make >/dev/null 2>&1") != 0) {
+                    log_info("Attempting direct compilation from C source");
+                    // Try to compile make directly - GNU Make can be built this way
+                    char bootstrap_cmd[2048];
+                    snprintf(bootstrap_cmd, sizeof(bootstrap_cmd),
+                        "cd '%s' && "
+                        "(gcc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
+                        "cc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
+                        "gcc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1 || "
+                        "cc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1) && "
+                        "mkdir -p '%s/bin' && cp make '%s/bin/make'",
+                        source_dir, main_install_dir, main_install_dir);
+                    int bootstrap_result = execute_build_command(bootstrap_cmd, "bootstrap make", pkg->name);
+                    if (bootstrap_result == 0) {
+                        log_info("Bootstrap make compiled successfully - installed to %s/bin", main_install_dir);
+                        // Now we have make, continue with normal autotools build
+                    } else {
+                        log_warning("Direct bootstrap compilation failed, will try configure approach");
+                    }
                 }
             }
         }
@@ -404,13 +429,40 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);
         struct stat st;
         if (stat(configure, &st) != 0) {
-            log_debug("Configure script not found, running autoreconf");
-            // Try to generate configure
-            char autoreconf_cmd[512];
-            snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
-            int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
-            if (autoreconf_result != 0) {
-                log_warning("autoreconf failed (exit code: %d), continuing anyway", autoreconf_result);
+            // Configure script not found - try bootstrap scripts first
+            log_debug("Configure script not found, checking for bootstrap scripts");
+
+            // Check for bootstrap scripts (used by coreutils and some other packages)
+            // Try common bootstrap script names in order of preference
+            const char *bootstrap_scripts[] = {"bootstrap", "bootstrap.sh", "autogen.sh", "autogen"};
+
+            for (size_t i = 0; i < sizeof(bootstrap_scripts) / sizeof(bootstrap_scripts[0]); i++) {
+                char bootstrap[512];
+                snprintf(bootstrap, sizeof(bootstrap), "%s/%s", source_dir, bootstrap_scripts[i]);
+                if (stat(bootstrap, &st) == 0) {
+                    log_info("Found %s script, running it to generate configure", bootstrap_scripts[i]);
+                    char bootstrap_cmd[512];
+                    snprintf(bootstrap_cmd, sizeof(bootstrap_cmd), "cd '%s' && sh %s", source_dir, bootstrap_scripts[i]);
+                    int bootstrap_result = execute_build_command(bootstrap_cmd, bootstrap_scripts[i], pkg->name);
+                    if (bootstrap_result != 0) {
+                        log_warning("%s script failed (exit code: %d), trying next bootstrap method", bootstrap_scripts[i], bootstrap_result);
+                    } else {
+                        log_debug("%s script completed successfully", bootstrap_scripts[i]);
+                        break; // Success, stop trying other bootstrap scripts
+                    }
+                }
+            }
+
+            // Check if configure was generated by bootstrap, if not try autoreconf
+            if (stat(configure, &st) != 0) {
+                log_debug("Configure script still not found after bootstrap, running autoreconf");
+                // Try to generate configure
+                char autoreconf_cmd[512];
+                snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
+                int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
+                if (autoreconf_result != 0) {
+                    log_warning("autoreconf failed (exit code: %d), continuing anyway", autoreconf_result);
+                }
             }
         }
 

@@ -302,7 +302,6 @@ main() {
         # Check if already installed
         if check_tsi_installed; then
             log_warn "TSI is already installed at: $PREFIX/bin/tsi"
-            log_info ""
 
             # Ask user if they want to proceed (interactive by default)
             # Only skip prompt if explicitly set to non-interactive mode
@@ -326,7 +325,7 @@ main() {
                     { printf "[INFO] Do you want to proceed with a fresh installation? (this will rebuild TSI)\n[INFO] Type 'yes' to continue, or press Ctrl+C to cancel: " > /dev/tty; read -r user_response < /dev/tty; printf "\n" > /dev/tty; }
                     if [ "$user_response" != "yes" ]; then
                         log_info "Installation cancelled."
-                        log_info ""
+            log_info ""
                         log_info "To update your existing installation, use:"
                         log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
                         log_info "  # Or use environment variable:"
