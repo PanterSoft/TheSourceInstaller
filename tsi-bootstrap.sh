@@ -791,6 +791,76 @@ main() {
         fi
         log_info ""
 
+    # In repair mode, also update packages from remote repository (overwrite local changes)
+    if [ "$REPAIR_MODE" = true ]; then
+        log_info ""
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info "Updating Package Repository from Remote"
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info ""
+        log_info "Fetching latest packages from remote repository..."
+
+        # Ensure packages directory exists
+        mkdir -p "$PREFIX/packages"
+
+        # Use git to fetch packages from remote
+        if command_exists git; then
+            git_cmd=$(get_command_path git)
+            TEMP_REPO_DIR="$INSTALL_DIR/tmp-repo-update"
+
+            # Clone or update the repository
+            if [ -d "$TEMP_REPO_DIR/.git" ]; then
+                log_info "Updating existing repository clone..."
+                cd "$TEMP_REPO_DIR"
+                if "$git_cmd" fetch origin "$TSI_BRANCH" >/dev/null 2>&1 && \
+                   "$git_cmd" reset --hard "origin/$TSI_BRANCH" >/dev/null 2>&1; then
+                    log_info "✓ Repository updated"
+                    cd "$INSTALL_DIR"
+                else
+                    log_warn "Failed to update repository, trying fresh clone..."
+                    cd "$INSTALL_DIR"
+                    rm -rf "$TEMP_REPO_DIR"
+                fi
+            fi
+
+            if [ ! -d "$TEMP_REPO_DIR/.git" ]; then
+                log_info "Cloning repository..."
+                if "$git_cmd" clone --depth 1 --branch "$TSI_BRANCH" "$TSI_REPO" "$TEMP_REPO_DIR" >/dev/null 2>&1; then
+                    log_info "✓ Repository cloned"
+                else
+                    log_warn "Failed to clone repository"
+                    TEMP_REPO_DIR=""
+                fi
+            fi
+
+            # Copy packages from repository (force overwrite local changes)
+            if [ -n "$TEMP_REPO_DIR" ] && [ -d "$TEMP_REPO_DIR/packages" ]; then
+                PACKAGE_COUNT=0
+                for pkg_file in "$TEMP_REPO_DIR/packages"/*.json; do
+                    if [ -f "$pkg_file" ]; then
+                        pkg_name=$(basename "$pkg_file")
+                        # Force overwrite local changes with -f flag
+                        cp -f "$pkg_file" "$PREFIX/packages/$pkg_name" 2>/dev/null || true
+                        PACKAGE_COUNT=$((PACKAGE_COUNT + 1))
+                    fi
+                done
+                if [ "$PACKAGE_COUNT" -gt 0 ]; then
+                    log_info "✓ Updated $PACKAGE_COUNT package definitions from remote"
+                    log_info "  Local changes have been overwritten with remote versions"
+                else
+                    log_warn "  No package definitions found in repository"
+                fi
+            else
+                log_warn "  Could not access repository packages directory"
+            fi
+        else
+            log_warn "Git is not installed - cannot update packages from remote"
+            log_warn "  Install git to enable automatic package updates during repair"
+            log_warn "  Or manually copy packages to $PREFIX/packages/"
+        fi
+        log_info ""
+    fi
+
     log_info ""
     log_info "========================================="
     log_info "TSI installed successfully!"
