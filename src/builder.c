@@ -162,6 +162,126 @@ bool builder_apply_patches(const char *source_dir, char **patches, size_t patche
     return true;
 }
 
+// Create ls wrapper script for BusyBox systems
+// Returns true if wrapper was created successfully, false otherwise
+// Sets *wrapper_exists to true if wrapper exists after this function
+bool builder_create_ls_wrapper(const char *tsi_bin_dir, const char *coreutils_ls_path, bool *wrapper_exists) {
+    if (!tsi_bin_dir || !wrapper_exists) {
+        return false;
+    }
+
+    // Check if coreutils ls is already available (best option)
+    struct stat st;
+    bool coreutils_ls_exists = false;
+    if (coreutils_ls_path) {
+        coreutils_ls_exists = (stat(coreutils_ls_path, &st) == 0 && S_ISREG(st.st_mode));
+    }
+
+    // Create ls wrapper script if coreutils ls doesn't exist
+    char ls_wrapper_path[1024];
+    snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
+    *wrapper_exists = false;
+
+    if (!coreutils_ls_exists) {
+        // Check if wrapper already exists
+        bool ls_wrapper_already_exists = (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode));
+        // Always recreate the wrapper to ensure it has the latest fixes
+        if (ls_wrapper_already_exists) {
+            log_info("Removing old ls wrapper to recreate with latest fixes");
+            unlink(ls_wrapper_path);
+        }
+
+        // Create ls wrapper script for BusyBox systems
+        log_info("Creating ls wrapper script for bootstrap");
+        FILE *fp = fopen(ls_wrapper_path, "w");
+        if (fp) {
+            fprintf(fp, "#!/bin/sh\n");
+            fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
+            fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
+            fprintf(fp, "\n");
+            fprintf(fp, "# Check if -t flag is present\n");
+            fprintf(fp, "has_t=false\n");
+            fprintf(fp, "dir=\".\"\n");
+            fprintf(fp, "for arg in \"$@\"; do\n");
+            fprintf(fp, "    case \"$arg\" in\n");
+            fprintf(fp, "        -t) has_t=true ;;\n");
+            fprintf(fp, "        -t*) has_t=true ;;\n");
+            fprintf(fp, "        *-t*) has_t=true ;;\n");
+            fprintf(fp, "        -*) : ;;\n");
+            fprintf(fp, "        *) dir=\"$arg\" ;;\n");
+            fprintf(fp, "    esac\n");
+            fprintf(fp, "done\n");
+            fprintf(fp, "\n");
+            fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
+            fprintf(fp, "    # Try GNU ls first if available\n");
+            fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
+            fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+            fprintf(fp, "    fi\n");
+            fprintf(fp, "    # Try system ls (might work on some systems)\n");
+            fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
+            fprintf(fp, "        exec /bin/ls \"$@\"\n");
+            fprintf(fp, "    fi\n");
+            fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
+            fprintf(fp, "    # Check if target is a file or directory\n");
+            fprintf(fp, "    if [ -f \"$dir\" ]; then\n");
+            fprintf(fp, "        # It's a file, just print the filename\n");
+            fprintf(fp, "        printf \"%%s\\n\" \"$dir\"\n");
+            fprintf(fp, "    elif [ -d \"$dir\" ]; then\n");
+            fprintf(fp, "        # It's a directory, list contents sorted by time\n");
+            fprintf(fp, "        tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
+            fprintf(fp, "        > \"$tmp\"\n");
+            fprintf(fp, "        for item in \"$dir\"/* \"$dir\"/.*; do\n");
+            fprintf(fp, "            [ \"$item\" = \"$dir/*\" ] && continue\n");
+            fprintf(fp, "            [ \"$item\" = \"$dir/.\" ] && continue\n");
+            fprintf(fp, "            [ \"$item\" = \"$dir/..\" ] && continue\n");
+            fprintf(fp, "            if [ -e \"$item\" ]; then\n");
+            fprintf(fp, "                name=$(basename \"$item\")\n");
+            fprintf(fp, "                mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
+            fprintf(fp, "                printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
+            fprintf(fp, "            fi\n");
+            fprintf(fp, "        done\n");
+            fprintf(fp, "        # Sort by mtime (descending) and output names only\n");
+            fprintf(fp, "        sort -rn \"$tmp\" | cut -f2-\n");
+            fprintf(fp, "        rm -f \"$tmp\"\n");
+            fprintf(fp, "    else\n");
+            fprintf(fp, "        # File doesn't exist, just print the name (configure scripts expect this)\n");
+            fprintf(fp, "        printf \"%%s\\n\" \"$dir\"\n");
+            fprintf(fp, "    fi\n");
+            fprintf(fp, "else\n");
+            fprintf(fp, "    # No -t flag, just use system ls\n");
+            fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
+            fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+            fprintf(fp, "    else\n");
+            fprintf(fp, "        exec /bin/ls \"$@\"\n");
+            fprintf(fp, "    fi\n");
+            fprintf(fp, "fi\n");
+            fclose(fp);
+
+            // Make it executable
+            char chmod_cmd[512];
+            snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
+            system(chmod_cmd);
+
+            // Verify it was created
+            if (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode)) {
+                log_info("Successfully created ls wrapper script: %s", ls_wrapper_path);
+                *wrapper_exists = true;
+                return true;
+            } else {
+                log_warning("Failed to create ls wrapper script");
+                return false;
+            }
+        } else {
+            log_warning("Failed to open ls wrapper script for writing: %s", ls_wrapper_path);
+            return false;
+        }
+    }
+
+    // coreutils ls exists, no need for wrapper
+    *wrapper_exists = false;
+    return true;
+}
+
 bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, const char *build_dir) {
     if (!config || !pkg || !source_dir) {
         log_error("builder_build called with invalid parameters");
@@ -291,105 +411,19 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin_dir);
         system(mkdir_cmd); // Ignore errors - directory might already exist
 
-        // First, check if coreutils ls is already available (best option)
+        // Check if coreutils ls is already available (best option)
         char coreutils_ls[1024];
         snprintf(coreutils_ls, sizeof(coreutils_ls), "%s/bin/ls", main_install_dir);
+        bool ls_wrapper_exists = false;
+        bool coreutils_ls_exists = false;
         struct stat st;
-        bool coreutils_ls_exists = (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode));
+        if (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode)) {
+            coreutils_ls_exists = true;
+        }
 
         // Create ls wrapper script if coreutils ls doesn't exist
-        char ls_wrapper_path[1024];
-        snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
-        bool ls_wrapper_exists = false;
-
         if (!coreutils_ls_exists) {
-            ls_wrapper_exists = (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode));
-            // Always recreate the wrapper to ensure it has the latest fixes
-            if (ls_wrapper_exists) {
-                log_info("Removing old ls wrapper to recreate with latest fixes");
-                unlink(ls_wrapper_path);
-            }
-
-            // Create ls wrapper script for BusyBox systems
-            log_info("Creating ls wrapper script for bootstrap");
-            FILE *fp = fopen(ls_wrapper_path, "w");
-            if (fp) {
-                fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
-                fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
-                fprintf(fp, "\n");
-                fprintf(fp, "# Check if -t flag is present\n");
-                fprintf(fp, "has_t=false\n");
-                fprintf(fp, "dir=\".\"\n");
-                fprintf(fp, "for arg in \"$@\"; do\n");
-                fprintf(fp, "    case \"$arg\" in\n");
-                fprintf(fp, "        -t) has_t=true ;;\n");
-                fprintf(fp, "        -t*) has_t=true ;;\n");
-                fprintf(fp, "        *-t*) has_t=true ;;\n");
-                fprintf(fp, "        -*) : ;;\n");
-                fprintf(fp, "        *) dir=\"$arg\" ;;\n");
-                fprintf(fp, "    esac\n");
-                fprintf(fp, "done\n");
-                fprintf(fp, "\n");
-                fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
-                fprintf(fp, "    # Try GNU ls first if available\n");
-                fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
-                fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
-                fprintf(fp, "    fi\n");
-                fprintf(fp, "    # Try system ls (might work on some systems)\n");
-                fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
-                fprintf(fp, "        exec /bin/ls \"$@\"\n");
-                fprintf(fp, "    fi\n");
-                fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
-                fprintf(fp, "    # Check if target is a file or directory\n");
-                fprintf(fp, "    if [ -f \"$dir\" ]; then\n");
-                fprintf(fp, "        # It's a file, just print the filename\n");
-                fprintf(fp, "        printf \"%%s\\n\" \"$dir\"\n");
-                fprintf(fp, "    elif [ -d \"$dir\" ]; then\n");
-                fprintf(fp, "        # It's a directory, list contents sorted by time\n");
-                fprintf(fp, "        tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
-                fprintf(fp, "        > \"$tmp\"\n");
-                fprintf(fp, "        for item in \"$dir\"/* \"$dir\"/.*; do\n");
-                fprintf(fp, "            [ \"$item\" = \"$dir/*\" ] && continue\n");
-                fprintf(fp, "            [ \"$item\" = \"$dir/.\" ] && continue\n");
-                fprintf(fp, "            [ \"$item\" = \"$dir/..\" ] && continue\n");
-                fprintf(fp, "            if [ -e \"$item\" ]; then\n");
-                fprintf(fp, "                name=$(basename \"$item\")\n");
-                fprintf(fp, "                mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
-                fprintf(fp, "                printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
-                fprintf(fp, "            fi\n");
-                fprintf(fp, "        done\n");
-                fprintf(fp, "        # Sort by mtime (descending) and output names only\n");
-                fprintf(fp, "        sort -rn \"$tmp\" | cut -f2-\n");
-                fprintf(fp, "        rm -f \"$tmp\"\n");
-                fprintf(fp, "    else\n");
-                fprintf(fp, "        # File doesn't exist, just print the name (configure scripts expect this)\n");
-                fprintf(fp, "        printf \"%%s\\n\" \"$dir\"\n");
-                fprintf(fp, "    fi\n");
-                fprintf(fp, "else\n");
-                fprintf(fp, "    # No -t flag, just use system ls\n");
-                fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
-                fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
-                fprintf(fp, "    else\n");
-                fprintf(fp, "        exec /bin/ls \"$@\"\n");
-                fprintf(fp, "    fi\n");
-                fprintf(fp, "fi\n");
-                fclose(fp);
-
-                // Make it executable
-                char chmod_cmd[512];
-                snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
-                system(chmod_cmd);
-
-                // Verify it was created
-                if (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode)) {
-                    log_info("Successfully created ls wrapper script: %s", ls_wrapper_path);
-                    ls_wrapper_exists = true;
-    } else {
-                    log_warning("Failed to create ls wrapper script");
-                }
-            } else {
-                log_warning("Failed to open ls wrapper script for writing: %s", ls_wrapper_path);
-            }
+            builder_create_ls_wrapper(tsi_bin_dir, coreutils_ls, &ls_wrapper_exists);
         }
 
         // Update needs_ls_wrapper based on whether wrapper was created

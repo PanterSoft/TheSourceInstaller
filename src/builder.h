@@ -26,6 +26,11 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
 bool builder_create_symlinks(const BuilderConfig *config, const char *package_name, const char *package_version);
 bool builder_apply_patches(const char *source_dir, char **patches, size_t patches_count);
 
+// Create ls wrapper script for BusyBox systems
+// Returns true if wrapper was created successfully, false otherwise
+// Sets *wrapper_exists to true if wrapper exists after this function
+bool builder_create_ls_wrapper(const char *tsi_bin_dir, const char *coreutils_ls_path, bool *wrapper_exists);
+
 #ifdef __cplusplus
 }
 #endif
