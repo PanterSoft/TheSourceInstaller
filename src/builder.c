@@ -243,15 +243,15 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     char main_install_dir[1024];
     char *install_pos = strstr(config->install_dir, "/install/");
     if (install_pos) {
-        // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
+            // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
         size_t len = install_pos - config->install_dir + strlen("/install");
-        strncpy(main_install_dir, config->install_dir, len);
-        main_install_dir[len] = '\0';
-    } else {
-        // Already main install directory
-        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-    }
+            strncpy(main_install_dir, config->install_dir, len);
+            main_install_dir[len] = '\0';
+        } else {
+            // Already main install directory
+            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+        }
 
     // For all autotools packages, create a minimal ls wrapper if needed
     // This helps when building on systems with BusyBox ls that doesn't support -t
@@ -287,7 +287,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 fprintf(fp, "# Tries GNU ls first, then falls back to system ls with workaround for -t\n");
                 fprintf(fp, "if [ -x /usr/bin/ls ] && /usr/bin/ls -t / >/dev/null 2>&1; then\n");
                 fprintf(fp, "    exec /usr/bin/ls \"$@\"\n");
-                fprintf(fp, "elif command -v ls >/dev/null 2>&1; then\n");
+                fprintf(fp, "elif [ -x /bin/ls ]; then\n");
                 fprintf(fp, "    # Check if -t flag is present (standalone or combined)\n");
                 fprintf(fp, "    has_t=false\n");
                 fprintf(fp, "    for arg in \"$@\"; do\n");
@@ -298,8 +298,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 fprintf(fp, "        esac\n");
                 fprintf(fp, "    done\n");
                 fprintf(fp, "    if [ \"$has_t\" = \"true\" ]; then\n");
-                fprintf(fp, "        # Try system ls first\n");
-                fprintf(fp, "        if ls \"$@\" 2>/dev/null; then\n");
+                fprintf(fp, "        # Try system ls first (use explicit path to avoid recursion)\n");
+                fprintf(fp, "        if /bin/ls \"$@\" 2>/dev/null; then\n");
                 fprintf(fp, "            exit 0\n");
                 fprintf(fp, "        fi\n");
                 fprintf(fp, "        # Workaround for BusyBox ls that doesn't support -t\n");
@@ -326,7 +326,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 fprintf(fp, "            fi\n");
                 fprintf(fp, "        done | sort -rn | cut -f2-\n");
                 fprintf(fp, "    else\n");
-                fprintf(fp, "        exec ls \"$@\"\n");
+                fprintf(fp, "        # No -t flag, use system ls directly (avoid recursion)\n");
+                fprintf(fp, "        exec /bin/ls \"$@\"\n");
                 fprintf(fp, "    fi\n");
                 fprintf(fp, "else\n");
                 fprintf(fp, "    echo 'ls: command not found' >&2\n");
@@ -337,9 +338,25 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 // Make it executable
                 char chmod_cmd[512];
                 snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
-                system(chmod_cmd); // Ignore errors
-                log_developer("Created bootstrap ls wrapper: %s", ls_wrapper_path);
+                int chmod_result = system(chmod_cmd);
+                if (chmod_result != 0) {
+                    log_warning("Failed to make ls wrapper executable: %s (exit code: %d)", ls_wrapper_path, WEXITSTATUS(chmod_result));
+    } else {
+                    log_info("Created bootstrap ls wrapper: %s", ls_wrapper_path);
+                    log_developer("ls wrapper is executable and ready for use");
+                }
+            } else {
+                log_warning("Failed to create ls wrapper file: %s", ls_wrapper_path);
             }
+        } else {
+            // Wrapper already exists, verify it's executable
+            if (!(st.st_mode & S_IXUSR)) {
+                log_info("ls wrapper exists but is not executable, making it executable");
+                char chmod_cmd[512];
+                snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
+                system(chmod_cmd);
+            }
+            log_developer("ls wrapper already exists: %s", ls_wrapper_path);
         }
     }
 
@@ -403,8 +420,12 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     if (tsi_bin_exists && has_usr_bin && has_bin) {
         // TSI bin exists - prioritize it (may contain bootstrap wrappers), then system tools
         // Put /usr/bin before /bin to prefer GNU tools over BusyBox
+        // CRITICAL: TSI bin MUST be first so ls wrapper is found before system ls
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        if (needs_ls_wrapper) {
+            log_developer("PATH set with TSI bin first (contains ls wrapper): %s/bin", main_install_dir);
+        }
     } else if (tsi_bin_exists && has_usr_bin) {
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
@@ -413,8 +434,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
     } else if (tsi_bin_exists) {
         // TSI bin exists but no system directories - use TSI bin only
-        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
     } else if (has_usr_bin && has_bin) {
         // Bootstrap mode - TSI bin doesn't exist yet, use system tools
         // Put /usr/bin before /bin to prefer GNU tools over BusyBox
@@ -581,11 +602,11 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 }
 
                 log_info("Configure script not found, but configure.ac or configure.in exists - trying autoreconf");
-                // Try to generate configure
-                char autoreconf_cmd[512];
-                snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
-                int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
-                if (autoreconf_result != 0) {
+            // Try to generate configure
+            char autoreconf_cmd[512];
+            snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
+            int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
+            if (autoreconf_result != 0) {
                     log_error("autoreconf failed (exit code: %d) - autotools may not be installed", autoreconf_result);
                     log_error("Package %s requires autotools (autoconf, automake) to generate configure script", pkg->name);
                     log_error("Either install autotools first, or ensure the package tarball includes a pre-generated configure script");
@@ -631,7 +652,22 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
         // Standard configure command: ./configure --prefix='install_dir'
         // Environment variables and configure_args are appended
+        // Note: env includes PATH with TSI bin first (for ls wrapper on BusyBox)
         snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        if (needs_ls_wrapper) {
+            // Verify wrapper exists and is in PATH before running configure
+            char verify_cmd[1024];
+            snprintf(verify_cmd, sizeof(verify_cmd), "test -x '%s/bin/ls' && echo 'ls wrapper exists' || echo 'ls wrapper missing'", main_install_dir);
+            FILE *verify = popen(verify_cmd, "r");
+            if (verify) {
+                char verify_result[256];
+                if (fgets(verify_result, sizeof(verify_result), verify)) {
+                    log_developer("ls wrapper verification: %s", verify_result);
+                }
+                pclose(verify);
+            }
+            log_developer("Running configure with PATH containing ls wrapper: %s/bin", main_install_dir);
+        }
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->configure_args[i]) + 2;
             if (needed > cmd_len) {
@@ -683,8 +719,9 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         // Generic check: look for common build artifacts (lib directory with files)
         char build_check[512];
         // Check for package-specific binary first, then library files, then generic artifacts
+        // Use simpler check that doesn't rely on complex nested command substitution
         snprintf(build_check, sizeof(build_check),
-                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || ([ -d lib ] && [ \"$(ls -A lib 2>/dev/null)\" ]); then exit 0; else exit 1; fi",
+                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || [ -d lib ]; then exit 0; else exit 1; fi",
                  pkg->name, pkg->name, pkg->name, pkg->name, pkg->name);
 
         if (cflags_env) {
@@ -982,10 +1019,21 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         // Step 4: 'make install' to install the programs and any data files
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         // Use -k flag to continue on errors (e.g., missing help2man for doc target)
-        // Check if main binary was installed to verify success
+        // Check if package was installed successfully - check for binary, library, or header files
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, cmd_len, "cd '%s' && %s make -k install; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ]; then exit 0; else exit 1; fi",
-                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name);
+        size_t install_check_len = strlen(cmd) + 512;
+        char *install_check_cmd = realloc(cmd, install_check_len);
+        if (!install_check_cmd) {
+            log_error("Failed to allocate memory for install check command");
+            free(cmd);
+            return false;
+        }
+        cmd = install_check_cmd;
+        cmd_len = install_check_len;
+        snprintf(cmd, cmd_len, "cd '%s' && %s make -k install; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ] || [ -f '%s/lib/lib%s.a' ] || [ -f '%s/lib/lib%s.so' ] || [ -f '%s/lib/lib%s.dylib' ] || [ -d '%s/lib' ] || [ -d '%s/include' ]; then exit 0; else exit 1; fi",
+                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, pkg->name, config->install_dir, pkg->name, config->install_dir, pkg->name,
+                 config->install_dir, config->install_dir);
     } else if (strcmp(build_system, "cmake") == 0) {
         log_debug("Running cmake --install for package: %s", pkg->name);
         snprintf(cmd, cmd_len, "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);

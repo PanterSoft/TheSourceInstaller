@@ -247,6 +247,169 @@ static int cmd_remove(int argc, char **argv) {
     return (fail_count > 0) ? 1 : 0;
 }
 
+// Install a single package independently (used for both dependencies and main package)
+// This ensures each package gets its own complete installation cycle
+static bool install_single_package(
+    const char *package_name,
+    const char *package_version,
+    BuilderConfig *builder_config,
+    SourceFetcher *fetcher,
+    Database *db,
+    Repository *repo,
+    bool force,
+    void (*output_callback)(const char *line, void *userdata),
+    bool is_dependency
+) {
+    // Parse package@version if present
+    char *pkg_name = NULL;
+    char *pkg_version = NULL;
+    if (package_version) {
+        pkg_name = strdup(package_name);
+        pkg_version = strdup(package_version);
+    } else {
+        char *at_pos = strchr(package_name, '@');
+        if (at_pos) {
+            size_t name_len = at_pos - package_name;
+            pkg_name = malloc(name_len + 1);
+            if (pkg_name) {
+                strncpy(pkg_name, package_name, name_len);
+                pkg_name[name_len] = '\0';
+            }
+            pkg_version = strdup(at_pos + 1);
+        } else {
+            pkg_name = strdup(package_name);
+        }
+    }
+
+    // Get package from repository
+    Package *pkg = pkg_version ? repository_get_package_version(repo, pkg_name, pkg_version) : repository_get_package(repo, pkg_name);
+
+    if (pkg_name) free(pkg_name);
+    if (pkg_version) free(pkg_version);
+
+    if (!pkg) {
+        fprintf(stderr, "Error: Package not found: %s\n", package_name);
+        log_error("Package not found: %s", package_name);
+        return false;
+    }
+
+    // Check if already installed (unless force)
+    if (!force) {
+        InstalledPackage *installed = database_get_package(db, pkg->name);
+        if (installed) {
+            bool version_matches = false;
+            if (pkg->version && installed->version) {
+                version_matches = (strcmp(pkg->version, installed->version) == 0);
+            } else if (!pkg->version && !installed->version) {
+                version_matches = true;
+            }
+            if (version_matches) {
+                if (!is_dependency) {
+                    printf("Package %s is already installed", pkg->name);
+                    if (pkg->version) printf(" (version %s)", pkg->version);
+                    printf("\n");
+                }
+                // Free the InstalledPackage structure
+                if (installed->name) free(installed->name);
+                if (installed->version) free(installed->version);
+                if (installed->install_path) free(installed->install_path);
+                if (installed->dependencies) {
+                    for (size_t j = 0; j < installed->dependencies_count; j++) {
+                        if (installed->dependencies[j]) free(installed->dependencies[j]);
+                    }
+                    free(installed->dependencies);
+                }
+                free(installed);
+                return true; // Already installed, consider it success
+            }
+            // Free the InstalledPackage structure
+            if (installed->name) free(installed->name);
+            if (installed->version) free(installed->version);
+            if (installed->install_path) free(installed->install_path);
+            if (installed->dependencies) {
+                for (size_t j = 0; j < installed->dependencies_count; j++) {
+                    if (installed->dependencies[j]) free(installed->dependencies[j]);
+                }
+                free(installed->dependencies);
+            }
+            free(installed);
+        }
+    }
+
+    // Set package-specific install directory
+    builder_config_set_package_dir(builder_config, pkg->name, pkg->version);
+
+    // Fetch source
+    log_debug("Fetching source for package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+    char *source_dir = fetcher_fetch(fetcher, pkg, force);
+    if (!source_dir) {
+        fprintf(stderr, "Error: Failed to fetch source for %s\n", pkg->name);
+        log_error("Failed to fetch source for package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+        return false;
+    }
+    log_developer("Source fetched for package: %s@%s -> %s", pkg->name, pkg->version ? pkg->version : "latest", source_dir);
+
+    // Build
+    printf("==> Building %s", pkg->name);
+    if (pkg->version && pkg->version[0]) {
+        printf(" %s", pkg->version);
+    }
+    printf("\n");
+    char build_dir[1024];
+    if (pkg->version && strcmp(pkg->version, "latest") != 0) {
+        snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, pkg->name, pkg->version);
+    } else {
+        snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, pkg->name);
+    }
+
+    log_debug("Building package: %s@%s in %s", pkg->name, pkg->version ? pkg->version : "latest", build_dir);
+    if (!builder_build_with_output(builder_config, pkg, source_dir, build_dir, output_callback, NULL)) {
+        fprintf(stderr, "Error: Failed to build package\n");
+        fprintf(stderr, "  %s\n", pkg->name);
+        log_error("Failed to build package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+        free(source_dir);
+        return false;
+    }
+    log_info("Successfully built package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+
+    // Install
+    printf("==> Installing %s", pkg->name);
+    if (pkg->version && pkg->version[0]) {
+        printf(" %s", pkg->version);
+    }
+    printf("\n");
+
+    log_debug("Installing package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+    if (!builder_install_with_output(builder_config, pkg, source_dir, build_dir, output_callback, NULL)) {
+        fprintf(stderr, "Error: Failed to install package\n");
+        fprintf(stderr, "  %s\n", pkg->name);
+        log_error("Failed to install package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+        free(source_dir);
+        return false;
+    }
+    log_info("Successfully installed package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+
+    // Show completion
+    char done_msg[256];
+    if (pkg->version) {
+        snprintf(done_msg, sizeof(done_msg), "Installed %s %s", pkg->name, pkg->version);
+    } else {
+        snprintf(done_msg, sizeof(done_msg), "Installed %s", pkg->name);
+    }
+    printf("%s\n", done_msg);
+
+    // Create symlinks to main install directory
+    log_developer("Creating symlinks for package: %s@%s", pkg->name, pkg->version ? pkg->version : "latest");
+    builder_create_symlinks(builder_config, pkg->name, pkg->version);
+
+    // Record in database with package-specific path
+    log_debug("Recording package in database: %s@%s -> %s", pkg->name, pkg->version ? pkg->version : "latest", builder_config->install_dir);
+    database_add_package(db, pkg->name, pkg->version, builder_config->install_dir, (const char **)pkg->dependencies, pkg->dependencies_count);
+
+    free(source_dir);
+    return true;
+}
+
 static int cmd_install(int argc, char **argv) {
     bool force = false;
     const char *package_name = NULL;
@@ -914,6 +1077,8 @@ install_package:
         log_warning("No dependencies to install (dependency_count=0, build_order_count=%zu)", build_order_count);
     }
 
+    // Install each dependency serially, one at a time
+    // Each package gets its own complete installation cycle (fetch, build, install, check)
     size_t current_dep = 0;
     for (size_t i = 0; i < build_order_count; i++) {
         if (!build_order[i]) {
@@ -926,142 +1091,28 @@ install_package:
 
         current_dep++;
         if (dependency_count > 1) {
-            char dep_msg[256];
-            snprintf(dep_msg, sizeof(dep_msg), "Installing dependency %zu of %zu", current_dep, dependency_count);
-            printf("Building dependency: %s\n", build_order[i]);
+            printf("Installing dependency %zu of %zu: %s\n", current_dep, dependency_count, build_order[i]);
         } else {
             printf("Installing dependency: %s\n", build_order[i]);
         }
 
-        // Parse package@version from build_order if present
-        char *dep_name = NULL;
-        char *dep_version = NULL;
-        char *at_pos = strchr(build_order[i], '@');
-        if (at_pos) {
-            size_t name_len = at_pos - build_order[i];
-            dep_name = malloc(name_len + 1);
-            if (dep_name) {
-                strncpy(dep_name, build_order[i], name_len);
-                dep_name[name_len] = '\0';
-            }
-            dep_version = strdup(at_pos + 1);
-        } else {
-            dep_name = strdup(build_order[i]);
-        }
-
-        Package *dep_pkg = dep_version ? repository_get_package_version(repo, dep_name ? dep_name : build_order[i], dep_version) : repository_get_package(repo, dep_name ? dep_name : build_order[i]);
-
-        if (dep_name) free(dep_name);
-        if (dep_version) free(dep_version);
-        if (!dep_pkg) {
-            char warn_msg[256];
-            snprintf(warn_msg, sizeof(warn_msg), "Dependency package not found: %s", build_order[i]);
-            fprintf(stderr, "Error: %s\n", warn_msg);
-            log_error("Dependency package not found: %s", build_order[i]);
+        // Install this dependency as a complete, independent package
+        // This ensures each package has its own checks and installation cycle
+        if (!install_single_package(build_order[i], NULL, builder_config, fetcher, db, repo, force, output_callback, true)) {
+            fprintf(stderr, "Error: Failed to install dependency: %s\n", build_order[i]);
+            log_error("Failed to install dependency: %s", build_order[i]);
             has_failures = true;
             failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
             if (failed_deps) {
                 failed_deps[failed_deps_count++] = strdup(build_order[i]);
             }
-            // Abort on error - don't continue building
-            log_error("Aborting installation due to missing dependency");
-            goto cleanup;
-        }
-
-        // Fetch source
-        log_debug("Fetching source for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        char *dep_source_dir = fetcher_fetch(fetcher, dep_pkg, force);
-        if (!dep_source_dir) {
-            fprintf(stderr, "Error: Failed to fetch source for %s\n", build_order[i]);
-            log_error("Failed to fetch source for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-            has_failures = true;
-            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
-            if (failed_deps) {
-                failed_deps[failed_deps_count++] = strdup(build_order[i]);
-            }
-            // Abort on error - don't continue building
-            log_error("Aborting installation due to fetch failure");
-            goto cleanup;
-        }
-        log_developer("Source fetched for dependency: %s@%s -> %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", dep_source_dir);
-
-        // Set package-specific install directory
-        builder_config_set_package_dir(builder_config, dep_pkg->name, dep_pkg->version);
-
-        // Build
-        printf("==> Building %s", dep_pkg->name);
-        if (dep_pkg->version && dep_pkg->version[0]) {
-            printf(" %s", dep_pkg->version);
-        }
-        printf("\n");
-        char build_dir[1024];
-        if (dep_pkg->version && strcmp(dep_pkg->version, "latest") != 0) {
-            snprintf(build_dir, sizeof(build_dir), "%s/%s-%s", builder_config->build_dir, dep_pkg->name, dep_pkg->version);
-        } else {
-            snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, dep_pkg->name);
-        }
-
-        log_debug("Building dependency: %s@%s in %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", build_dir);
-        if (!builder_build_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, NULL)) {
-            fprintf(stderr, "Error: Failed to build dependency\n");
-            fprintf(stderr, "  %s\n", build_order[i]);
-            log_error("Failed to build dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-            has_failures = true;
-            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
-            if (failed_deps) {
-                failed_deps[failed_deps_count++] = strdup(build_order[i]);
-            }
-            free(dep_source_dir);
-            // Abort on error - don't continue building
-            log_error("Aborting installation due to build failure");
-            goto cleanup;
-        }
-        log_info("Successfully built dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-
-        // Install
-        printf("==> Installing %s", dep_pkg->name);
-        if (dep_pkg->version && dep_pkg->version[0]) {
-            printf(" %s", dep_pkg->version);
-        }
-        printf("\n");
-
-        log_debug("Installing dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        if (!builder_install_with_output(builder_config, dep_pkg, dep_source_dir, build_dir, output_callback, NULL)) {
-            fprintf(stderr, "Error: Failed to install dependency\n");
-            fprintf(stderr, "  %s\n", build_order[i]);
-            log_error("Failed to install dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-            has_failures = true;
-            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
-            if (failed_deps) {
-                failed_deps[failed_deps_count++] = strdup(build_order[i]);
-            }
-            free(dep_source_dir);
             // Abort on error - don't continue installing
-            log_error("Aborting installation due to install failure");
+            log_error("Aborting installation due to dependency installation failure");
             goto cleanup;
         }
-        log_info("Successfully installed dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-
-        // Show completion
-        char done_msg[256];
-        if (dep_pkg->version) {
-            snprintf(done_msg, sizeof(done_msg), "Installed %s %s", dep_pkg->name, dep_pkg->version);
-        } else {
-            snprintf(done_msg, sizeof(done_msg), "Installed %s", dep_pkg->name);
-        }
-        printf("%s\n", done_msg);
-
-        // Create symlinks to main install directory
-        log_developer("Creating symlinks for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-        builder_create_symlinks(builder_config, dep_pkg->name, dep_pkg->version);
-
-        // Record in database with package-specific path
-        log_debug("Recording dependency in database: %s@%s -> %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", builder_config->install_dir);
-        database_add_package(db, dep_pkg->name, dep_pkg->version, builder_config->install_dir, (const char **)dep_pkg->dependencies, dep_pkg->dependencies_count);
-        free(dep_source_dir);
     }
 
-    // Install main package
+    // Install main package independently (same as dependencies)
     if (dependency_count > 0) {
         printf("\n");  // Add spacing after dependencies
     }
@@ -1072,100 +1123,20 @@ install_package:
     printf("\n");
     printf("Installing: %s\n", package_name);
     log_info("Installing main package: %s@%s", package_name, package_version ? package_version : "latest");
-    Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
-    if (main_pkg) {
-        // Set package-specific install directory
-        builder_config_set_package_dir(builder_config, main_pkg->name, main_pkg->version);
 
-        log_debug("Fetching source for main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-        char *main_source_dir = fetcher_fetch(fetcher, main_pkg, force);
-        if (main_source_dir) {
-            log_developer("Source fetched for main package: %s@%s -> %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", main_source_dir);
-            char build_dir[1024];
-            snprintf(build_dir, sizeof(build_dir), "%s/%s", builder_config->build_dir, main_pkg->name);
-
-            printf("==> Building %s", main_pkg->name);
-            if (main_pkg->version && main_pkg->version[0]) {
-                printf(" %s", main_pkg->version);
-            }
-            printf("\n");
-
-            log_debug("Building main package: %s@%s in %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", build_dir);
-            if (builder_build_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, NULL)) {
-                log_info("Successfully built main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                printf("==> Installing %s", main_pkg->name);
-                if (main_pkg->version && main_pkg->version[0]) {
-                    printf(" %s", main_pkg->version);
-                }
-                printf("\n");
-
-                log_debug("Installing main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                if (builder_install_with_output(builder_config, main_pkg, main_source_dir, build_dir, output_callback, NULL)) {
-                    log_info("Successfully installed main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                    // Create symlinks to main install directory
-                    log_developer("Creating symlinks for main package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-                    builder_create_symlinks(builder_config, main_pkg->name, main_pkg->version);
-
-                    // Record in database with package-specific path
-                    log_debug("Recording main package in database: %s@%s -> %s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest", builder_config->install_dir);
-                    database_add_package(db, main_pkg->name, main_pkg->version, builder_config->install_dir, (const char **)main_pkg->dependencies, main_pkg->dependencies_count);
-
-                    // Show completion
-                    char done_msg[256];
-                    if (main_pkg->version) {
-                        snprintf(done_msg, sizeof(done_msg), "Installed %s %s", main_pkg->name, main_pkg->version);
-                    } else {
-                        snprintf(done_msg, sizeof(done_msg), "Installed %s", main_pkg->name);
-                    }
-                    printf("%s\n", done_msg);
-                    log_info("Successfully installed package: %s@%s", main_pkg->name, main_pkg->version ? main_pkg->version : "latest");
-
-                    // Show summary
-                    printf("Installed to: %s\n", builder_config->install_dir);
-
-                    // Show description (if any)
-                    if (main_pkg->description) {
-                        printf("Description: %s\n", main_pkg->description);
-                    }
-                } else {
-                    fprintf(stderr, "Error: Failed to install package\n");
-                    if (package_version) {
-                        fprintf(stderr, "  %s@%s\n", package_name, package_version);
-                        log_error("Failed to install package: %s@%s", package_name, package_version);
-                    } else {
-                        fprintf(stderr, "  %s\n", package_name);
-                        log_error("Failed to install package: %s", package_name);
-                    }
-                    has_failures = true;
-                }
-            } else {
-                fprintf(stderr, "Error: Failed to build package\n");
-                if (package_version) {
-                    fprintf(stderr, "  %s@%s\n", package_name, package_version);
-                    log_error("Failed to build package: %s@%s", package_name, package_version);
-                } else {
-                    fprintf(stderr, "  %s\n", package_name);
-                    log_error("Failed to build package: %s", package_name);
-                }
-                has_failures = true;
-            }
-            free(main_source_dir);
-        } else {
-            fprintf(stderr, "Error: Failed to fetch source\n");
-            if (package_version) {
-                fprintf(stderr, "  %s@%s\n", package_name, package_version);
-                log_error("Failed to fetch source for package: %s@%s", package_name, package_version);
-            } else {
-                fprintf(stderr, "  %s\n", package_name);
-                log_error("Failed to fetch source for package: %s", package_name);
-            }
+    // Install main package using the same independent installation function
+    if (!install_single_package(package_name, package_version, builder_config, fetcher, db, repo, force, output_callback, false)) {
+        fprintf(stderr, "Error: Failed to install package: %s\n", package_name);
+        log_error("Failed to install main package: %s@%s", package_name, package_version ? package_version : "latest");
             has_failures = true;
+            goto cleanup;
         }
-    } else {
-        fprintf(stderr, "Error: Package not found\n");
-        fprintf(stderr, "  %s\n", package_name);
-        has_failures = true;
-    }
+
+    // Main package installation completed successfully
+    log_info("Successfully installed main package: %s@%s", package_name, package_version ? package_version : "latest");
+
+success:
+    // Installation completed successfully
 
 cleanup:
     // Clean up failed dependencies list
