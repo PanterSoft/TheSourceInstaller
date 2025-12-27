@@ -266,9 +266,31 @@ main() {
         # Check if already installed
         if check_tsi_installed; then
             log_warn "TSI is already installed at: $PREFIX/bin/tsi"
-            log_warn "Use --repair to update or repair the installation"
-            log_warn "Continuing with fresh installation..."
             log_info ""
+
+            # Ask user if they want to proceed (only in interactive mode)
+            if [ -t 0 ] && [ -t 1 ]; then
+                log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
+                log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
+                read -r user_response
+                if [ "$user_response" != "yes" ]; then
+                    log_info "Installation cancelled."
+                    log_info ""
+                    log_info "To update your existing installation, use:"
+                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
+                    exit 0
+                fi
+                log_info ""
+            else
+                # Non-interactive mode (piped) - can't ask for confirmation, so exit
+                log_error "TSI is already installed. Cannot proceed in non-interactive mode."
+                log_error ""
+                log_error "To update your existing installation, use:"
+                log_error "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
+                log_error ""
+                log_error "Or run the installer interactively to confirm fresh installation."
+                exit 1
+            fi
         fi
     fi
 
@@ -666,14 +688,43 @@ main() {
     fi
 
     # Initialize package repository (only for fresh installs, not repair mode)
-    # Skip automatic update to avoid hanging - user can run 'tsi update' manually
+    # Copy basic set of packages so TSI works immediately without git
     if [ "$REPAIR_MODE" != true ]; then
         log_info ""
-        log_info "Creating package repository directory..."
+        log_info "Setting up package repository..."
         mkdir -p "$PREFIX/repos"
-        log_info "✓ Package repository directory created"
+
+        # Find packages directory (could be in tsi/ or parent)
+        PACKAGES_DIR=""
+        if [ -d "../packages" ]; then
+            PACKAGES_DIR="../packages"
+        elif [ -d "packages" ]; then
+            PACKAGES_DIR="packages"
+        elif [ -d "../../packages" ]; then
+            PACKAGES_DIR="../../packages"
+        fi
+
+        if [ -n "$PACKAGES_DIR" ] && [ -d "$PACKAGES_DIR" ]; then
+            # Copy all package JSON files to repository
+            PACKAGE_COUNT=0
+            for pkg_file in "$PACKAGES_DIR"/*.json; do
+                if [ -f "$pkg_file" ]; then
+                    pkg_name=$(basename "$pkg_file")
+                    cp "$pkg_file" "$PREFIX/repos/$pkg_name" 2>/dev/null || true
+                    PACKAGE_COUNT=$((PACKAGE_COUNT + 1))
+                fi
+            done
+            if [ "$PACKAGE_COUNT" -gt 0 ]; then
+                log_info "✓ Installed $PACKAGE_COUNT package definitions"
+                log_info "  Package repository is ready to use!"
+            else
+                log_warn "  No package definitions found in $PACKAGES_DIR"
+            fi
+        else
+            log_warn "  Packages directory not found, repository will be empty"
+            log_warn "  Run 'tsi update' after installation to download package definitions"
+        fi
         log_info ""
-        log_info "Note: Run 'tsi update' after installation to download package definitions"
     fi
 
     log_info ""
