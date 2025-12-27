@@ -37,6 +37,10 @@ bool config_is_strict_isolation(void);
 // Get config file path
 void config_get_path(char *path, size_t size, const char *tsi_prefix);
 
+// Apply logging settings from config file
+// This should be called after config_load to ensure logging settings are applied
+void config_apply_logging_settings(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
+#include <dirent.h>
 
 // Helper function to get C compiler directory
 // Returns the directory containing the C compiler (gcc, clang, or cc)
@@ -358,33 +359,33 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
             } else {
                 // No /bin available - use only TSI (may fail if shell scripts are needed)
                 log_warning("No /bin available and TSI bash not found - using only TSI PATH");
-                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-            }
+    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        }
+    } else {
+        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+        char compiler_dir[512] = "";
+        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+        struct stat st;
+        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+        if (strlen(compiler_dir) > 0 && has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else if (strlen(compiler_dir) > 0) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+        } else if (has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         } else {
-            // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
-            // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
-            char compiler_dir[512] = "";
-            get_compiler_dir(compiler_dir, sizeof(compiler_dir));
-
-            // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
-            struct stat st;
-            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
-
-            if (strlen(compiler_dir) > 0 && has_bin) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                         main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-            } else if (strlen(compiler_dir) > 0) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                         main_install_dir, compiler_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-            } else if (has_bin) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-            } else {
-                // Fallback: use TSI PATH only (shouldn't happen if system has a compiler and /bin)
-                log_warning("C compiler and /bin not found, using only TSI PATH");
-                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            // Fallback: use TSI PATH only (shouldn't happen if system has a compiler and /bin)
+            log_warning("C compiler and /bin not found, using only TSI PATH");
+            snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
             }
         }
     }
@@ -427,13 +428,134 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         char configure[512];
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);
         struct stat st;
+        log_developer("Checking for configure script at: %s", configure);
         if (stat(configure, &st) != 0) {
-            log_debug("Configure script not found, running autoreconf");
-            snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv", source_dir);
+            log_info("Configure script not found at: %s", configure);
+
+            // First, verify the source directory has content (extraction might have failed)
+            DIR *dir_check = opendir(source_dir);
+            size_t file_count = 0;
+            if (dir_check) {
+                struct dirent *entry;
+                while ((entry = readdir(dir_check)) != NULL) {
+                    if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                        file_count++;
+                    }
+                }
+                closedir(dir_check);
+            }
+
+            if (file_count == 0) {
+                log_error("Source directory is empty: %s", source_dir);
+                log_error("Archive extraction appears to have failed completely");
+                log_error("Please check the download and extraction logs above for errors");
+                return false;
+            } else {
+                log_info("Source directory contains %zu files, but configure script is missing", file_count);
+            }
+
+            // Configure script not found - try bootstrap scripts first
+            log_info("Configure script not found, checking for bootstrap scripts");
+
+            // Check for bootstrap scripts (used by coreutils and some other packages)
+            // Try common bootstrap script names in order of preference
+            const char *bootstrap_scripts[] = {"bootstrap", "bootstrap.sh", "autogen.sh", "autogen"};
+            bool bootstrap_ran = false;
+
+            for (size_t i = 0; i < sizeof(bootstrap_scripts) / sizeof(bootstrap_scripts[0]); i++) {
+                char bootstrap[512];
+                snprintf(bootstrap, sizeof(bootstrap), "%s/%s", source_dir, bootstrap_scripts[i]);
+                if (stat(bootstrap, &st) == 0) {
+                    log_info("Found %s script, running it to generate configure", bootstrap_scripts[i]);
+                    snprintf(cmd, sizeof(cmd), "cd '%s' && sh %s 2>&1", source_dir, bootstrap_scripts[i]);
+                    int bootstrap_result = system(cmd);
+                    bootstrap_ran = true;
+                    if (bootstrap_result != 0) {
+                        log_warning("%s script failed (exit code: %d), trying next bootstrap method", bootstrap_scripts[i], WEXITSTATUS(bootstrap_result));
+                    } else {
+                        log_info("%s script completed successfully", bootstrap_scripts[i]);
+                        // Re-check if configure was generated
+                        if (stat(configure, &st) == 0) {
+                            log_info("Configure script generated successfully by %s", bootstrap_scripts[i]);
+                            break; // Success, stop trying other bootstrap scripts
+                        } else {
+                            log_warning("%s script ran but configure script was not generated", bootstrap_scripts[i]);
+                        }
+                    }
+                }
+            }
+
+            // Check if configure was generated by bootstrap, if not try autoreconf
+            if (stat(configure, &st) != 0) {
+                if (bootstrap_ran) {
+                    log_warning("Bootstrap scripts ran but configure script was not generated");
+                }
+
+                // Before trying autoreconf, check if source files exist (might be extraction issue)
+                char configure_ac[512], configure_in[512];
+                snprintf(configure_ac, sizeof(configure_ac), "%s/configure.ac", source_dir);
+                snprintf(configure_in, sizeof(configure_in), "%s/configure.in", source_dir);
+                bool has_configure_ac = (stat(configure_ac, &st) == 0);
+                bool has_configure_in = (stat(configure_in, &st) == 0);
+
+                if (!has_configure_ac && !has_configure_in) {
+                    // Check if source directory is empty or has very few files (extraction might have failed)
+                    if (file_count == 0) {
+                        log_error("Source directory is empty: %s", source_dir);
+                        log_error("Archive extraction appears to have failed completely");
+                        log_error("Please check the download and extraction logs above for errors");
+                        return false;
+                    } else if (file_count < 5) {
+                        log_error("Source directory has very few files (%zu) - extraction may have failed", file_count);
+                        log_error("Source directory: %s", source_dir);
+                        log_error("Expected files like configure, Makefile.in, README, etc. are missing");
+                    }
+
+                    log_error("No configure script found and no configure.ac or configure.in found in source directory");
+                    log_error("This strongly suggests that archive extraction failed or was incomplete");
+                    log_error("Source directory: %s", source_dir);
+                    log_error("Please verify:");
+                    log_error("  1. The archive was downloaded completely");
+                    log_error("  2. The archive extraction succeeded (check for errors above)");
+                    log_error("  3. The source directory contains the expected files");
+                    log_error("  4. For coreutils, the tarball should include a pre-generated configure script");
+                    return false;
+                }
+
+                log_info("Configure script not found, but configure.ac or configure.in exists - trying autoreconf");
+                // Try to generate configure
+                snprintf(cmd, sizeof(cmd), "cd '%s' && autoreconf -fiv 2>&1", source_dir);
             int autoreconf_result = system(cmd);
             if (autoreconf_result != 0) {
-                log_warning("autoreconf failed (exit code: %d), continuing anyway", WEXITSTATUS(autoreconf_result));
+                    log_error("autoreconf failed (exit code: %d) - autotools may not be installed", WEXITSTATUS(autoreconf_result));
+                    log_error("Package %s requires autotools (autoconf, automake) to generate configure script", pkg->name);
+                    log_error("Either install autotools first, or ensure the package tarball includes a pre-generated configure script");
+                    return false;
+                } else {
+                    // Re-check if configure was generated
+                    if (stat(configure, &st) != 0) {
+                        log_error("autoreconf completed but configure script was not generated");
+                        log_error("This may indicate that autotools are incomplete or the source is corrupted");
+                        return false;
+                    }
+                    log_info("Configure script generated successfully by autoreconf");
+                }
             }
+        } else {
+            log_debug("Configure script found, skipping bootstrap");
+        }
+
+        // Final check: ensure configure script exists and is executable
+        if (stat(configure, &st) != 0) {
+            log_error("Configure script not found after all bootstrap attempts: %s", configure);
+            log_error("Package %s cannot be built without a configure script", pkg->name);
+            log_error("The package tarball should include a pre-generated configure script, or autotools must be installed");
+            return false;
+        }
+        if (!(st.st_mode & S_IXUSR)) {
+            log_info("Configure script exists but is not executable, making it executable");
+            snprintf(cmd, sizeof(cmd), "chmod +x '%s'", configure);
+            system(cmd); // Ignore errors
         }
 
         // Configure
@@ -752,31 +874,31 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
                 log_warning("No /bin available and TSI bash not found - using only TSI PATH");
                 snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
                          main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-            }
+        }
+    } else {
+        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+        char compiler_dir[512] = "";
+        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+        struct stat st;
+        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+        if (strlen(compiler_dir) > 0 && has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+        } else if (strlen(compiler_dir) > 0) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+        } else if (has_bin) {
+            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir);
         } else {
-            // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
-            // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
-            char compiler_dir[512] = "";
-            get_compiler_dir(compiler_dir, sizeof(compiler_dir));
-
-            // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
-            struct stat st;
-            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
-
-            if (strlen(compiler_dir) > 0 && has_bin) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                         main_install_dir, compiler_dir, main_install_dir, main_install_dir);
-            } else if (strlen(compiler_dir) > 0) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                         main_install_dir, compiler_dir, main_install_dir, main_install_dir);
-            } else if (has_bin) {
-                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                         main_install_dir, main_install_dir, main_install_dir);
-            } else {
-                // Fallback: use TSI PATH only
-                log_warning("C compiler and /bin not found, using only TSI PATH for install");
-                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                         main_install_dir, main_install_dir, main_install_dir);
+            // Fallback: use TSI PATH only
+            log_warning("C compiler and /bin not found, using only TSI PATH for install");
+            snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                     main_install_dir, main_install_dir, main_install_dir);
             }
         }
     }
