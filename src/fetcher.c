@@ -7,6 +7,233 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
+// Helper function to get TSI installation prefix
+// Similar to get_tsi_prefix() in main.c but accessible from fetcher
+static const char *get_tsi_prefix_for_fetcher(void) {
+    static char prefix[1024] = {0};
+    static bool initialized = false;
+
+    if (initialized) {
+        return prefix[0] ? prefix : NULL;
+    }
+    initialized = true;
+
+    // Try to get from environment variable first
+    const char *env_prefix = getenv("TSI_PREFIX");
+    if (env_prefix && env_prefix[0]) {
+        strncpy(prefix, env_prefix, sizeof(prefix) - 1);
+        prefix[sizeof(prefix) - 1] = '\0';
+        return prefix;
+    }
+
+    // Try to detect from binary location
+    char exe_path[1024] = {0};
+    ssize_t len = 0;
+
+#ifdef __APPLE__
+    uint32_t size = sizeof(exe_path);
+    if (_NSGetExecutablePath(exe_path, &size) == 0) {
+        len = strlen(exe_path);
+    }
+#else
+    len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+#endif
+
+    if (len > 0 && len < (ssize_t)sizeof(exe_path)) {
+        exe_path[len] = '\0';
+        char *bin_pos = strstr(exe_path, "/bin/tsi");
+        if (bin_pos) {
+            size_t prefix_len = bin_pos - exe_path;
+            if (prefix_len > 0 && prefix_len < sizeof(prefix)) {
+                strncpy(prefix, exe_path, prefix_len);
+                prefix[prefix_len] = '\0';
+                return prefix;
+            }
+        }
+    }
+
+    // Fallback to common locations
+    const char *home = getenv("HOME");
+    struct stat st;
+    if (home) {
+        snprintf(prefix, sizeof(prefix), "%s/.tsi", home);
+        if (stat(prefix, &st) == 0) {
+            return prefix;
+        }
+    }
+
+    // Try /opt/tsi
+    if (stat("/opt/tsi", &st) == 0) {
+        strncpy(prefix, "/opt/tsi", sizeof(prefix) - 1);
+        return prefix;
+    }
+
+    return NULL;
+}
+
+// Helper function to find a tool, preferring TSI-installed version
+static char *find_tool(const char *tool_name) {
+    static char tool_path[1024];
+
+    // First, try TSI-installed version
+    const char *tsi_prefix = get_tsi_prefix_for_fetcher();
+    if (tsi_prefix) {
+        snprintf(tool_path, sizeof(tool_path), "%s/bin/%s", tsi_prefix, tool_name);
+        struct stat st;
+        if (stat(tool_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
+            log_debug("Using TSI-installed %s: %s", tool_name, tool_path);
+            return tool_path;
+        }
+    }
+
+    // Fall back to system tool (will be found via PATH)
+    return (char *)tool_name;
+}
+
+// Check if a tool is available (either TSI-installed or in system PATH)
+static bool tool_available(const char *tool_name) {
+    // First check TSI-installed version
+    const char *tsi_prefix = get_tsi_prefix_for_fetcher();
+    if (tsi_prefix) {
+        char tool_path[1024];
+        snprintf(tool_path, sizeof(tool_path), "%s/bin/%s", tsi_prefix, tool_name);
+        struct stat st;
+        if (stat(tool_path, &st) == 0 && (st.st_mode & S_IXUSR)) {
+            return true;
+        }
+    }
+
+    // Check system PATH using command -v
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "command -v %s >/dev/null 2>&1", tool_name);
+    return system(cmd) == 0;
+}
+
+// Download tool preference enum
+typedef enum {
+    DOWNLOAD_TOOL_NONE = 0,
+    DOWNLOAD_TOOL_WGET,
+    DOWNLOAD_TOOL_CURL
+} DownloadTool;
+
+// Detect which download tool is available, preferring TSI-installed versions
+static DownloadTool detect_download_tool(void) {
+    // Prefer wget if available (better progress bar support)
+    if (tool_available("wget")) {
+        log_debug("Detected wget as download tool");
+        return DOWNLOAD_TOOL_WGET;
+    }
+
+    // Fall back to curl
+    if (tool_available("curl")) {
+        log_debug("Detected curl as download tool");
+        return DOWNLOAD_TOOL_CURL;
+    }
+
+    log_debug("No download tool available (wget or curl)");
+    return DOWNLOAD_TOOL_NONE;
+}
+
+// Archive format types
+typedef enum {
+    ARCHIVE_FORMAT_UNKNOWN = 0,
+    ARCHIVE_FORMAT_XZ,      // .tar.xz
+    ARCHIVE_FORMAT_GZIP,    // .tar.gz, .tgz
+    ARCHIVE_FORMAT_BZIP2,   // .tar.bz2, .tbz2
+    ARCHIVE_FORMAT_TAR      // .tar (uncompressed)
+} ArchiveFormat;
+
+// Detect archive format by file extension and magic bytes
+static ArchiveFormat detect_archive_format(const char *archive) {
+    if (!archive) return ARCHIVE_FORMAT_UNKNOWN;
+
+    // First, try to detect by file extension (fastest method)
+    const char *ext = strrchr(archive, '.');
+    if (ext) {
+        // Check for .tar.xz, .tar.gz, .tar.bz2 first (multi-extension)
+        if (strstr(archive, ".tar.xz") || strstr(archive, ".txz")) {
+            return ARCHIVE_FORMAT_XZ;
+        }
+        if (strstr(archive, ".tar.gz") || strcmp(ext, ".tgz") == 0) {
+            return ARCHIVE_FORMAT_GZIP;
+        }
+        if (strstr(archive, ".tar.bz2") || strcmp(ext, ".tbz2") == 0 || strcmp(ext, ".tbz") == 0) {
+            return ARCHIVE_FORMAT_BZIP2;
+        }
+        if (strcmp(ext, ".tar") == 0) {
+            return ARCHIVE_FORMAT_TAR;
+        }
+        // Check single extensions
+        if (strcmp(ext, ".xz") == 0) {
+            return ARCHIVE_FORMAT_XZ;
+        }
+        if (strcmp(ext, ".gz") == 0) {
+            return ARCHIVE_FORMAT_GZIP;
+        }
+        if (strcmp(ext, ".bz2") == 0 || strcmp(ext, ".bz") == 0) {
+            return ARCHIVE_FORMAT_BZIP2;
+        }
+    }
+
+    // If extension detection failed, check magic bytes (file signatures)
+    FILE *fp = fopen(archive, "rb");
+    if (!fp) {
+        log_debug("Cannot open archive for magic byte detection: %s", archive);
+        return ARCHIVE_FORMAT_UNKNOWN;
+    }
+
+    unsigned char magic[6];
+    size_t read = fread(magic, 1, sizeof(magic), fp);
+    fclose(fp);
+
+    if (read < 2) {
+        return ARCHIVE_FORMAT_UNKNOWN;
+    }
+
+    // Check magic bytes
+    // xz: 0xfd 0x37 0x7a 0x58 0x5a 0x00
+    if (read >= 6 && magic[0] == 0xfd && magic[1] == 0x37 &&
+        magic[2] == 0x7a && magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00) {
+        log_debug("Detected xz format by magic bytes");
+        return ARCHIVE_FORMAT_XZ;
+    }
+
+    // gzip: 0x1f 0x8b
+    if (magic[0] == 0x1f && magic[1] == 0x8b) {
+        log_debug("Detected gzip format by magic bytes");
+        return ARCHIVE_FORMAT_GZIP;
+    }
+
+    // bzip2: "BZ" (0x42 0x5a)
+    if (read >= 2 && magic[0] == 0x42 && magic[1] == 0x5a) {
+        log_debug("Detected bzip2 format by magic bytes");
+        return ARCHIVE_FORMAT_BZIP2;
+    }
+
+    // tar: Check for "ustar" at offset 257 (standard tar header)
+    // For simplicity, if it's not compressed and has a .tar extension or no known compression magic, assume tar
+    if (read >= 2) {
+        // Try to read at offset 257 for ustar magic
+        fp = fopen(archive, "rb");
+        if (fp) {
+            fseek(fp, 257, SEEK_SET);
+            char ustar[6] = {0};
+            if (fread(ustar, 1, 5, fp) == 5 && strncmp(ustar, "ustar", 5) == 0) {
+                fclose(fp);
+                log_debug("Detected tar format by ustar magic");
+                return ARCHIVE_FORMAT_TAR;
+            }
+            fclose(fp);
+        }
+    }
+
+    log_debug("Could not detect archive format for: %s", archive);
+    return ARCHIVE_FORMAT_UNKNOWN;
+}
 
 SourceFetcher* fetcher_new(const char *source_dir) {
     log_developer("fetcher_new called with source_dir='%s'", source_dir);
@@ -41,31 +268,78 @@ void fetcher_free(SourceFetcher *fetcher) {
 
 bool fetcher_download_file(const char *url, const char *dest) {
     log_debug("Downloading file: %s -> %s", url, dest);
+
+    // Detect which download tool is available
+    DownloadTool tool = detect_download_tool();
+    if (tool == DOWNLOAD_TOOL_NONE) {
+        log_error("No download tool available (wget or curl required)");
+        return false;
+    }
+
+    // Check if stdout is a TTY to determine if we should show progress
+    bool show_progress = isatty(STDOUT_FILENO);
+
     char cmd[1024];
+    char *tool_path;
+    const char *tool_name;
 
-    // Try wget first
-    snprintf(cmd, sizeof(cmd), "wget -q -O '%s' '%s' 2>/dev/null", dest, url);
-    if (system(cmd) == 0) {
-        struct stat st;
-        if (stat(dest, &st) == 0 && st.st_size > 0) {
-            log_info("File downloaded successfully using wget: %s (%ld bytes)", dest, (long)st.st_size);
-            return true;
+    // Select tool and build command
+    if (tool == DOWNLOAD_TOOL_WGET) {
+        tool_path = find_tool("wget");
+        tool_name = "wget";
+        if (show_progress) {
+            // wget with progress bar
+            snprintf(cmd, sizeof(cmd), "%s --progress=bar:force -O '%s' '%s' 2>&1", tool_path, dest, url);
+        } else {
+            // wget quiet mode
+            snprintf(cmd, sizeof(cmd), "%s -q -O '%s' '%s' 2>/dev/null", tool_path, dest, url);
+        }
+    } else { // DOWNLOAD_TOOL_CURL
+        tool_path = find_tool("curl");
+        tool_name = "curl";
+        if (show_progress) {
+            // curl with progress bar (# shows progress)
+            snprintf(cmd, sizeof(cmd), "%s -# -fSL -o '%s' '%s' 2>&1", tool_path, dest, url);
+        } else {
+            // curl quiet mode
+            snprintf(cmd, sizeof(cmd), "%s -fsSL -o '%s' '%s' 2>/dev/null", tool_path, dest, url);
         }
     }
 
-    // Try curl
-    log_developer("wget failed, trying curl");
-    snprintf(cmd, sizeof(cmd), "curl -fsSL -o '%s' '%s' 2>/dev/null", dest, url);
-    if (system(cmd) == 0) {
+    log_debug("Using %s to download: %s", tool_name, url);
+
+    // Execute download
+    int result = system(cmd);
+    if (result == 0) {
         struct stat st;
         if (stat(dest, &st) == 0 && st.st_size > 0) {
-            log_info("File downloaded successfully using curl: %s (%ld bytes)", dest, (long)st.st_size);
+            log_info("File downloaded successfully using %s: %s (%ld bytes)", tool_name, dest, (long)st.st_size);
             return true;
+        } else {
+            log_error("Download completed but file is empty or missing: %s", dest);
+            return false;
+        }
+    } else {
+        log_error("Download failed using %s (exit code: %d)", tool_name, result);
+        return false;
+    }
+}
+
+// Helper function to verify extraction succeeded
+static bool verify_extraction(const char *dest) {
+    DIR *dir = opendir(dest);
+    if (!dir) return false;
+
+    int file_count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            file_count++;
+            break; // At least one file exists
         }
     }
-
-    log_error("Failed to download file: %s -> %s", url, dest);
-    return false;
+    closedir(dir);
+    return file_count > 0;
 }
 
 bool fetcher_extract_tarball(const char *archive, const char *dest) {
@@ -81,104 +355,159 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
     }
     log_debug("Archive file exists: %s (%ld bytes)", archive, (long)st.st_size);
 
+    // Detect archive format
+    ArchiveFormat format = detect_archive_format(archive);
+
     char cmd[1024];
     int result;
-
-    // Try tar with different compression formats
-    // Note: We capture stderr to a temp file so we can show it if all attempts fail
     char error_file[512];
     snprintf(error_file, sizeof(error_file), "%s/tar_error.log", dest);
+    const char *format_name = "unknown";
 
-    // Try xz compression first (common for .tar.xz files)
-    snprintf(cmd, sizeof(cmd), "tar -xJf '%s' -C '%s' 2>'%s'", archive, dest, error_file);
-    result = system(cmd);
-    if (result == 0) {
-        // Verify extraction succeeded by checking if files were extracted
-        DIR *dir = opendir(dest);
-        if (dir) {
-            int file_count = 0;
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    file_count++;
-                    break; // At least one file exists
+    // Find TSI-installed tools, preferring them over system tools
+    char *tar_path = find_tool("tar");
+    char *gzip_path = find_tool("gzip");
+    char *xz_path = find_tool("xz");
+
+    // Extract using the detected format
+    switch (format) {
+        case ARCHIVE_FORMAT_XZ:
+            format_name = "xz";
+            log_info("Detected xz compression format, extracting with tar -xJf");
+            // For xz, we need to use tar with -J flag, or decompress with xz first then tar
+            // Try tar -xJf first (GNU tar supports this)
+            snprintf(cmd, sizeof(cmd), "%s -xJf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+            result = system(cmd);
+            if (result != 0) {
+                // Fallback: decompress with xz first, then extract with tar
+                log_debug("tar -xJf failed, trying xz decompression + tar extraction");
+                char temp_tar[1024];
+                snprintf(temp_tar, sizeof(temp_tar), "%s/temp.tar", dest);
+                char xz_cmd[1024];
+                snprintf(xz_cmd, sizeof(xz_cmd), "%s -dc '%s' > '%s' 2>'%s'", xz_path, archive, temp_tar, error_file);
+                if (system(xz_cmd) == 0) {
+                    snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>>'%s'", tar_path, temp_tar, dest, error_file);
+                    result = system(cmd);
+                    unlink(temp_tar); // Clean up temp file
                 }
             }
-            closedir(dir);
-            if (file_count > 0) {
-                log_debug("Extraction successful (xz format)");
-                unlink(error_file); // Remove error log on success
-                return true;
+            break;
+
+        case ARCHIVE_FORMAT_GZIP:
+            format_name = "gzip";
+            log_info("Detected gzip compression format, extracting with tar -xzf");
+            // Try tar -xzf first
+            snprintf(cmd, sizeof(cmd), "%s -xzf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+            result = system(cmd);
+            if (result != 0) {
+                // Fallback: decompress with gzip first, then extract with tar
+                log_debug("tar -xzf failed, trying gzip decompression + tar extraction");
+                char temp_tar[1024];
+                snprintf(temp_tar, sizeof(temp_tar), "%s/temp.tar", dest);
+                char gzip_cmd[1024];
+                snprintf(gzip_cmd, sizeof(gzip_cmd), "%s -dc '%s' > '%s' 2>'%s'", gzip_path, archive, temp_tar, error_file);
+                if (system(gzip_cmd) == 0) {
+                    snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>>'%s'", tar_path, temp_tar, dest, error_file);
+                    result = system(cmd);
+                    unlink(temp_tar); // Clean up temp file
+                }
             }
+            break;
+
+        case ARCHIVE_FORMAT_BZIP2:
+            format_name = "bzip2";
+            log_info("Detected bzip2 compression format, extracting with tar -xjf");
+            snprintf(cmd, sizeof(cmd), "%s -xjf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+            result = system(cmd);
+            break;
+
+        case ARCHIVE_FORMAT_TAR:
+            format_name = "tar (uncompressed)";
+            log_info("Detected uncompressed tar format, extracting with tar -xf");
+            snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+            result = system(cmd);
+            break;
+
+        case ARCHIVE_FORMAT_UNKNOWN:
+        default:
+            log_warning("Could not detect archive format, trying all formats in order");
+            format_name = "unknown";
+            // Fall through to try-all logic below
+            result = -1;
+            break;
+    }
+
+    // If format was detected and extraction succeeded, verify it
+    if (format != ARCHIVE_FORMAT_UNKNOWN && result == 0) {
+        if (verify_extraction(dest)) {
+            log_info("Extraction successful (%s format)", format_name);
+            unlink(error_file);
+            return true;
+        } else {
+            log_warning("Extraction command succeeded but no files were extracted, trying other formats");
         }
     }
 
-    // Try gzip compression
-    snprintf(cmd, sizeof(cmd), "tar -xzf '%s' -C '%s' 2>'%s'", archive, dest, error_file);
-    result = system(cmd);
-    if (result == 0) {
-        DIR *dir = opendir(dest);
-        if (dir) {
-            int file_count = 0;
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    file_count++;
-                    break;
-                }
-            }
-            closedir(dir);
-            if (file_count > 0) {
-                log_debug("Extraction successful (gzip format)");
-                unlink(error_file);
-                return true;
+    // If detection failed or extraction failed, try all formats as fallback
+    if (format == ARCHIVE_FORMAT_UNKNOWN || result != 0) {
+        log_debug("Trying xz format as fallback");
+        snprintf(cmd, sizeof(cmd), "%s -xJf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+        result = system(cmd);
+        if (result != 0) {
+            // Try xz decompression + tar
+            char temp_tar[1024];
+            snprintf(temp_tar, sizeof(temp_tar), "%s/temp.tar", dest);
+            char xz_cmd[1024];
+            snprintf(xz_cmd, sizeof(xz_cmd), "%s -dc '%s' > '%s' 2>'%s'", xz_path, archive, temp_tar, error_file);
+            if (system(xz_cmd) == 0) {
+                snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>>'%s'", tar_path, temp_tar, dest, error_file);
+                result = system(cmd);
+                unlink(temp_tar);
             }
         }
-    }
+        if (result == 0 && verify_extraction(dest)) {
+            log_info("Extraction successful (xz format, fallback)");
+            unlink(error_file);
+            return true;
+        }
 
-    // Try bzip2 compression
-    snprintf(cmd, sizeof(cmd), "tar -xjf '%s' -C '%s' 2>'%s'", archive, dest, error_file);
-    result = system(cmd);
-    if (result == 0) {
-        DIR *dir = opendir(dest);
-        if (dir) {
-            int file_count = 0;
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    file_count++;
-                    break;
-                }
-            }
-            closedir(dir);
-            if (file_count > 0) {
-                log_debug("Extraction successful (bzip2 format)");
-                unlink(error_file);
-                return true;
+        log_debug("Trying gzip format as fallback");
+        snprintf(cmd, sizeof(cmd), "%s -xzf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+        result = system(cmd);
+        if (result != 0) {
+            // Try gzip decompression + tar
+            char temp_tar[1024];
+            snprintf(temp_tar, sizeof(temp_tar), "%s/temp.tar", dest);
+            char gzip_cmd[1024];
+            snprintf(gzip_cmd, sizeof(gzip_cmd), "%s -dc '%s' > '%s' 2>'%s'", gzip_path, archive, temp_tar, error_file);
+            if (system(gzip_cmd) == 0) {
+                snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>>'%s'", tar_path, temp_tar, dest, error_file);
+                result = system(cmd);
+                unlink(temp_tar);
             }
         }
-    }
+        if (result == 0 && verify_extraction(dest)) {
+            log_info("Extraction successful (gzip format, fallback)");
+            unlink(error_file);
+            return true;
+        }
 
-    // Try uncompressed
-    snprintf(cmd, sizeof(cmd), "tar -xf '%s' -C '%s' 2>'%s'", archive, dest, error_file);
-    result = system(cmd);
-    if (result == 0) {
-        DIR *dir = opendir(dest);
-        if (dir) {
-            int file_count = 0;
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    file_count++;
-                    break;
-                }
-            }
-            closedir(dir);
-            if (file_count > 0) {
-                log_debug("Extraction successful (uncompressed format)");
-                unlink(error_file);
-                return true;
-            }
+        log_debug("Trying bzip2 format as fallback");
+        snprintf(cmd, sizeof(cmd), "%s -xjf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+        result = system(cmd);
+        if (result == 0 && verify_extraction(dest)) {
+            log_info("Extraction successful (bzip2 format, fallback)");
+            unlink(error_file);
+            return true;
+        }
+
+        log_debug("Trying uncompressed tar format as fallback");
+        snprintf(cmd, sizeof(cmd), "%s -xf '%s' -C '%s' 2>'%s'", tar_path, archive, dest, error_file);
+        result = system(cmd);
+        if (result == 0 && verify_extraction(dest)) {
+            log_info("Extraction successful (uncompressed tar format, fallback)");
+            unlink(error_file);
+            return true;
         }
     }
 
@@ -202,7 +531,6 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
         unlink(error_file);
     }
 
-    // Verify the archive is actually a valid tar file
     log_error("Archive may be corrupted or in an unsupported format");
     log_error("Please verify the download completed successfully");
 
