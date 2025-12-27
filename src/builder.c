@@ -424,7 +424,26 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         if (needs_ls_wrapper) {
-            log_developer("PATH set with TSI bin first (contains ls wrapper): %s/bin", main_install_dir);
+            log_info("PATH set with TSI bin first (contains ls wrapper): %s/bin", main_install_dir);
+            // Verify wrapper is actually in PATH and will be found
+            char test_cmd[1024];
+            snprintf(test_cmd, sizeof(test_cmd), "PATH=%s/bin:/usr/bin:/bin command -v ls", main_install_dir);
+            FILE *test = popen(test_cmd, "r");
+            if (test) {
+                char test_result[256];
+                if (fgets(test_result, sizeof(test_result), test)) {
+                    // Remove newline
+                    size_t len = strlen(test_result);
+                    if (len > 0 && test_result[len-1] == '\n') {
+                        test_result[len-1] = '\0';
+                    }
+                    log_info("ls command will resolve to: %s", test_result);
+                    if (strstr(test_result, main_install_dir) == NULL) {
+                        log_warning("WARNING: ls wrapper may not be found! Expected path containing %s/bin, got: %s", main_install_dir, test_result);
+                    }
+                }
+                pclose(test);
+            }
         }
     } else if (tsi_bin_exists && has_usr_bin) {
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
@@ -652,21 +671,44 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
         // Standard configure command: ./configure --prefix='install_dir'
         // Environment variables and configure_args are appended
-        // Note: env includes PATH with TSI bin first (for ls wrapper on BusyBox)
-        snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        // CRITICAL: For BusyBox systems, we MUST ensure the ls wrapper is found
+        // We do this by explicitly setting PATH in the command itself, not just in env
         if (needs_ls_wrapper) {
-            // Verify wrapper exists and is in PATH before running configure
+            // Verify wrapper exists before running configure
             char verify_cmd[1024];
-            snprintf(verify_cmd, sizeof(verify_cmd), "test -x '%s/bin/ls' && echo 'ls wrapper exists' || echo 'ls wrapper missing'", main_install_dir);
+            snprintf(verify_cmd, sizeof(verify_cmd), "test -x '%s/bin/ls' && echo 'exists' || echo 'missing'", main_install_dir);
             FILE *verify = popen(verify_cmd, "r");
+            bool wrapper_verified = false;
             if (verify) {
                 char verify_result[256];
                 if (fgets(verify_result, sizeof(verify_result), verify)) {
-                    log_developer("ls wrapper verification: %s", verify_result);
+                    if (strstr(verify_result, "exists") != NULL) {
+                        wrapper_verified = true;
+                        log_info("ls wrapper verified: %s/bin/ls", main_install_dir);
+                    } else {
+                        log_warning("ls wrapper NOT found at: %s/bin/ls", main_install_dir);
+                    }
                 }
                 pclose(verify);
             }
-            log_developer("Running configure with PATH containing ls wrapper: %s/bin", main_install_dir);
+            if (!wrapper_verified) {
+                log_error("ls wrapper is missing! Cannot proceed with configure on BusyBox system");
+                free(cmd);
+                return false;
+            }
+            // Explicitly set PATH in the command to ensure wrapper is found
+            // Extract other env vars from env string (everything except PATH)
+            char *env_without_path = strstr(env, "PKG_CONFIG_PATH");
+            if (env_without_path) {
+                snprintf(cmd, cmd_len, "cd '%s' && PATH='%s/bin:/usr/bin:/bin' %s ./configure --prefix='%s'",
+                         source_dir, main_install_dir, env_without_path, config->install_dir);
+            } else {
+                snprintf(cmd, cmd_len, "cd '%s' && PATH='%s/bin:/usr/bin:/bin' ./configure --prefix='%s'",
+                         source_dir, main_install_dir, config->install_dir);
+            }
+            log_info("Running configure with explicit PATH containing ls wrapper: %s/bin", main_install_dir);
+        } else {
+            snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
         }
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->configure_args[i]) + 2;
