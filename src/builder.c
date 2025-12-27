@@ -171,6 +171,29 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     log_info("Building package: %s@%s (source_dir=%s, build_dir=%s)",
              pkg->name, pkg->version ? pkg->version : "latest", source_dir, build_dir);
 
+    // Verify source directory exists and list contents for debugging
+    struct stat source_st;
+    if (stat(source_dir, &source_st) != 0) {
+        log_error("Source directory does not exist: %s", source_dir);
+        return false;
+    }
+    log_developer("Source directory exists: %s", source_dir);
+
+    // List a few files in source directory for debugging
+    DIR *source_dir_handle = opendir(source_dir);
+    if (source_dir_handle) {
+        struct dirent *entry;
+        int file_count = 0;
+        log_developer("Source directory contents (first 10 files):");
+        while ((entry = readdir(source_dir_handle)) != NULL && file_count < 10) {
+            if (entry->d_name[0] != '.') {
+                log_developer("  - %s", entry->d_name);
+                file_count++;
+            }
+        }
+        closedir(source_dir_handle);
+    }
+
     // Create build directory
     log_developer("Creating build directory: %s", build_dir);
     char cmd[512];
@@ -229,22 +252,46 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 fprintf(fp, "if [ -x /usr/bin/ls ] && /usr/bin/ls -t / >/dev/null 2>&1; then\n");
                 fprintf(fp, "    exec /usr/bin/ls \"$@\"\n");
                 fprintf(fp, "elif command -v ls >/dev/null 2>&1; then\n");
-                fprintf(fp, "    # System ls - if it doesn't support -t, try to work around it\n");
-                fprintf(fp, "    case \"$*\" in\n");
-                fprintf(fp, "        *-t*)\n");
-                fprintf(fp, "            # -t flag: try system ls first, if it fails, use find + stat workaround\n");
-                fprintf(fp, "            ls \"$@\" 2>/dev/null || {\n");
-                fprintf(fp, "                # Workaround: use find to list files sorted by time\n");
-                fprintf(fp, "                for f in \"$@\"; do\n");
-                fprintf(fp, "                    [ \"$f\" = \"-t\" ] && continue\n");
-                fprintf(fp, "                    [ -e \"$f\" ] && echo \"$f\"\n");
-                fprintf(fp, "                done | xargs -I {} sh -c 'stat -c \"%%Y {}\" \"{}\" 2>/dev/null || stat -f \"%%m {}\" \"{}\" 2>/dev/null' | sort -rn | cut -d' ' -f2-\n");
-                fprintf(fp, "            }\n");
-                fprintf(fp, "            ;;\n");
-                fprintf(fp, "        *)\n");
-                fprintf(fp, "            exec ls \"$@\"\n");
-                fprintf(fp, "            ;;\n");
-                fprintf(fp, "    esac\n");
+                fprintf(fp, "    # Check if -t flag is present (standalone or combined)\n");
+                fprintf(fp, "    has_t=false\n");
+                fprintf(fp, "    for arg in \"$@\"; do\n");
+                fprintf(fp, "        case \"$arg\" in\n");
+                fprintf(fp, "            -t) has_t=true; break ;;\n");
+                fprintf(fp, "            -t*) has_t=true; break ;;\n");
+                fprintf(fp, "            *-t*) has_t=true; break ;;\n");
+                fprintf(fp, "        esac\n");
+                fprintf(fp, "    done\n");
+                fprintf(fp, "    if [ \"$has_t\" = \"true\" ]; then\n");
+                fprintf(fp, "        # Try system ls first\n");
+                fprintf(fp, "        if ls \"$@\" 2>/dev/null; then\n");
+                fprintf(fp, "            exit 0\n");
+                fprintf(fp, "        fi\n");
+                fprintf(fp, "        # Workaround for BusyBox ls that doesn't support -t\n");
+                fprintf(fp, "        # Parse arguments to find directory\n");
+                fprintf(fp, "        dir=\".\"\n");
+                fprintf(fp, "        skip_next=false\n");
+                fprintf(fp, "        for arg in \"$@\"; do\n");
+                fprintf(fp, "            if [ \"$skip_next\" = \"true\" ]; then\n");
+                fprintf(fp, "                dir=\"$arg\"\n");
+                fprintf(fp, "                break\n");
+                fprintf(fp, "            fi\n");
+                fprintf(fp, "            case \"$arg\" in\n");
+                fprintf(fp, "                -t) skip_next=true ;;\n");
+                fprintf(fp, "                -t*) dir=\".\" ;;\n");
+                fprintf(fp, "                -*) continue ;;\n");
+                fprintf(fp, "                *) dir=\"$arg\"; break ;;\n");
+                fprintf(fp, "            esac\n");
+                fprintf(fp, "        done\n");
+                fprintf(fp, "        # Use find + stat to implement ls -t\n");
+                fprintf(fp, "        find \"$dir\" -maxdepth 1 ! -name \".\" ! -name \"..\" 2>/dev/null | while read item; do\n");
+                fprintf(fp, "            if [ -f \"$item\" ] || [ -d \"$item\" ]; then\n");
+                fprintf(fp, "                mtime=$(stat -c \"%%Y\" \"$item\" 2>/dev/null || stat -f \"%%m\" \"$item\" 2>/dev/null || echo \"0\")\n");
+                fprintf(fp, "                printf \"%%s\\t%%s\\n\" \"$mtime\" \"$(basename \"$item\")\"\n");
+                fprintf(fp, "            fi\n");
+                fprintf(fp, "        done | sort -rn | cut -f2-\n");
+                fprintf(fp, "    else\n");
+                fprintf(fp, "        exec ls \"$@\"\n");
+                fprintf(fp, "    fi\n");
                 fprintf(fp, "else\n");
                 fprintf(fp, "    echo 'ls: command not found' >&2\n");
                 fprintf(fp, "    exit 1\n");
@@ -291,45 +338,42 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     char env[4096] = "";
     // Build PATH: TSI bin first (prioritize TSI-installed tools), then system directories for bootstrap
     // This allows bootstrap packages (like make) to use system tools when TSI tools aren't available yet
-    // Check if TSI bin directory exists and has tools
+    // Check if TSI bin directory exists (including bootstrap wrappers like ls)
     struct stat st;
-    bool tsi_bin_has_tools = false;
-    if (stat(main_install_dir, &st) == 0) {
-        char tsi_bin[1024];
-        snprintf(tsi_bin, sizeof(tsi_bin), "%s/bin", main_install_dir);
-        DIR *dir = opendir(tsi_bin);
-        if (dir) {
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    tsi_bin_has_tools = true;
-                    break;
-                }
-            }
-            closedir(dir);
-        }
+    bool tsi_bin_exists = false;
+    char tsi_bin[1024];
+    snprintf(tsi_bin, sizeof(tsi_bin), "%s/bin", main_install_dir);
+    if (stat(tsi_bin, &st) == 0 && S_ISDIR(st.st_mode)) {
+        tsi_bin_exists = true;
     }
+    // Always include TSI bin in PATH if it exists (even if empty, bootstrap wrappers might be created during build)
+    // This ensures that wrappers created during the build (like ls for make) are found
 
     // Build PATH: TSI bin first, then system directories for bootstrap
     // Include /usr/bin before /bin to prefer GNU coreutils over BusyBox when available
     // This is critical for autotools configure scripts that need `ls -t`
+    // ALWAYS include TSI bin if it exists (even if empty) - bootstrap wrappers are created during build
     struct stat st_usr_bin, st_bin;
     bool has_usr_bin = (stat("/usr/bin", &st_usr_bin) == 0 && S_ISDIR(st_usr_bin.st_mode));
     bool has_bin = (stat("/bin", &st_bin) == 0 && S_ISDIR(st_bin.st_mode));
 
-    if (tsi_bin_has_tools && has_usr_bin && has_bin) {
-        // TSI has tools - prioritize them, but allow fallback to system tools
+    if (tsi_bin_exists && has_usr_bin && has_bin) {
+        // TSI bin exists - prioritize it (may contain bootstrap wrappers), then system tools
         // Put /usr/bin before /bin to prefer GNU tools over BusyBox
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-    } else if (tsi_bin_has_tools && has_usr_bin) {
+    } else if (tsi_bin_exists && has_usr_bin) {
         snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
-    } else if (tsi_bin_has_tools && has_bin) {
+    } else if (tsi_bin_exists && has_bin) {
         snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (tsi_bin_exists) {
+        // TSI bin exists but no system directories - use TSI bin only
+        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
     } else if (has_usr_bin && has_bin) {
-        // Bootstrap mode - TSI bin is empty, use system tools
+        // Bootstrap mode - TSI bin doesn't exist yet, use system tools
         // Put /usr/bin before /bin to prefer GNU tools over BusyBox
         snprintf(env, sizeof(env), "PATH=/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                  main_install_dir, main_install_dir, main_install_dir, main_install_dir);
@@ -428,13 +472,16 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         char configure[512];
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);
         struct stat st;
+        log_developer("Checking for configure script at: %s", configure);
         if (stat(configure, &st) != 0) {
+            log_info("Configure script not found at: %s", configure);
             // Configure script not found - try bootstrap scripts first
-            log_debug("Configure script not found, checking for bootstrap scripts");
+            log_info("Configure script not found, checking for bootstrap scripts");
 
             // Check for bootstrap scripts (used by coreutils and some other packages)
             // Try common bootstrap script names in order of preference
             const char *bootstrap_scripts[] = {"bootstrap", "bootstrap.sh", "autogen.sh", "autogen"};
+            bool bootstrap_ran = false;
 
             for (size_t i = 0; i < sizeof(bootstrap_scripts) / sizeof(bootstrap_scripts[0]); i++) {
                 char bootstrap[512];
@@ -444,26 +491,62 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                     char bootstrap_cmd[512];
                     snprintf(bootstrap_cmd, sizeof(bootstrap_cmd), "cd '%s' && sh %s", source_dir, bootstrap_scripts[i]);
                     int bootstrap_result = execute_build_command(bootstrap_cmd, bootstrap_scripts[i], pkg->name);
+                    bootstrap_ran = true;
                     if (bootstrap_result != 0) {
                         log_warning("%s script failed (exit code: %d), trying next bootstrap method", bootstrap_scripts[i], bootstrap_result);
                     } else {
-                        log_debug("%s script completed successfully", bootstrap_scripts[i]);
-                        break; // Success, stop trying other bootstrap scripts
+                        log_info("%s script completed successfully", bootstrap_scripts[i]);
+                        // Re-check if configure was generated
+                        if (stat(configure, &st) == 0) {
+                            log_info("Configure script generated successfully by %s", bootstrap_scripts[i]);
+                            break; // Success, stop trying other bootstrap scripts
+                        } else {
+                            log_warning("%s script ran but configure script was not generated", bootstrap_scripts[i]);
+                        }
                     }
                 }
             }
 
             // Check if configure was generated by bootstrap, if not try autoreconf
             if (stat(configure, &st) != 0) {
-                log_debug("Configure script still not found after bootstrap, running autoreconf");
+                if (bootstrap_ran) {
+                    log_warning("Bootstrap scripts ran but configure script was not generated");
+                }
+                log_info("Configure script still not found, trying autoreconf");
                 // Try to generate configure
                 char autoreconf_cmd[512];
                 snprintf(autoreconf_cmd, sizeof(autoreconf_cmd), "cd '%s' && autoreconf -fiv", source_dir);
                 int autoreconf_result = execute_build_command(autoreconf_cmd, "autoreconf", pkg->name);
                 if (autoreconf_result != 0) {
-                    log_warning("autoreconf failed (exit code: %d), continuing anyway", autoreconf_result);
+                    log_error("autoreconf failed (exit code: %d) - autotools may not be installed", autoreconf_result);
+                    log_error("Package %s requires autotools (autoconf, automake) to generate configure script", pkg->name);
+                    log_error("Either install autotools first, or ensure the package tarball includes a pre-generated configure script");
+                    return false;
+                } else {
+                    // Re-check if configure was generated
+                    if (stat(configure, &st) != 0) {
+                        log_error("autoreconf completed but configure script was not generated");
+                        return false;
+                    }
+                    log_info("Configure script generated successfully by autoreconf");
                 }
             }
+        } else {
+            log_debug("Configure script found, skipping bootstrap");
+        }
+
+        // Final check: ensure configure script exists and is executable
+        if (stat(configure, &st) != 0) {
+            log_error("Configure script not found after all bootstrap attempts: %s", configure);
+            log_error("Package %s cannot be built without a configure script", pkg->name);
+            log_error("The package tarball should include a pre-generated configure script, or autotools must be installed");
+            return false;
+        }
+        if (!(st.st_mode & S_IXUSR)) {
+            log_info("Configure script exists but is not executable, making it executable");
+            char chmod_cmd[512];
+            snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", configure);
+            system(chmod_cmd); // Ignore errors
         }
 
         // Configure

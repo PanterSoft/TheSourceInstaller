@@ -871,8 +871,16 @@ install_package:
         if (!dep_pkg) {
             char warn_msg[256];
             snprintf(warn_msg, sizeof(warn_msg), "Dependency package not found: %s", build_order[i]);
-            fprintf(stderr, "Warning: %s\n", warn_msg);
-            continue;
+            fprintf(stderr, "Error: %s\n", warn_msg);
+            log_error("Dependency package not found: %s", build_order[i]);
+            has_failures = true;
+            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
+            if (failed_deps) {
+                failed_deps[failed_deps_count++] = strdup(build_order[i]);
+            }
+            // Abort on error - don't continue building
+            log_error("Aborting installation due to missing dependency");
+            goto cleanup;
         }
 
         // Fetch source
@@ -881,7 +889,14 @@ install_package:
         if (!dep_source_dir) {
             fprintf(stderr, "Error: Failed to fetch source for %s\n", build_order[i]);
             log_error("Failed to fetch source for dependency: %s@%s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest");
-            continue;
+            has_failures = true;
+            failed_deps = realloc(failed_deps, sizeof(char*) * (failed_deps_count + 1));
+            if (failed_deps) {
+                failed_deps[failed_deps_count++] = strdup(build_order[i]);
+            }
+            // Abort on error - don't continue building
+            log_error("Aborting installation due to fetch failure");
+            goto cleanup;
         }
         log_developer("Source fetched for dependency: %s@%s -> %s", dep_pkg->name, dep_pkg->version ? dep_pkg->version : "latest", dep_source_dir);
 
