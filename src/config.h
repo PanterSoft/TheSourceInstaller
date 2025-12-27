@@ -8,6 +8,16 @@
 extern "C" {
 #endif
 
+/**
+ * TSI Configuration System
+ *
+ * Configuration is a central part of TSI's operation. The config file (tsi.cfg)
+ * controls core behavior like strict isolation mode and other settings.
+ *
+ * Config is automatically loaded at startup in main() and is available to all
+ * commands and subsystems throughout TSI's execution.
+ */
+
 // Configuration structure
 typedef struct {
     bool strict_isolation;  // Strict isolation mode (only TSI packages after bootstrap)

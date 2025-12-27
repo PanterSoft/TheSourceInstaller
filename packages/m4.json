@@ -10,5 +10,7 @@
   "build_dependencies": [],
   "build_system": "autotools",
   "configure_args": [],
-  "env": {}
+  "env": {
+    "CFLAGS": "-Wno-error -Wno-error=format-nonliteral -Wno-format-nonliteral"
+  }
 }

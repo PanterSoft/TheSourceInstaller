@@ -8,10 +8,18 @@
   },
   "dependencies": [],
   "build_dependencies": [
-    "make",
-    "coreutils"
+    "m4",
+    "bash",
+    "coreutils",
+    "make"
   ],
   "build_system": "autotools",
-  "configure_args": [],
+  "configure_args": [
+    "--disable-werror",
+    "--enable-gold",
+    "--enable-ld=default",
+    "--enable-plugins",
+    "--enable-shared"
+  ],
   "env": {}
 }

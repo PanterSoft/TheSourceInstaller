@@ -1,3 +1,13 @@
+/**
+ * TSI Configuration System
+ *
+ * This module implements TSI's configuration management, which is central to
+ * how TSI operates. Configuration is loaded from tsi.cfg and controls core
+ * behavior like strict isolation mode.
+ *
+ * Config is loaded early in main() and is available throughout TSI's execution.
+ */
+
 #include "config.h"
 #include "log.h"
 #include <stdio.h>
@@ -6,6 +16,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// Global configuration instance (singleton)
+// This is initialized with defaults and loaded from tsi.cfg at startup
 static TsiConfig g_config = {
     .strict_isolation = false,
     .initialized = false

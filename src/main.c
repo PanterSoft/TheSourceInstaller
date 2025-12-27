@@ -151,7 +151,7 @@ static bool run_command_with_window(const char *overview, const char *detail, co
         printf("\n");
     }
 
-    printf("%s\n", cmd);
+        printf("%s\n", cmd);
 
     FILE *pipe = popen(cmd, "r");
     if (!pipe) {
@@ -163,7 +163,7 @@ static bool run_command_with_window(const char *overview, const char *detail, co
     bool pipe_error = false;
 
     while (fgets(line, sizeof(line), pipe)) {
-        fputs(line, stdout);
+            fputs(line, stdout);
         fflush(stdout);
     }
 
@@ -294,6 +294,11 @@ static int cmd_install(int argc, char **argv) {
 
     char tsi_prefix[1024];
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
+
+    // Config is already loaded in main(), but reload if prefix changed
+    if (prefix) {
+        config_load(tsi_prefix);
+    }
 
     char db_dir[1024];
     int len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
@@ -655,7 +660,11 @@ install_package:
     }
 
     if (deps_count > 0) {
-        printf("==> Resolving dependencies\n");
+        printf("==> Resolving dependencies");
+        if (config_is_strict_isolation()) {
+            printf(" (isolated)");
+        }
+        printf("\n");
 
         // Count actual dependencies (excluding the main package itself)
         size_t actual_deps_count = 0;
@@ -797,7 +806,11 @@ install_package:
     }
 
     if (build_order_count > 0) {
-        printf("==> Build order\n");
+        printf("==> Build order");
+        if (config_is_strict_isolation()) {
+            printf(" (isolated)");
+        }
+        printf("\n");
         log_debug("Build order calculated: %zu packages", build_order_count);
         for (size_t i = 0; i < build_order_count; i++) {
             if (build_order[i]) {
@@ -891,7 +904,11 @@ install_package:
 
     // Install dependencies first
     if (dependency_count > 0) {
-        printf("==> Installing dependencies\n");
+        printf("==> Installing dependencies");
+        if (config_is_strict_isolation()) {
+            printf(" (isolated)");
+        }
+        printf("\n");
         log_info("Installing %zu dependencies before main package", dependency_count);
     } else {
         log_warning("No dependencies to install (dependency_count=0, build_order_count=%zu)", build_order_count);
@@ -1048,7 +1065,11 @@ install_package:
     if (dependency_count > 0) {
         printf("\n");  // Add spacing after dependencies
     }
-    printf("==> Installing package\n");
+    printf("==> Installing package");
+    if (config_is_strict_isolation()) {
+        printf(" (isolated)");
+    }
+    printf("\n");
     printf("Installing: %s\n", package_name);
     log_info("Installing main package: %s@%s", package_name, package_version ? package_version : "latest");
     Package *main_pkg = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
@@ -1780,8 +1801,8 @@ static int cmd_update(int argc, char **argv) {
         return 1;
     }
 
-    return 0;
-}
+        return 0;
+    }
 
 
 int main(int argc, char **argv) {
@@ -1795,11 +1816,22 @@ int main(int argc, char **argv) {
 
     // Initialize logging (file logging disabled by default to prevent hangs)
     const char *enable_console_log = getenv("TSI_LOG_TO_CONSOLE");
-    log_set_file(false);
-    log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
+        log_set_file(false);
+        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
     if (log_get_level() == LOG_LEVEL_NONE) {
         log_set_level(LOG_LEVEL_DEVELOPER);
     }
+
+    // ============================================================================
+    // CONFIGURATION LOADING - Central to TSI's operation
+    // ============================================================================
+    // Configuration is a fundamental part of TSI. The config file (tsi.cfg) controls
+    // core behavior like strict isolation mode. Config is loaded early here so it's
+    // available to all commands and subsystems throughout TSI's execution.
+    // ============================================================================
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
+    config_load(tsi_prefix);
 
     if (argc < 2) {
         print_usage(argv[0]);

@@ -288,14 +288,27 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
     // Bootstrap handling: For essential bootstrap tools, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent builds use only TSI packages (completely isolated)
-    // Bootstrap packages in order: m4, ncurses, bash, coreutils, diffutils, gawk, grep, sed, make, patch, tar, gzip, xz
+    // Essential base tools bootstrap sequence:
+    //   1. M4 - Required for Autoconf
+    //   2. Ncurses - Required for interactive shells and text-based tools
+    //   3. Bash - Most build scripts (configure) require a POSIX shell
+    //   4. Coreutils - Provides ls, cp, mkdir, etc., which make needs to move files
+    //   5. Diffutils - Required by many test suites and build scripts
+    //   6. Gawk - Required for processing text during the build of more complex tools
+    //   7. Grep / Sed - Essential text manipulation for the configure scripts
+    //   8. Make - Now you have a native make that uses your native coreutils
+    //   9. Patch - Needed to apply fixes to source code before compiling
+    //  10. Tar / Gzip / Xz - To unpack the source code of future packages
+    //  11. Binutils - Required for GCC (linker, assembler, etc.)
+    //  12. GCC (Final) - Now rebuild GCC using your new make, binutils, and other tools
     bool is_bootstrap_pkg = (strcmp(pkg->name, "m4") == 0 || strcmp(pkg->name, "ncurses") == 0 ||
                              strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "coreutils") == 0 ||
                              strcmp(pkg->name, "diffutils") == 0 || strcmp(pkg->name, "gawk") == 0 ||
                              strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "sed") == 0 ||
                              strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "patch") == 0 ||
                              strcmp(pkg->name, "tar") == 0 || strcmp(pkg->name, "gzip") == 0 ||
-                             strcmp(pkg->name, "xz") == 0);
+                             strcmp(pkg->name, "xz") == 0 || strcmp(pkg->name, "binutils") == 0 ||
+                             strcmp(pkg->name, "gcc") == 0);
 
     if (is_bootstrap_pkg) {
         // Bootstrap: Use only essential system directories + TSI PATH
@@ -315,19 +328,36 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                      main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
         }
     } else {
-        // Normal mode: Check strict isolation setting
+        // After bootstrap: Check strict isolation setting
         if (strict_isolation) {
-            // Strict isolation: Only use TSI packages, no system tools (except /bin/sh if needed)
-            log_info("Strict isolation: Building %s - using only TSI-installed packages", pkg->name);
+            // Strict isolation: ONLY use TSI-installed packages, no system tools at all
+            // This means: no system compiler, no /bin, no system tools - everything from TSI
+            log_info("Strict isolation: Building %s - using ONLY TSI-installed packages (no system tools)", pkg->name);
+
+            // Check if TSI has bash installed (prefer it over /bin/sh)
+            char tsi_bash[1024];
+            snprintf(tsi_bash, sizeof(tsi_bash), "%s/bin/bash", main_install_dir);
+            struct stat bash_st;
+            bool has_tsi_bash = (stat(tsi_bash, &bash_st) == 0);
+
+            // In strict isolation mode after bootstrap: ONLY TSI packages
+            // No system compiler, no /bin - everything must come from TSI
+            // Only fallback to /bin/sh if TSI bash is not available (shouldn't happen after bootstrap)
             struct stat st;
             bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
 
-            // In strict mode, only include /bin for sh (POSIX requirement)
-            // All other tools must come from TSI
-            if (has_bin) {
+            if (has_tsi_bash) {
+                // Use TSI bash - complete isolation, no system tools
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib SHELL=%s/bin/bash",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else if (has_bin) {
+                // Fallback: TSI bash not available yet, use /bin/sh (should only happen during transition)
+                log_warning("TSI bash not found, falling back to /bin/sh (this should not happen after bootstrap)");
                 snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                          main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
             } else {
+                // No /bin available - use only TSI (may fail if shell scripts are needed)
+                log_warning("No /bin available and TSI bash not found - using only TSI PATH");
                 snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
                          main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
             }
@@ -401,6 +431,8 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         }
 
         // Configure
+        // Standard autotools build process (per INSTALL files):
+        // Step 1: './configure' to configure the package for your system
         log_debug("Running configure for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s' 2>&1", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
@@ -413,8 +445,25 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         }
 
         // Make
+        // Standard autotools build process (per INSTALL files):
+        // Step 2: 'make' to compile the package
+        // (Optional Step 3: 'make check' - not implemented, can be added if needed)
         log_debug("Running make for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make 2>&1", source_dir, env);
+        // Extract CFLAGS from env and pass directly to make to override Makefile CFLAGS
+        const char *cflags_env = NULL;
+        if (pkg->env_count > 0) {
+            for (size_t i = 0; i < pkg->env_count; i++) {
+                if (pkg->env_keys[i] && strcmp(pkg->env_keys[i], "CFLAGS") == 0) {
+                    cflags_env = pkg->env_values[i];
+                    break;
+                }
+            }
+        }
+        if (cflags_env) {
+            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make CFLAGS='%s' 2>&1", source_dir, env, cflags_env);
+        } else {
+            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make 2>&1", source_dir, env);
+        }
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->make_args[i]);
@@ -609,9 +658,29 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
     // Bootstrap handling: For essential bootstrap tools install, we need minimal system tools
     // We ONLY use essential system directories (/usr/bin, /bin, /usr/local/bin) - NOT the full system PATH
     // Once these are installed, all subsequent installs use only TSI's tools (completely isolated)
-    // Bootstrap packages: make, coreutils, sed, grep, gawk, bash, m4
-    if (strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "coreutils") == 0 || strcmp(pkg->name, "sed") == 0 ||
-        strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "gawk") == 0 || strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "m4") == 0) {
+    // Essential base tools bootstrap sequence:
+    //   1. M4 - Required for Autoconf
+    //   2. Ncurses - Required for interactive shells and text-based tools
+    //   3. Bash - Most build scripts (configure) require a POSIX shell
+    //   4. Coreutils - Provides ls, cp, mkdir, etc., which make needs to move files
+    //   5. Diffutils - Required by many test suites and build scripts
+    //   6. Gawk - Required for processing text during the build of more complex tools
+    //   7. Grep / Sed - Essential text manipulation for the configure scripts
+    //   8. Make - Now you have a native make that uses your native coreutils
+    //   9. Patch - Needed to apply fixes to source code before compiling
+    //  10. Tar / Gzip / Xz - To unpack the source code of future packages
+    //  11. Binutils - Required for GCC (linker, assembler, etc.)
+    //  12. GCC (Final) - Now rebuild GCC using your new make, binutils, and other tools
+    bool is_bootstrap_pkg = (strcmp(pkg->name, "m4") == 0 || strcmp(pkg->name, "ncurses") == 0 ||
+                             strcmp(pkg->name, "bash") == 0 || strcmp(pkg->name, "coreutils") == 0 ||
+                             strcmp(pkg->name, "diffutils") == 0 || strcmp(pkg->name, "gawk") == 0 ||
+                             strcmp(pkg->name, "grep") == 0 || strcmp(pkg->name, "sed") == 0 ||
+                             strcmp(pkg->name, "make") == 0 || strcmp(pkg->name, "patch") == 0 ||
+                             strcmp(pkg->name, "tar") == 0 || strcmp(pkg->name, "gzip") == 0 ||
+                             strcmp(pkg->name, "xz") == 0 || strcmp(pkg->name, "binutils") == 0 ||
+                             strcmp(pkg->name, "gcc") == 0);
+
+    if (is_bootstrap_pkg) {
         // Bootstrap: Use only essential system directories + TSI PATH
         char bootstrap_path[512] = "";
         get_bootstrap_path(bootstrap_path, sizeof(bootstrap_path));
@@ -626,29 +695,65 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
              main_install_dir, main_install_dir, main_install_dir);
         }
     } else {
-        // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
-        // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
-        char compiler_dir[512] = "";
-        get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+        // After bootstrap: Check strict isolation setting
+        bool strict_isolation = config_is_strict_isolation();
+        if (strict_isolation) {
+            // Strict isolation: ONLY use TSI-installed packages, no system tools at all
+            // This means: no system compiler, no /bin, no system tools - everything from TSI
+            log_info("Strict isolation: Installing %s - using ONLY TSI-installed packages (no system tools)", pkg->name);
 
-        // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
-        struct stat st;
-        bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+            // Check if TSI has bash installed (prefer it over /bin/sh)
+            char tsi_bash[1024];
+            snprintf(tsi_bash, sizeof(tsi_bash), "%s/bin/bash", main_install_dir);
+            struct stat bash_st;
+            bool has_tsi_bash = (stat(tsi_bash, &bash_st) == 0);
 
-        if (strlen(compiler_dir) > 0 && has_bin) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
-        } else if (strlen(compiler_dir) > 0) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                     main_install_dir, compiler_dir, main_install_dir, main_install_dir);
-        } else if (has_bin) {
-            snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                     main_install_dir, main_install_dir, main_install_dir);
+            // In strict isolation mode after bootstrap: ONLY TSI packages
+            // No system compiler, no /bin - everything must come from TSI
+            // Only fallback to /bin/sh if TSI bash is not available (shouldn't happen after bootstrap)
+            struct stat st;
+            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+            if (has_tsi_bash) {
+                // Use TSI bash - complete isolation, no system tools
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib SHELL=%s/bin/bash",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else if (has_bin) {
+                // Fallback: TSI bash not available yet, use /bin/sh (should only happen during transition)
+                log_warning("TSI bash not found, falling back to /bin/sh (this should not happen after bootstrap)");
+                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            } else {
+                // No /bin available - use only TSI (may fail if shell scripts are needed)
+                log_warning("No /bin available and TSI bash not found - using only TSI PATH");
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+            }
         } else {
-            // Fallback: use TSI PATH only
-            log_warning("C compiler and /bin not found, using only TSI PATH for install");
-            snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
-                     main_install_dir, main_install_dir, main_install_dir);
+            // Normal mode: Use TSI-installed packages and tools + system C compiler + /bin (for sh)
+            // Always include C compiler and /bin in PATH (these are basic system tools, not TSI packages)
+            char compiler_dir[512] = "";
+            get_compiler_dir(compiler_dir, sizeof(compiler_dir));
+
+            // Build PATH: TSI bin, compiler dir, /bin (for sh and basic POSIX utilities)
+            struct stat st;
+            bool has_bin = (stat("/bin", &st) == 0 && S_ISDIR(st.st_mode));
+
+            if (strlen(compiler_dir) > 0 && has_bin) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:%s:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+            } else if (strlen(compiler_dir) > 0) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:%s PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, compiler_dir, main_install_dir, main_install_dir);
+            } else if (has_bin) {
+                snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir);
+            } else {
+                // Fallback: use TSI PATH only
+                log_warning("C compiler and /bin not found, using only TSI PATH for install");
+                snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
+                         main_install_dir, main_install_dir, main_install_dir);
+            }
         }
     }
 
@@ -678,6 +783,9 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
     char cmd[1024];
 
     if (strcmp(build_system, "autotools") == 0) {
+        // Standard autotools install process (per INSTALL files):
+        // Step 4: 'make install' to install the programs and any data files
+        // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         log_debug("Running make install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install 2>&1", source_dir, env);
     } else if (strcmp(build_system, "cmake") == 0) {

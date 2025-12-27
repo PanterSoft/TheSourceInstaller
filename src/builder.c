@@ -604,6 +604,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
 
         // Configure
+        // Standard autotools build process (per INSTALL files):
+        // Step 1: './configure' to configure the package for your system
         log_debug("Running configure for package: %s", pkg->name);
         // Use dynamic allocation to prevent buffer overflow
         size_t cmd_len = 1024;
@@ -612,6 +614,8 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
             log_error("Failed to allocate memory for configure command");
             return false;
         }
+        // Standard configure command: ./configure --prefix='install_dir'
+        // Environment variables and configure_args are appended
         snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->configure_args[i]) + 2;
@@ -636,6 +640,9 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         }
 
         // Make
+        // Standard autotools build process (per INSTALL files):
+        // Step 2: 'make' to compile the package
+        // (Optional Step 3: 'make check' - not implemented, can be added if needed)
         log_debug("Running make for package: %s", pkg->name);
         // Use dynamic allocation to prevent buffer overflow
         cmd_len = 1024;
@@ -644,7 +651,21 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
             log_error("Failed to allocate memory for make command");
             return false;
         }
-        snprintf(cmd, cmd_len, "cd '%s' && %s make", source_dir, env);
+        // Extract CFLAGS from env and pass directly to make to override Makefile CFLAGS
+        const char *cflags_env = NULL;
+        if (pkg->env_count > 0) {
+            for (size_t i = 0; i < pkg->env_count; i++) {
+                if (pkg->env_keys[i] && strcmp(pkg->env_keys[i], "CFLAGS") == 0) {
+                    cflags_env = pkg->env_values[i];
+                    break;
+                }
+            }
+        }
+        if (cflags_env) {
+            snprintf(cmd, cmd_len, "cd '%s' && %s make CFLAGS='%s'", source_dir, env, cflags_env);
+        } else {
+            snprintf(cmd, cmd_len, "cd '%s' && %s make", source_dir, env);
+        }
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->make_args[i]) + 2;
             if (needed > cmd_len) {
@@ -877,6 +898,9 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     }
 
     if (strcmp(build_system, "autotools") == 0) {
+        // Standard autotools install process (per INSTALL files):
+        // Step 4: 'make install' to install the programs and any data files
+        // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
         log_debug("Running make install for package: %s", pkg->name);
         snprintf(cmd, cmd_len, "cd '%s' && %s make install", source_dir, env);
     } else if (strcmp(build_system, "cmake") == 0) {
