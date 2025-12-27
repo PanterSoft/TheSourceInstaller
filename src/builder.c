@@ -696,19 +696,47 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 free(cmd);
                 return false;
             }
+            // Test the wrapper to make sure it works
+            char test_wrapper_cmd[1024];
+            snprintf(test_wrapper_cmd, sizeof(test_wrapper_cmd), "PATH='%s/bin:/usr/bin:/bin' '%s/bin/ls' -t / >/dev/null 2>&1 && echo 'works' || echo 'fails'", main_install_dir, main_install_dir);
+            FILE *test_wrapper = popen(test_wrapper_cmd, "r");
+            if (test_wrapper) {
+                char test_result[256];
+                if (fgets(test_result, sizeof(test_result), test_wrapper)) {
+                    if (strstr(test_result, "works") != NULL) {
+                        log_info("ls wrapper test passed: ls -t works correctly");
+                    } else {
+                        log_warning("ls wrapper test failed: ls -t may not work correctly");
+                    }
+                }
+                pclose(test_wrapper);
+            }
             // Explicitly set PATH in the command to ensure wrapper is found
-            // Extract other env vars from env string (everything except PATH)
-            char *env_without_path = strstr(env, "PKG_CONFIG_PATH");
-            if (env_without_path) {
-                snprintf(cmd, cmd_len, "cd '%s' && PATH='%s/bin:/usr/bin:/bin' %s ./configure --prefix='%s'",
-                         source_dir, main_install_dir, env_without_path, config->install_dir);
+            // Build env string with PATH first, then other vars
+            // Extract other env vars from env string (everything after PATH=...)
+            char *pkg_config_start = strstr(env, "PKG_CONFIG_PATH");
+            if (pkg_config_start) {
+                // Build new env string with corrected PATH
+                size_t new_env_len = strlen(pkg_config_start) + 256;
+                char *new_env = malloc(new_env_len);
+                if (new_env) {
+                    snprintf(new_env, new_env_len, "PATH='%s/bin:/usr/bin:/bin' %s", main_install_dir, pkg_config_start);
+                    snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'",
+                             source_dir, new_env, config->install_dir);
+                    free(new_env);
+                } else {
+                    // Fallback: just set PATH explicitly
+                    snprintf(cmd, cmd_len, "cd '%s' && PATH='%s/bin:/usr/bin:/bin' %s ./configure --prefix='%s'",
+                             source_dir, main_install_dir, pkg_config_start, config->install_dir);
+                }
             } else {
+                // No other env vars, just set PATH
                 snprintf(cmd, cmd_len, "cd '%s' && PATH='%s/bin:/usr/bin:/bin' ./configure --prefix='%s'",
                          source_dir, main_install_dir, config->install_dir);
             }
-            log_info("Running configure with explicit PATH containing ls wrapper: %s/bin", main_install_dir);
+            log_info("Running configure with explicit PATH='%s/bin:/usr/bin:/bin' (ls wrapper at %s/bin/ls)", main_install_dir, main_install_dir);
         } else {
-            snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        snprintf(cmd, cmd_len, "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
         }
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->configure_args[i]) + 2;

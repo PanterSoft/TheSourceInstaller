@@ -7,7 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/patch/patch-2.7.6.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": ["m4", "bash", "coreutils", "make"],
+  "build_dependencies": ["coreutils", "make"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
