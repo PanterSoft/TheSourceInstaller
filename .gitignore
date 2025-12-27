@@ -45,3 +45,5 @@ src/bin/
 # MkDocs build output
 site/
 .venv/
+*.bak2
+*.bak
