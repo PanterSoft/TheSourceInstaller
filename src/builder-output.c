@@ -306,16 +306,18 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         bool ls_binary_exists = false;
         if (!coreutils_ls_exists) {
             ls_binary_exists = (stat(ls_binary_path, &st) == 0 && S_ISREG(st.st_mode));
-            // Always recompile the ls binary to ensure it has the latest fixes
-            // Remove old binary if it exists so we can recompile with updated code
+            // Always remove and recompile the ls binary to ensure it has the latest fixes
+            // This ensures we get the latest code even if the binary already exists
             if (ls_binary_exists) {
-                log_debug("Removing old ls binary to recompile with latest fixes");
-                unlink(ls_binary_path);
-                ls_binary_exists = false;
+                log_info("Removing old ls binary to recompile with latest fixes");
+                if (unlink(ls_binary_path) != 0) {
+                    log_warning("Failed to remove old ls binary: %s", ls_binary_path);
+                }
             }
+            ls_binary_exists = false; // Always recompile
         }
 
-        if (!coreutils_ls_exists && !ls_binary_exists) {
+        if (!coreutils_ls_exists) {
             // Try to compile a minimal ls binary from C source
             log_info("Attempting to compile minimal ls binary for bootstrap");
             char ls_source_path[1024];
