@@ -18,8 +18,7 @@ A distribution-independent source-based package manager that enables building pa
 ### Quick Install
 
 ```bash
-# Default installation to /opt/tsi (requires root)
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
 Add to PATH:

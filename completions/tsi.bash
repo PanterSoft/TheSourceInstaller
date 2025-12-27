@@ -1,6 +1,11 @@
 # Bash completion script for TSI
 # Source this file or add to /etc/bash_completion.d/
 
+# Only run in bash
+if [ -z "$BASH_VERSION" ]; then
+    return 0
+fi
+
 _tsi() {
     local cur prev words cword
     COMPREPLY=()
@@ -20,7 +25,7 @@ _tsi() {
             elif [[ ${cur} == *@ ]]; then
                 # User typed package@, show versions
                 local pkg_name="${cur%@}"
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                     # Parse JSON files to get versions
                     local versions=$(python3 -c "
@@ -51,7 +56,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 # User typed package@version, complete version part
                 local pkg_name="${cur%%@*}"
                 local version_part="${cur#*@}"
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                     local versions=$(python3 -c "
 import json, os, sys
@@ -79,7 +84,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 fi
             else
                 # List packages from repository
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
                     if [ -n "$packages" ]; then
@@ -103,7 +108,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
             if [[ ${cur} == *@ ]]; then
                 # User typed package@, show versions
                 local pkg_name="${cur%@}"
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                     local versions=$(python3 -c "
 import json, os, sys
@@ -132,7 +137,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 # User typed package@version, complete version part
                 local pkg_name="${cur%%@*}"
                 local version_part="${cur#*@}"
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                     local versions=$(python3 -c "
 import json, os, sys
@@ -159,7 +164,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 fi
             else
                 # List packages from repository
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
                     if [ -n "$packages" ]; then
@@ -215,7 +220,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
             # We're in install command
             if [[ ${prev} == "--force" ]] || [[ ${prev} == "--prefix" ]]; then
                 # After --force or --prefix, complete packages
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
                     if [ -n "$packages" ]; then
@@ -229,7 +234,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 return 0
             else
                 # Complete packages
-                local repo_dir="${HOME}/.tsi/repos"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
                     if [ -n "$packages" ]; then

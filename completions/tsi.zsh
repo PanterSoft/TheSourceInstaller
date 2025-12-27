@@ -68,7 +68,7 @@ _tsi() {
                 if [[ $cur == *@ ]]; then
                     # User typed package@, show versions
                     local pkg_name="${cur%@}"
-                    local repo_dir="${HOME}/.tsi/repos"
+                    local repo_dir="${HOME}/.tsi/packages"
                     if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                         local versions=($(python3 -c "
 import json, os, sys
@@ -98,7 +98,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                     # User typed package@version, complete version part
                     local pkg_name="${cur%%@*}"
                     local version_part="${cur#*@}"
-                    local repo_dir="${HOME}/.tsi/repos"
+                    local repo_dir="${HOME}/.tsi/packages"
                     if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
                         local versions=($(python3 -c "
 import json, os, sys
@@ -130,7 +130,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                     fi
                 else
                     # List packages from repository
-                    local repo_dir="${HOME}/.tsi/repos"
+                    local repo_dir="${HOME}/.tsi/packages"
                     if [ -d "$repo_dir" ]; then
                         local packages=($(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null))
                         if [ ${#packages[@]} -gt 0 ]; then

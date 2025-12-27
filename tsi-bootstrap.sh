@@ -18,7 +18,16 @@ REPAIR_MODE="${REPAIR:-false}"
 if [ "$REPAIR_MODE" = "true" ] || [ "$REPAIR_MODE" = "1" ] || [ "$REPAIR_MODE" = "yes" ]; then
     REPAIR_MODE=true
 else
-    REPAIR_MODE=false
+REPAIR_MODE=false
+fi
+
+# Non-interactive mode (default: false, meaning interactive by default)
+# Can be set via --non-interactive flag or NON_INTERACTIVE environment variable
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
+    NON_INTERACTIVE=true
+else
+    NON_INTERACTIVE=false
 fi
 
 # Isolate TSI: prioritize TSI's bin directory in PATH
@@ -207,6 +216,10 @@ main() {
                 REPAIR_MODE=true
                 shift
                 ;;
+            --non-interactive|--yes|-y)
+                NON_INTERACTIVE=true
+                shift
+                ;;
             --prefix)
                 if [ $# -lt 2 ]; then
                     log_error "--prefix requires a path argument"
@@ -226,6 +239,8 @@ main() {
                 echo "                    Examples:"
                 echo "                      --prefix /opt/tsi     (system-wide, requires root)"
                 echo "                      --prefix ~/.tsi       (user-local, default)"
+                echo "  --non-interactive, --yes, -y"
+                echo "                    Run in non-interactive mode (skip prompts)"
                 echo "  --help, -h        Show this help"
                 echo ""
                 echo "Examples:"
@@ -241,8 +256,10 @@ main() {
                 echo "  # Or use command-line arguments (no '--' needed for 'repair')"
                 echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
                 echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s --prefix ~/.tsi"
-                echo "  # Note: '--repair' requires '--' separator:"
-                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
+                echo ""
+                echo "  # Non-interactive mode (skip prompts)"
+                echo "  NON_INTERACTIVE=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s --non-interactive"
                 echo ""
                 exit 0
                 ;;
@@ -287,8 +304,20 @@ main() {
             log_warn "TSI is already installed at: $PREFIX/bin/tsi"
             log_info ""
 
-            # Ask user if they want to proceed (only in interactive mode)
-            if [ -t 0 ] && [ -t 1 ]; then
+            # Ask user if they want to proceed (interactive by default)
+            # Only skip prompt if explicitly set to non-interactive mode
+            if [ "$NON_INTERACTIVE" = true ]; then
+                # Non-interactive mode - can't ask for confirmation, so exit
+                log_error "TSI is already installed. Cannot proceed in non-interactive mode."
+                log_error ""
+                log_error "To update your existing installation, use:"
+                log_error "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                log_error ""
+                log_error "Or use environment variable (recommended):"
+                log_error "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                exit 1
+            elif [ -t 0 ] && [ -t 1 ]; then
+                # Interactive terminal - ask for confirmation
                 log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
                 log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
                 read -r user_response
@@ -296,19 +325,35 @@ main() {
                     log_info "Installation cancelled."
                     log_info ""
                     log_info "To update your existing installation, use:"
-                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
+                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                    log_info "  # Or use environment variable:"
+                    log_info "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                     exit 0
                 fi
                 log_info ""
             else
-                # Non-interactive mode (piped) - can't ask for confirmation, so exit
-                log_error "TSI is already installed. Cannot proceed in non-interactive mode."
-                log_error ""
-                log_error "To update your existing installation, use:"
-                log_error "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
-                log_error ""
-                log_error "Or run the installer interactively to confirm fresh installation."
-                exit 1
+                # Not a terminal, but not explicitly non-interactive - try to be interactive anyway
+                # This handles cases where stdin might not be a TTY but we still want to prompt
+                log_warn "Warning: Not running in a terminal, but attempting interactive mode."
+                log_warn "If this fails, use --non-interactive flag or set NON_INTERACTIVE=1"
+                log_info ""
+                log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
+                log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
+                read -r user_response || {
+                    log_error "Failed to read user input. Use --non-interactive flag or set NON_INTERACTIVE=1"
+                    log_error ""
+                    log_error "To update your existing installation, use:"
+                    log_error "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                    exit 1
+                }
+                if [ "$user_response" != "yes" ]; then
+                    log_info "Installation cancelled."
+                    log_info ""
+                    log_info "To update your existing installation, use:"
+                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                    exit 0
+                fi
+                log_info ""
             fi
         fi
     fi
@@ -392,9 +437,9 @@ main() {
                     log_info "Using existing source (version: ${CURRENT_VERSION:0:8})"
                 else
                     log_info "Using existing source"
-                fi
-                cd tsi
-            else
+        fi
+        cd tsi
+    else
                 log_info "Existing source version doesn't match target, will re-download..."
                 rm -rf tsi
                 # Fall through to download section
@@ -646,7 +691,7 @@ main() {
         DYNAMIC_EXIT=$?
         set -e  # Re-enable exit on error
         if [ $DYNAMIC_EXIT -ne 0 ] || [ ! -f "bin/tsi" ]; then
-            log_error "Failed to link TSI binary"
+        log_error "Failed to link TSI binary"
             if [ -n "$STATIC_ERROR" ]; then
                 log_error "Static linking error:"
                 echo "$STATIC_ERROR" | head -5 | sed 's/^/  /' >&2
@@ -655,7 +700,7 @@ main() {
                 log_error "Dynamic linking error:"
                 echo "$DYNAMIC_ERROR" | head -5 | sed 's/^/  /' >&2
             fi
-            exit 1
+        exit 1
         fi
     fi
 
@@ -706,12 +751,12 @@ main() {
         log_warn "  Completion scripts not found (optional)"
     fi
 
-    # Initialize package repository (only for fresh installs, not repair mode)
+    # Initialize package repository
     # Copy basic set of packages so TSI works immediately without git
-    if [ "$REPAIR_MODE" != true ]; then
-        log_info ""
-        log_info "Setting up package repository..."
-        mkdir -p "$PREFIX/packages"
+    # Do this for both fresh installs and repairs (to ensure packages are available)
+    log_info ""
+    log_info "Setting up package repository..."
+    mkdir -p "$PREFIX/packages"
 
         # Find packages directory (could be in tsi/ or parent)
         # We're currently in src/ directory, so packages could be:
@@ -754,7 +799,6 @@ main() {
             log_warn "  Run 'tsi update' after installation to download package definitions"
         fi
         log_info ""
-    fi
 
     log_info ""
     log_info "========================================="
@@ -765,58 +809,138 @@ main() {
     log_info "and prefers TSI-installed tools over system tools."
     log_info ""
 
-    # Automatically add TSI to PATH for current terminal session
-    # Check if we're in an interactive shell (not piped)
-    if [ -t 0 ] && [ -t 1 ]; then
-        # Interactive terminal - export PATH for current session
-        # Only prepend TSI, leave existing PATH untouched
-        export PATH="$PREFIX/bin:$PATH"
-        log_info "✓ Added TSI to PATH for current terminal session"
-        log_info ""
-        log_info "You can now use 'tsi' command immediately!"
-        log_info ""
-    else
-        # Piped execution (curl ... | sh) - can't modify parent shell
+    # Handle PATH export and autocompletion setup
+    if [ "$NON_INTERACTIVE" = true ]; then
+        # Non-interactive mode - print instructions
         log_info "To use TSI in this terminal session, run:"
         log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
         log_info ""
         log_info "This command only adds TSI to your PATH and leaves everything else unchanged."
         log_info ""
+    else
+        # Interactive mode - prompt user
+        log_info ""
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info "Setup Options"
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info ""
+
+        # Prompt for current session PATH export
+        log_info "Add TSI to PATH for this terminal session? (y/n): "
+        read -r export_path_response
+        if [ "$export_path_response" = "y" ] || [ "$export_path_response" = "Y" ] || [ "$export_path_response" = "yes" ]; then
+            export PATH="$PREFIX/bin:$PATH"
+            log_info "✓ Added TSI to PATH for current terminal session"
+            log_info ""
+        else
+            log_info "Skipped PATH export for current session."
+            log_info "You can add it manually with: export PATH=\"$PREFIX/bin:\$PATH\""
+            log_info ""
+        fi
+
+        # Prompt for permanent PATH setup
+        log_info "Add TSI to PATH permanently in your shell config? (y/n): "
+        read -r permanent_path_response
+        if [ "$permanent_path_response" = "y" ] || [ "$permanent_path_response" = "Y" ] || [ "$permanent_path_response" = "yes" ]; then
+            if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
+                SHELL_CONFIG="$HOME/.zshrc"
+            else
+                SHELL_CONFIG="$HOME/.bashrc"
+            fi
+
+            # Check if already added
+            if grep -q "export PATH=\"$PREFIX/bin:\$PATH\"" "$SHELL_CONFIG" 2>/dev/null; then
+                log_info "PATH already configured in $SHELL_CONFIG"
+            else
+                echo "" >> "$SHELL_CONFIG"
+                echo "# TSI package manager" >> "$SHELL_CONFIG"
+                echo "export PATH=\"$PREFIX/bin:\$PATH\"" >> "$SHELL_CONFIG"
+                log_info "✓ Added PATH to $SHELL_CONFIG"
+            fi
+            log_info ""
+        else
+            log_info "Skipped permanent PATH setup."
+            log_info ""
+        fi
+
+        # Prompt for autocompletion
+        if [ -f "$PREFIX/share/completions/tsi.bash" ] || [ -f "$PREFIX/share/completions/tsi.zsh" ]; then
+            log_info "Enable shell autocompletion for TSI? (y/n): "
+            read -r autocomplete_response
+            if [ "$autocomplete_response" = "y" ] || [ "$autocomplete_response" = "Y" ] || [ "$autocomplete_response" = "yes" ]; then
+                if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
+                    SHELL_CONFIG="$HOME/.zshrc"
+                    COMPLETION_FILE="$PREFIX/share/completions/tsi.zsh"
+                    if [ -f "$COMPLETION_FILE" ]; then
+                        if grep -q "source $COMPLETION_FILE" "$SHELL_CONFIG" 2>/dev/null; then
+                            log_info "Autocompletion already configured in $SHELL_CONFIG"
+                        else
+                            echo "source $COMPLETION_FILE" >> "$SHELL_CONFIG"
+                            log_info "✓ Added autocompletion to $SHELL_CONFIG"
+                            log_info "  Run 'source $SHELL_CONFIG' to enable in current session"
+                        fi
+                    fi
+                else
+                    SHELL_CONFIG="$HOME/.bashrc"
+                    COMPLETION_FILE="$PREFIX/share/completions/tsi.bash"
+                    if [ -f "$COMPLETION_FILE" ]; then
+                        if grep -q "source $COMPLETION_FILE" "$SHELL_CONFIG" 2>/dev/null; then
+                            log_info "Autocompletion already configured in $SHELL_CONFIG"
+                        else
+                            echo "source $COMPLETION_FILE" >> "$SHELL_CONFIG"
+                            log_info "✓ Added autocompletion to $SHELL_CONFIG"
+                            log_info "  Run 'source $SHELL_CONFIG' to enable in current session"
+                        fi
+                    fi
+                fi
+                log_info ""
+            else
+                log_info "Skipped autocompletion setup."
+                log_info ""
+            fi
+        fi
     fi
 
-    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    log_info "To add TSI to PATH permanently:"
-    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    log_info ""
-    log_info "The commands below only add TSI to your PATH and leave everything else unchanged."
-    log_info ""
-    if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
-        log_info "For zsh, add to ~/.zshrc:"
+    # Show manual setup instructions only in non-interactive mode
+    if [ "$NON_INTERACTIVE" = true ]; then
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info "Manual Setup Instructions"
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         log_info ""
-        log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
-        log_info "  source ~/.zshrc"
+        log_info "The commands below only add TSI to your PATH and leave everything else unchanged."
         log_info ""
-        log_info "Or manually edit ~/.zshrc and add:"
-        log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
-        log_info ""
-        log_info "To enable autocomplete (zsh):"
-        log_info "  echo 'source $PREFIX/share/completions/tsi.zsh' >> ~/.zshrc"
-        log_info "  source ~/.zshrc"
-    else
-        log_info "For bash, add to ~/.bashrc:"
-        log_info ""
+        if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
+            log_info "For zsh, add to ~/.zshrc:"
+            log_info ""
+            log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.zshrc"
+            log_info "  source ~/.zshrc"
+            log_info ""
+            log_info "Or manually edit ~/.zshrc and add:"
+            log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
+            log_info ""
+            if [ -f "$PREFIX/share/completions/tsi.zsh" ]; then
+                log_info "To enable autocomplete (zsh):"
+                log_info "  echo 'source $PREFIX/share/completions/tsi.zsh' >> ~/.zshrc"
+                log_info "  source ~/.zshrc"
+            fi
+        else
+            log_info "For bash, add to ~/.bashrc:"
+            log_info ""
         log_info "  echo 'export PATH=\"$PREFIX/bin:\\\$PATH\"' >> ~/.bashrc"
-        log_info "  source ~/.bashrc"
+            log_info "  source ~/.bashrc"
+            log_info ""
+            log_info "Or manually edit ~/.bashrc and add:"
+            log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
+            log_info ""
+            if [ -f "$PREFIX/share/completions/tsi.bash" ]; then
+                log_info "To enable autocomplete (bash):"
+                log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
+                log_info "  source ~/.bashrc"
+            fi
+        fi
         log_info ""
-        log_info "Or manually edit ~/.bashrc and add:"
-        log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
         log_info ""
-        log_info "To enable autocomplete (bash):"
-        log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
-        log_info "  source ~/.bashrc"
     fi
-    log_info ""
-    log_info ""
     if [ "$REPAIR_MODE" != true ]; then
         log_info "Package repository is ready! Try: tsi list"
     else

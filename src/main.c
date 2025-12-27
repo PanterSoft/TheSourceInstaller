@@ -1169,7 +1169,7 @@ static int cmd_versions(int argc, char **argv) {
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
     char repo_dir[1024];
-    snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    snprintf(repo_dir, sizeof(repo_dir), "%s/packages", tsi_prefix);
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
@@ -1251,7 +1251,7 @@ static int cmd_info(int argc, char **argv) {
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
     char repo_dir[1024];
-    snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    snprintf(repo_dir, sizeof(repo_dir), "%s/packages", tsi_prefix);
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
@@ -1499,7 +1499,7 @@ static int cmd_update(int argc, char **argv) {
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
 
     char repo_dir[1024];
-    int len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    int len = snprintf(repo_dir, sizeof(repo_dir), "%s/packages", tsi_prefix);
     if (len < 0 || (size_t)len >= sizeof(repo_dir)) {
         fprintf(stderr, "Error: Path too long\n");
         return 1;
