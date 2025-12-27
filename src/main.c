@@ -226,14 +226,12 @@ static int cmd_remove(int argc, char **argv) {
         return 1;
     }
 
-    int success_count = 0;
     int fail_count = 0;
 
     // Remove each package
     for (int i = 0; i < package_count; i++) {
         if (database_remove_package(db, packages[i])) {
             printf("Removed %s\n", packages[i]);
-            success_count++;
         } else {
             fprintf(stderr, "Warning: Package %s is not installed\n", packages[i]);
             fail_count++;
@@ -1173,15 +1171,12 @@ install_package:
     if (!install_single_package(package_name, package_version, builder_config, fetcher, db, repo, force, output_callback, false)) {
         fprintf(stderr, "Error: Failed to install package: %s\n", package_name);
         log_error("Failed to install main package: %s@%s", package_name, package_version ? package_version : "latest");
-            has_failures = true;
+                    has_failures = true;
             goto cleanup;
         }
 
     // Main package installation completed successfully
     log_info("Successfully installed main package: %s@%s", package_name, package_version ? package_version : "latest");
-
-success:
-    // Installation completed successfully
 
 cleanup:
     // Clean up failed dependencies list
