@@ -9,9 +9,7 @@
   "dependencies": [],
   "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": [
-    "--disable-docs"
-  ],
+  "configure_args": [],
   "env": {
     "CFLAGS": "-O2 -g"
   },

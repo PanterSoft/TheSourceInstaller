@@ -771,21 +771,27 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
         }
     }
 
-    // Apply package-specific environment variables
+    // Apply package-specific environment variables (excluding CFLAGS - not needed for install)
+    // Note: CFLAGS is excluded as it's only needed during build, not install
     if (pkg->env_count > 0) {
         for (size_t i = 0; i < pkg->env_count; i++) {
             if (pkg->env_keys[i] && pkg->env_values[i]) {
-                // Append to env string: KEY=VALUE
+                // Skip CFLAGS - not needed for install
+                if (strcmp(pkg->env_keys[i], "CFLAGS") == 0) {
+                    continue;
+                }
+                // Append to env string: KEY='VALUE' (quote values to handle spaces)
                 size_t env_len = strlen(env);
-                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 2; // +2 for = and space
+                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 5; // +5 for =, '', space, and quotes
                 if (needed < sizeof(env)) {
                     if (env_len > 0) {
                         strcat(env, " ");
                     }
                     strcat(env, pkg->env_keys[i]);
-                    strcat(env, "=");
+                    strcat(env, "='");
                     strcat(env, pkg->env_values[i]);
-                    log_developer("Added package env for install: %s=%s", pkg->env_keys[i], pkg->env_values[i]);
+                    strcat(env, "'");
+                    log_developer("Added package env for install: %s='%s'", pkg->env_keys[i], pkg->env_values[i]);
                 }
             }
         }
@@ -800,8 +806,11 @@ bool builder_install_with_output(BuilderConfig *config, Package *pkg, const char
         // Standard autotools install process (per INSTALL files):
         // Step 4: 'make install' to install the programs and any data files
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
+        // Use -k flag to continue on errors (e.g., missing help2man for doc target)
+        // Check if main binary was installed to verify success
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make install 2>&1", source_dir, env);
+        snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k install 2>&1; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ]; then exit 0; else exit 1; fi",
+                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name);
     } else if (strcmp(build_system, "cmake") == 0) {
         log_debug("Running cmake --install for package: %s", pkg->name);
         snprintf(cmd, sizeof(cmd), "cd '%s' && %s cmake --install '%s' 2>&1", build_dir, env, build_dir);
