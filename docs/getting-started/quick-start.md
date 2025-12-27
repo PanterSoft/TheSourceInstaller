@@ -72,7 +72,7 @@ After installation, TSI creates the following structure:
 │   └── include/
 ├── sources/        # Downloaded source code
 ├── db/             # Package database
-└── repos/          # Package repository
+└── packages/       # Package repository
 ```
 
 ## Next Steps

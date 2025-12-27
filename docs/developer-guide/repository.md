@@ -1,11 +1,11 @@
 # TSI Package Repository
 
-TSI uses a local package repository to store package definitions. The repository is located at `~/.tsi/repos/` by default.
+TSI uses a local package repository to store package definitions. The repository is located at `~/.tsi/packages/` by default.
 
 ## Repository Structure
 
 ```
-~/.tsi/repos/
+~/.tsi/packages/
 ├── pkg-config.json
 ├── zlib.json
 ├── openssl.json
@@ -29,7 +29,7 @@ tsi update
 This will:
 1. Clone or update the TSI repository from GitHub
 2. Copy all `.json` files from the `packages/` directory
-3. Update your local repository at `~/.tsi/repos/`
+3. Update your local repository at `~/.tsi/packages/`
 
 ### Custom Repository
 
@@ -83,7 +83,7 @@ After updating, TSI will automatically discover all packages in the repository:
 
 ```bash
 # List all available packages (from repository)
-ls ~/.tsi/repos/*.json
+ls ~/.tsi/packages/*.json
 
 # Get info about a package
 tsi info pkg-config
@@ -102,20 +102,20 @@ You can also manually manage the repository:
 
 ```bash
 # Add a package manually
-cp my-package.json ~/.tsi/repos/
+cp my-package.json ~/.tsi/packages/
 
 # Remove a package
-rm ~/.tsi/repos/package-name.json
+rm ~/.tsi/packages/package-name.json
 
 # Edit a package
-vim ~/.tsi/repos/package-name.json
+vim ~/.tsi/packages/package-name.json
 ```
 
 ## Best Practices
 
 1. **Regular Updates**: Run `tsi update` regularly to get new packages and updates
 2. **Version Control**: Keep your custom packages in a Git repository
-3. **Backup**: Backup `~/.tsi/repos/` if you have custom packages
+3. **Backup**: Backup `~/.tsi/packages/` if you have custom packages
 4. **Testing**: Use `--local` for testing package definitions before committing
 
 ## Troubleshooting
@@ -135,7 +135,7 @@ vim ~/.tsi/repos/package-name.json
 
 **Solutions**:
 - Check if `packages/` directory exists in the repository
-- Verify JSON files are valid: `cat ~/.tsi/repos/*.json | jq .`
+- Verify JSON files are valid: `cat ~/.tsi/packages/*.json | jq .`
 - Try updating from local: `tsi update --local /path/to/packages`
 
 ### Custom Repository Not Working

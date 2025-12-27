@@ -79,8 +79,9 @@ The bootstrap installer supports several command-line options and environment va
 - `--repair` - Repair/update existing TSI installation
 - `--help, -h` - Show help message
 
-**Environment variables:**
+**Environment variables (recommended - cleaner syntax, no '--' needed):**
 - `PREFIX` - Installation prefix (same as `--prefix` option, default: `/opt/tsi`)
+- `REPAIR` - Set to `1`, `true`, or `yes` to repair/update existing installation (same as `--repair` flag)
 - `TSI_REPO` - Custom repository URL (default: `https://github.com/PanterSoft/tsi.git`)
 - `TSI_BRANCH` - Branch to use from repository (default: `main`)
 - `INSTALL_DIR` - Temporary directory for downloading and building source (default: `$HOME/tsi-install`)
@@ -88,11 +89,17 @@ The bootstrap installer supports several command-line options and environment va
 **Examples:**
 
 ```bash
-# Install to user location (~/.tsi) instead of default
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/.tsi
+# Install to user location (~/.tsi) - using environment variable (recommended, no '--' needed)
+PREFIX=~/.tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 
-# Repair existing installation
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh -s -- --repair
+# Repair existing installation - using environment variable (recommended, no '--' needed)
+REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+
+# Or use command-line arguments (no '--' needed for 'repair')
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s --prefix ~/.tsi
+# Note: '--repair' requires '--' separator:
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
 
 # Install from a fork or different branch
 TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=develop \
@@ -102,9 +109,11 @@ TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=develop \
 INSTALL_DIR=/tmp/tsi-build \
   curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh
 
-# Combine options
-PREFIX=~/my-tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+# Combine options using environment variables
+PREFIX=~/my-tsi REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
+
+**Note:** When piping to `sh`, use environment variables (no `--` needed) for cleaner syntax. The `--` separator is only required when using `sh -s --` with command-line arguments.
 
 ### Manual Build
 

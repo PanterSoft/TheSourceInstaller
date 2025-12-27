@@ -235,7 +235,7 @@ static int cmd_install(int argc, char **argv) {
     }
 
     char repo_dir[1024];
-    len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    len = snprintf(repo_dir, sizeof(repo_dir), "%s/packages", tsi_prefix);
     if (len < 0 || (size_t)len >= sizeof(repo_dir)) {
         fprintf(stderr, "Error: Path too long\n");
         return 1;

@@ -141,7 +141,7 @@ After installation, TSI creates:
 │   └── include/
 ├── sources/        # Downloaded source code
 ├── db/             # Package database
-└── repos/          # Package repository
+└── packages/       # Package repository
 ```
 
 ## Package Format

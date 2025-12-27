@@ -47,7 +47,7 @@ The repair mode will:
 - ✅ **Preserve all data**:
   - Package database (`~/.tsi/db/`)
   - Installed packages (`~/.tsi/install/`)
-  - Package repository (`~/.tsi/repos/`)
+  - Package repository (`~/.tsi/packages/`)
   - Downloaded sources (`~/.tsi/sources/`)
 - ✅ **Only replace**: TSI binary and completion scripts
 
@@ -81,7 +81,7 @@ This will:
 - Remove all TSI data:
   - `~/.tsi/db/` (package database)
   - `~/.tsi/install/` (installed packages)
-  - `~/.tsi/repos/` (package repository)
+  - `~/.tsi/packages/` (package repository)
   - `~/.tsi/sources/` (downloaded sources)
   - `~/.tsi/build/` (build directories)
   - `~/.tsi/` (entire directory)

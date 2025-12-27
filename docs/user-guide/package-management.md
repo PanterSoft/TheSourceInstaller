@@ -6,7 +6,7 @@ TSI manages packages through a local repository system. Packages are defined as 
 
 ## Package Repository
 
-The package repository is located at `~/.tsi/repos/` by default. Each package is defined as a JSON file.
+The package repository is located at `~/.tsi/packages/` by default. Each package is defined as a JSON file.
 
 ### Updating the Repository
 

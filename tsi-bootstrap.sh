@@ -12,7 +12,14 @@ PREFIX="${PREFIX:-/opt/tsi}"
 TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
-REPAIR_MODE=false
+# Support REPAIR environment variable as alternative to --repair flag
+REPAIR_MODE="${REPAIR:-false}"
+# Convert string "true"/"1" to boolean
+if [ "$REPAIR_MODE" = "true" ] || [ "$REPAIR_MODE" = "1" ] || [ "$REPAIR_MODE" = "yes" ]; then
+    REPAIR_MODE=true
+else
+    REPAIR_MODE=false
+fi
 
 # Isolate TSI: prioritize TSI's bin directory in PATH
 # This ensures TSI uses its own installed tools when available
@@ -191,17 +198,24 @@ check_source_version() {
 
 main() {
     # Parse command line arguments
+    # Handle both direct execution and piped execution
+    # When piped via stdin, arguments come after 'sh -s' and may need '--' separator
+    # We also support arguments without '--' by checking if they look like our options
     while [ $# -gt 0 ]; do
         case "$1" in
-            --repair)
+            --repair|repair)
                 REPAIR_MODE=true
                 shift
                 ;;
             --prefix)
+                if [ $# -lt 2 ]; then
+                    log_error "--prefix requires a path argument"
+                    exit 1
+                fi
                 PREFIX="$2"
                 shift 2
                 ;;
-            --help|-h)
+            --help|-h|help)
                 echo "TSI Bootstrap Installer"
                 echo ""
                 echo "Usage: $0 [options]"
@@ -218,11 +232,17 @@ main() {
                 echo "  # Install to default location (/opt/tsi, requires root)"
                 echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh"
                 echo ""
-                echo "  # Install to user location (~/.tsi)"
-                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/.tsi"
+                echo "  # Install to user location using environment variable (recommended, no '--' needed)"
+                echo "  PREFIX=~/.tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                 echo ""
-                echo "  # Install to custom location using environment variable"
-                echo "  PREFIX=~/my-tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo "  # Repair using environment variable (recommended, no '--' needed)"
+                echo "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo ""
+                echo "  # Or use command-line arguments (no '--' needed for 'repair')"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s --prefix ~/.tsi"
+                echo "  # Note: '--repair' requires '--' separator:"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair"
                 echo ""
                 exit 0
                 ;;
@@ -691,7 +711,7 @@ main() {
     if [ "$REPAIR_MODE" != true ]; then
         log_info ""
         log_info "Setting up package repository..."
-        mkdir -p "$PREFIX/repos"
+        mkdir -p "$PREFIX/packages"
 
         # Find packages directory (could be in tsi/ or parent)
         # We're currently in src/ directory, so packages could be:
@@ -719,7 +739,7 @@ main() {
             for pkg_file in "$PACKAGES_DIR"/*.json; do
                 if [ -f "$pkg_file" ]; then
                     pkg_name=$(basename "$pkg_file")
-                    cp "$pkg_file" "$PREFIX/repos/$pkg_name" 2>/dev/null || true
+                    cp "$pkg_file" "$PREFIX/packages/$pkg_name" 2>/dev/null || true
                     PACKAGE_COUNT=$((PACKAGE_COUNT + 1))
                 fi
             done
