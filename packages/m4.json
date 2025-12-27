@@ -9,8 +9,13 @@
   "dependencies": [],
   "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": [],
+  "configure_args": [
+    "--disable-docs"
+  ],
   "env": {
-    "CFLAGS": "-Wno-error -Wno-error=format-nonliteral -Wno-format-nonliteral"
+    "CFLAGS": "-O2 -g"
+  },
+  "env_darwin": {
+    "CFLAGS": "-O2 -g -Wno-format-nonliteral -Wno-error=format-nonliteral -Wno-error"
   }
 }

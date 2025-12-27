@@ -60,6 +60,9 @@ bool package_has_dependency(const Package *pkg, const char *dep_name);
 void package_add_dependency(Package *pkg, const char *dep_name);
 void package_add_build_dependency(Package *pkg, const char *dep_name);
 
+// Get OS name (darwin, linux, etc.) - used for OS-specific configurations
+const char* package_get_os_name(void);
+
 #ifdef __cplusplus
 }
 #endif
