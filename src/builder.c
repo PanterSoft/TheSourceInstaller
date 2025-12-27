@@ -297,34 +297,23 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         struct stat st;
         bool coreutils_ls_exists = (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode));
 
-        // Try to create a minimal ls binary only if coreutils ls doesn't exist
-        char ls_binary_path[1024];
-        snprintf(ls_binary_path, sizeof(ls_binary_path), "%s/ls", tsi_bin_dir);
+        // Create ls wrapper script if coreutils ls doesn't exist
+        char ls_wrapper_path[1024];
+        snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
+        bool ls_wrapper_exists = false;
 
-        // Always remove and recompile the ls binary to ensure it has the latest fixes
-        // This ensures we get the latest code even if the binary already exists
-        bool ls_binary_exists = false;
         if (!coreutils_ls_exists) {
-            ls_binary_exists = (stat(ls_binary_path, &st) == 0 && S_ISREG(st.st_mode));
-            if (ls_binary_exists) {
-                log_info("Removing old ls binary to recompile with latest fixes");
-                if (unlink(ls_binary_path) != 0) {
-                    log_warning("Failed to remove old ls binary: %s", ls_binary_path);
-                }
+            ls_wrapper_exists = (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode));
+            // Always recreate the wrapper to ensure it has the latest fixes
+            if (ls_wrapper_exists) {
+                log_info("Removing old ls wrapper to recreate with latest fixes");
+                unlink(ls_wrapper_path);
             }
-            // Always recompile, so set to false
-            ls_binary_exists = false;
-        }
 
-        if (!coreutils_ls_exists && !ls_binary_exists) {
-            // Try to compile a minimal ls binary from C source
-            log_info("Attempting to compile minimal ls binary for bootstrap");
-            char ls_source_path[1024];
-            snprintf(ls_source_path, sizeof(ls_source_path), "%s/ls.c", tsi_bin_dir);
-
-            // Create minimal ls C source code
-            FILE *ls_source = fopen(ls_source_path, "w");
-            if (ls_source) {
+            // Create ls wrapper script for BusyBox systems
+            log_info("Creating ls wrapper script for bootstrap");
+            FILE *fp = fopen(ls_wrapper_path, "w");
+            if (fp) {
                 fprintf(ls_source, "#include <stdio.h>\n");
                 fprintf(ls_source, "#include <stdlib.h>\n");
                 fprintf(ls_source, "#include <string.h>\n");
@@ -433,21 +422,38 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 // Try to compile it
                 char compile_cmd[2048];
                 snprintf(compile_cmd, sizeof(compile_cmd),
-                    "(gcc -o '%s' '%s' -O2 2>&1 || "
-                    "cc -o '%s' '%s' -O2 2>&1) && "
-                    "rm -f '%s'",
+                    "(gcc -o '%s' '%s' -O2 -std=c99 2>&1 || "
+                    "cc -o '%s' '%s' -O2 -std=c99 2>&1) && "
+                    "rm -f '%s' && "
+                    "test -x '%s' && "
+                    "('%s' -t . >/dev/null 2>&1 || '%s' . >/dev/null 2>&1) && "
+                    "echo 'ls binary compiled and tested successfully'",
                     ls_binary_path, ls_source_path,
                     ls_binary_path, ls_source_path,
-                    ls_source_path);
+                    ls_source_path,
+                    ls_binary_path,
+                    ls_binary_path, ls_binary_path);
 
-                int compile_result = system(compile_cmd);
-                if (compile_result == 0 && stat(ls_binary_path, &st) == 0) {
-                    log_info("Successfully compiled minimal ls binary: %s", ls_binary_path);
-                    ls_binary_exists = true;
+                FILE *compile = popen(compile_cmd, "r");
+                if (compile) {
+                    char compile_output[4096];
+                    size_t compile_read = 0;
+                    while (fgets(compile_output + compile_read, sizeof(compile_output) - compile_read, compile)) {
+                        compile_read += strlen(compile_output + compile_read);
+                    }
+                    int compile_status = pclose(compile);
+                    if (compile_status == 0 && strstr(compile_output, "ls binary compiled and tested successfully") != NULL) {
+                        log_info("Successfully compiled and tested minimal ls binary: %s", ls_binary_path);
+                        ls_binary_exists = true;
     } else {
-                    log_warning("Failed to compile ls binary, falling back to wrapper script");
-                    // Remove source file if compilation failed
-                    unlink(ls_source_path);
+                        log_warning("Failed to compile or test ls binary (exit: %d), falling back to wrapper script", compile_status);
+                        if (compile_read > 0) {
+                            log_debug("Compilation output: %s", compile_output);
+                        }
+                        // Remove source file and any partial binary if compilation failed
+                        unlink(ls_source_path);
+                        unlink(ls_binary_path);
+                    }
                 }
             }
         }
