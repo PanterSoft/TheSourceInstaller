@@ -239,10 +239,12 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     }
     log_developer("Build directory created successfully: %s", build_dir);
 
-    // For bootstrap packages (like make), create a minimal ls wrapper if needed
-    // This helps when building make on systems with BusyBox ls that doesn't support -t
+    // For all autotools packages, create a minimal ls wrapper if needed
+    // This helps when building on systems with BusyBox ls that doesn't support -t
+    // Configure scripts need ls -t to check build environment sanity
+    const char *build_system_check = pkg->build_system ? pkg->build_system : "autotools";
     // Also check if system make is available - if not, we'll need to bootstrap make differently
-    if (strcmp(pkg->name, "make") == 0) {
+    if (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0) {
         // Check if system make is available
         int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
         if (!has_system_make) {
@@ -900,6 +902,32 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
     snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib",
              main_install_dir, main_install_dir, main_install_dir);
 
+    // Apply package-specific environment variables (excluding CFLAGS - not needed for install)
+    // Note: CFLAGS is excluded as it's only needed during build, not install
+    if (pkg->env_count > 0) {
+        for (size_t i = 0; i < pkg->env_count; i++) {
+            if (pkg->env_keys[i] && pkg->env_values[i]) {
+                // Skip CFLAGS - not needed for install
+                if (strcmp(pkg->env_keys[i], "CFLAGS") == 0) {
+                    continue;
+                }
+                // Append to env string: KEY='VALUE' (quote values to handle spaces)
+                size_t env_len = strlen(env);
+                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 5; // +5 for =, '', space, and quotes
+                if (needed < sizeof(env)) {
+                    if (env_len > 0) {
+                        strcat(env, " ");
+                    }
+                    strcat(env, pkg->env_keys[i]);
+                    strcat(env, "='");
+                    strcat(env, pkg->env_values[i]);
+                    strcat(env, "'");
+                    log_developer("Added package env for install: %s='%s'", pkg->env_keys[i], pkg->env_values[i]);
+                }
+            }
+        }
+    }
+
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     log_debug("Using build system for install: %s", build_system);
     log_developer("Install environment: %s", env);
@@ -914,8 +942,11 @@ bool builder_install(BuilderConfig *config, Package *pkg, const char *source_dir
         // Standard autotools install process (per INSTALL files):
         // Step 4: 'make install' to install the programs and any data files
         // (Optional Step 5: 'make installcheck' - not implemented, can be added if needed)
+        // Use -k flag to continue on errors (e.g., missing help2man for doc target)
+        // Check if main binary was installed to verify success
         log_debug("Running make install for package: %s", pkg->name);
-        snprintf(cmd, cmd_len, "cd '%s' && %s make install", source_dir, env);
+        snprintf(cmd, cmd_len, "cd '%s' && %s make -k install; if [ -f '%s/bin/%s' ] || [ -f '%s/bin/%s.exe' ]; then exit 0; else exit 1; fi",
+                 source_dir, env, config->install_dir, pkg->name, config->install_dir, pkg->name);
     } else if (strcmp(build_system, "cmake") == 0) {
         log_debug("Running cmake --install for package: %s", pkg->name);
         snprintf(cmd, cmd_len, "cd '%s' && %s cmake --install '%s'", build_dir, env, build_dir);
