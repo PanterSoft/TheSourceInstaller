@@ -398,10 +398,11 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
         log_error("Archive file is empty: %s", archive);
         return false;
     }
-    log_debug("Archive file exists: %s (%ld bytes)", archive, (long)st.st_size);
+    log_info("Archive file exists: %s (%ld bytes)", archive, (long)st.st_size);
 
     // Detect archive format
     ArchiveFormat format = detect_archive_format(archive);
+    log_debug("Detected archive format: %d", format);
 
     char cmd[1024];
     int result;
@@ -413,6 +414,18 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
     char *tar_path = find_tool("tar");
     char *gzip_path = find_tool("gzip");
     char *xz_path = find_tool("xz");
+
+    // Check if required tools are available
+    if (!tool_available("tar")) {
+        log_error("tar command is not available - cannot extract archive");
+        log_error("Please install tar or ensure it is in PATH");
+        return false;
+    }
+
+    // Check for xz tool if we need it
+    if (format == ARCHIVE_FORMAT_XZ && !tool_available("xz") && !tool_available("tar")) {
+        log_warning("xz tool not found - will try tar -xJf (may fail on BusyBox)");
+    }
 
     // Extract using the detected format
     switch (format) {
@@ -558,10 +571,14 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
 
     // All extraction attempts failed - show error message
     log_error("Failed to extract archive: %s", archive);
+    log_error("Destination directory: %s", dest);
+
+    // Check if error file exists and show its contents
     FILE *fp = fopen(error_file, "r");
     if (fp) {
         char line[256];
-        log_error("Extraction error details:");
+        log_error("Extraction error details from tar_error.log:");
+        bool has_errors = false;
         while (fgets(line, sizeof(line), fp)) {
             // Remove trailing newline
             size_t len = strlen(line);
@@ -570,13 +587,43 @@ bool fetcher_extract_tarball(const char *archive, const char *dest) {
             }
             if (strlen(line) > 0) {
                 log_error("  %s", line);
+                has_errors = true;
             }
         }
         fclose(fp);
+        if (!has_errors) {
+            log_error("  (error log file is empty - extraction command may have failed silently)");
+        }
         unlink(error_file);
+    } else {
+        log_error("Could not read error log file: %s", error_file);
+        log_error("This suggests the extraction command failed before creating the error log");
+    }
+
+    // Check what tools are available
+    log_error("Available tools:");
+    log_error("  tar: %s", tool_available("tar") ? "yes" : "NO");
+    log_error("  xz: %s", tool_available("xz") ? "yes" : "NO");
+    log_error("  gzip: %s", tool_available("gzip") ? "yes" : "NO");
+
+    // Check if destination directory exists and is empty
+    DIR *dir = opendir(dest);
+    if (dir) {
+        int file_count = 0;
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                file_count++;
+            }
+        }
+        closedir(dir);
+        log_error("Destination directory contains %d files (expected > 0)", file_count);
+    } else {
+        log_error("Destination directory does not exist or cannot be read: %s", dest);
     }
 
     log_error("Archive may be corrupted or in an unsupported format");
+    log_error("For xz archives on BusyBox, you may need to install xz tool separately");
     log_error("Please verify the download completed successfully");
 
     return false;
