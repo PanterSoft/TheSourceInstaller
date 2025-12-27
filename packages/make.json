@@ -10,5 +10,8 @@
   "build_dependencies": [],
   "build_system": "autotools",
   "configure_args": [],
-  "env": {}
+  "env": {
+    "ac_cv_path_LS": "/usr/bin/ls",
+    "gl_cv_func_lstat_dereferences_slashed_symlink": "yes"
+  }
 }

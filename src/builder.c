@@ -182,6 +182,78 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     }
     log_developer("Build directory created successfully: %s", build_dir);
 
+    // For bootstrap packages (like make), create a minimal ls wrapper if needed
+    // This helps when building make on systems with BusyBox ls that doesn't support -t
+    if (strcmp(pkg->name, "make") == 0) {
+        char main_install_dir[1024];
+        char *last_slash = strrchr(config->install_dir, '/');
+        if (last_slash) {
+            if (strstr(config->install_dir, "/install/") != NULL) {
+                size_t len = strstr(config->install_dir, "/install/") - config->install_dir + strlen("/install");
+                strncpy(main_install_dir, config->install_dir, len);
+                main_install_dir[len] = '\0';
+            } else {
+                strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+                main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+            }
+        } else {
+            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+        }
+        char tsi_bin_dir[1024];
+        snprintf(tsi_bin_dir, sizeof(tsi_bin_dir), "%s/bin", main_install_dir);
+
+        // Create bin directory if it doesn't exist
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin_dir);
+        system(mkdir_cmd); // Ignore errors - directory might already exist
+
+        // Create a minimal ls wrapper script that supports -t
+        char ls_wrapper_path[1024];
+        snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
+
+        // Check if wrapper already exists
+        struct stat st;
+        if (stat(ls_wrapper_path, &st) != 0) {
+            FILE *fp = fopen(ls_wrapper_path, "w");
+            if (fp) {
+                fprintf(fp, "#!/bin/sh\n");
+                fprintf(fp, "# Minimal ls wrapper for bootstrap builds\n");
+                fprintf(fp, "# Tries GNU ls first, then falls back to system ls with workaround for -t\n");
+                fprintf(fp, "if [ -x /usr/bin/ls ] && /usr/bin/ls -t / >/dev/null 2>&1; then\n");
+                fprintf(fp, "    exec /usr/bin/ls \"$@\"\n");
+                fprintf(fp, "elif command -v ls >/dev/null 2>&1; then\n");
+                fprintf(fp, "    # System ls - if it doesn't support -t, try to work around it\n");
+                fprintf(fp, "    case \"$*\" in\n");
+                fprintf(fp, "        *-t*)\n");
+                fprintf(fp, "            # -t flag: try system ls first, if it fails, use find + stat workaround\n");
+                fprintf(fp, "            ls \"$@\" 2>/dev/null || {\n");
+                fprintf(fp, "                # Workaround: use find to list files sorted by time\n");
+                fprintf(fp, "                for f in \"$@\"; do\n");
+                fprintf(fp, "                    [ \"$f\" = \"-t\" ] && continue\n");
+                fprintf(fp, "                    [ -e \"$f\" ] && echo \"$f\"\n");
+                fprintf(fp, "                done | xargs -I {} sh -c 'stat -c \"%%Y {}\" \"{}\" 2>/dev/null || stat -f \"%%m {}\" \"{}\" 2>/dev/null' | sort -rn | cut -d' ' -f2-\n");
+                fprintf(fp, "            }\n");
+                fprintf(fp, "            ;;\n");
+                fprintf(fp, "        *)\n");
+                fprintf(fp, "            exec ls \"$@\"\n");
+                fprintf(fp, "            ;;\n");
+                fprintf(fp, "    esac\n");
+                fprintf(fp, "else\n");
+                fprintf(fp, "    echo 'ls: command not found' >&2\n");
+                fprintf(fp, "    exit 1\n");
+                fprintf(fp, "fi\n");
+                fclose(fp);
+
+                // Make it executable
+                char chmod_cmd[512];
+                snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
+                system(chmod_cmd); // Ignore errors
+                log_developer("Created bootstrap ls wrapper: %s", ls_wrapper_path);
+            }
+        }
+    }
+
     // Apply patches
     if (pkg->patches_count > 0) {
         log_debug("Applying %zu patches to source", pkg->patches_count);
@@ -211,11 +283,82 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     }
 
     char env[4096] = "";
-    // Only use TSI-installed packages and tools - no system packages
-    // PATH only includes TSI's bin directory (build tools like make, gcc, sed must be installed via TSI first)
-    // Restrict all paths to only TSI to ensure complete isolation from system packages
-    snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
-             main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    // Build PATH: TSI bin first (prioritize TSI-installed tools), then system directories for bootstrap
+    // This allows bootstrap packages (like make) to use system tools when TSI tools aren't available yet
+    // Check if TSI bin directory exists and has tools
+    struct stat st;
+    bool tsi_bin_has_tools = false;
+    if (stat(main_install_dir, &st) == 0) {
+        char tsi_bin[1024];
+        snprintf(tsi_bin, sizeof(tsi_bin), "%s/bin", main_install_dir);
+        DIR *dir = opendir(tsi_bin);
+        if (dir) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] != '.') {
+                    tsi_bin_has_tools = true;
+                    break;
+                }
+            }
+            closedir(dir);
+        }
+    }
+
+    // Build PATH: TSI bin first, then system directories for bootstrap
+    // Include /usr/bin before /bin to prefer GNU coreutils over BusyBox when available
+    // This is critical for autotools configure scripts that need `ls -t`
+    struct stat st_usr_bin, st_bin;
+    bool has_usr_bin = (stat("/usr/bin", &st_usr_bin) == 0 && S_ISDIR(st_usr_bin.st_mode));
+    bool has_bin = (stat("/bin", &st_bin) == 0 && S_ISDIR(st_bin.st_mode));
+
+    if (tsi_bin_has_tools && has_usr_bin && has_bin) {
+        // TSI has tools - prioritize them, but allow fallback to system tools
+        // Put /usr/bin before /bin to prefer GNU tools over BusyBox
+        snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (tsi_bin_has_tools && has_usr_bin) {
+        snprintf(env, sizeof(env), "PATH=%s/bin:/usr/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (tsi_bin_has_tools && has_bin) {
+        snprintf(env, sizeof(env), "PATH=%s/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (has_usr_bin && has_bin) {
+        // Bootstrap mode - TSI bin is empty, use system tools
+        // Put /usr/bin before /bin to prefer GNU tools over BusyBox
+        snprintf(env, sizeof(env), "PATH=/usr/bin:/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (has_usr_bin) {
+        snprintf(env, sizeof(env), "PATH=/usr/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else if (has_bin) {
+        snprintf(env, sizeof(env), "PATH=/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    } else {
+        // Fallback: use TSI PATH only (shouldn't happen)
+        log_warning("No system directories found, using only TSI PATH");
+        snprintf(env, sizeof(env), "PATH=%s/bin PKG_CONFIG_PATH=%s/lib/pkgconfig LD_LIBRARY_PATH=%s/lib CPPFLAGS=-I%s/include LDFLAGS=-L%s/lib",
+                 main_install_dir, main_install_dir, main_install_dir, main_install_dir, main_install_dir);
+    }
+
+    // Apply package-specific environment variables
+    if (pkg->env_count > 0) {
+        for (size_t i = 0; i < pkg->env_count; i++) {
+            if (pkg->env_keys[i] && pkg->env_values[i]) {
+                // Append to env string: KEY=VALUE
+                size_t env_len = strlen(env);
+                size_t needed = env_len + strlen(pkg->env_keys[i]) + strlen(pkg->env_values[i]) + 2; // +2 for = and space
+                if (needed < sizeof(env)) {
+                    if (env_len > 0) {
+                        strcat(env, " ");
+                    }
+                    strcat(env, pkg->env_keys[i]);
+                    strcat(env, "=");
+                    strcat(env, pkg->env_values[i]);
+                    log_developer("Added package env: %s=%s", pkg->env_keys[i], pkg->env_values[i]);
+                }
+            }
+        }
+    }
 
     const char *build_system = pkg->build_system ? pkg->build_system : "autotools";
     log_info("Using build system: %s for package: %s", build_system, pkg->name);

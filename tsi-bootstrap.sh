@@ -321,8 +321,9 @@ main() {
                 # When piping (curl ... | sh), stdin is the pipe, but we can read from /dev/tty
                 if [ -t 1 ] && [ -c /dev/tty ] 2>/dev/null; then
                     # We have a terminal - read from /dev/tty to bypass stdin pipe
-                    log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
-                    log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
+                    # Write prompt to /dev/tty so it appears on the terminal
+                    printf "[INFO] Do you want to proceed with a fresh installation? (this will rebuild TSI)\n" > /dev/tty
+                    printf "[INFO] Type 'yes' to continue, or press Ctrl+C to cancel: " > /dev/tty
                     read -r user_response < /dev/tty
                     if [ "$user_response" != "yes" ]; then
                         log_info "Installation cancelled."
@@ -887,8 +888,13 @@ main() {
         log_info ""
 
         # Prompt for current session PATH export
-        log_info "Add TSI to PATH for this terminal session? (y/n): "
-        read -r export_path_response
+        # Write prompt to /dev/tty so it appears on the terminal
+        printf "[INFO] Add TSI to PATH for this terminal session? (y/n): " > /dev/tty
+        if [ -c /dev/tty ] 2>/dev/null; then
+            read -r export_path_response < /dev/tty
+        else
+            read -r export_path_response
+        fi
         if [ "$export_path_response" = "y" ] || [ "$export_path_response" = "Y" ] || [ "$export_path_response" = "yes" ]; then
             export PATH="$PREFIX/bin:$PATH"
             log_info "✓ Added TSI to PATH for current terminal session"
@@ -900,7 +906,7 @@ main() {
         fi
 
         # Prompt for permanent PATH setup
-        log_info "Add TSI to PATH permanently in your shell config? (y/n): "
+        printf "Add TSI to PATH permanently in your shell config? (y/n): " > /dev/tty
         if [ -c /dev/tty ] 2>/dev/null; then
             read -r permanent_path_response < /dev/tty
         else
@@ -930,7 +936,7 @@ main() {
 
         # Prompt for autocompletion
         if [ -f "$PREFIX/share/completions/tsi.bash" ] || [ -f "$PREFIX/share/completions/tsi.zsh" ]; then
-            log_info "Enable shell autocompletion for TSI? (y/n): "
+            printf "Enable shell autocompletion for TSI? (y/n): " > /dev/tty
             if [ -c /dev/tty ] 2>/dev/null; then
                 read -r autocomplete_response < /dev/tty
             else
