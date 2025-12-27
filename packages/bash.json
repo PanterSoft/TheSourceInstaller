@@ -9,7 +9,7 @@
   "dependencies": [
     "ncurses"
   ],
-  "build_dependencies": ["m4", "ncurses"],
+  "build_dependencies": ["ncurses"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}

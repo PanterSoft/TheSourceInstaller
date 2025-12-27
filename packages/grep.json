@@ -7,7 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/grep/grep-3.11.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": ["m4", "bash", "coreutils"],
+  "build_dependencies": ["coreutils"],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
