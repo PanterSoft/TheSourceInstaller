@@ -1,3 +1,19 @@
+/**
+ * TSI Logging System Header
+ *
+ * This header defines the public API for TSI's logging system. The complete
+ * implementation is in log.c, which is the dedicated source file for all
+ * logging functionality.
+ *
+ * The logging system provides:
+ * - Multiple log levels (DEVELOPER, DEBUG, INFO, WARNING, ERROR, NONE)
+ * - Console and file output
+ * - Configurable via environment variables or tsi.cfg
+ * - Non-blocking, fail-safe design
+ *
+ * See log.c for the complete implementation.
+ */
+
 #ifndef LOG_H
 #define LOG_H
 

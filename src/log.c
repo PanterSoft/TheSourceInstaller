@@ -1,3 +1,32 @@
+/**
+ * TSI Logging System Implementation
+ *
+ * This is the dedicated source file for TSI's logging system. All logging
+ * functionality is implemented here, providing a centralized, configurable
+ * logging solution for the entire TSI codebase.
+ *
+ * Features:
+ * - Multiple log levels (DEVELOPER, DEBUG, INFO, WARNING, ERROR, NONE)
+ * - Console and file output support
+ * - Log file rotation
+ * - Timestamp support
+ * - Color-coded console output
+ * - Environment variable configuration
+ * - Configuration file integration (via tsi.cfg)
+ *
+ * The logging system is designed to be:
+ * - Non-blocking: File operations won't hang the system
+ * - Fail-safe: Logging failures won't crash TSI
+ * - Configurable: Via environment variables or tsi.cfg
+ * - Thread-safe: Safe for use in single-threaded contexts
+ *
+ * Usage:
+ *   #include "log.h"
+ *   log_init_from_env();  // Initialize from environment
+ *   log_info("Message: %s", value);
+ *   log_cleanup();  // Clean up resources
+ */
+
 #include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
