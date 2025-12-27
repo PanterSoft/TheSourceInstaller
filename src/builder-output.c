@@ -268,19 +268,227 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
 
     // Set up environment
     char main_install_dir[1024];
-    char *last_slash = strrchr(config->install_dir, '/');
-    if (last_slash) {
-        if (strstr(config->install_dir, "/install/") != NULL) {
-            size_t len = strstr(config->install_dir, "/install/") - config->install_dir + strlen("/install");
-            strncpy(main_install_dir, config->install_dir, len);
-            main_install_dir[len] = '\0';
-        } else {
-            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-        }
+    char *install_pos = strstr(config->install_dir, "/install/");
+    if (install_pos) {
+        size_t len = install_pos - config->install_dir + strlen("/install");
+        strncpy(main_install_dir, config->install_dir, len);
+        main_install_dir[len] = '\0';
     } else {
         strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
         main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+    }
+
+    // For all autotools packages, we need ls -t for configure scripts
+    // Create minimal ls binary/wrapper if coreutils is not available
+    const char *build_system_check = pkg->build_system ? pkg->build_system : "autotools";
+    bool needs_ls = (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0);
+    bool is_coreutils = (strcmp(pkg->name, "coreutils") == 0);
+    bool needs_ls_wrapper = needs_ls && !is_coreutils;
+
+    if (needs_ls_wrapper) {
+        char tsi_bin_dir[1024];
+        snprintf(tsi_bin_dir, sizeof(tsi_bin_dir), "%s/bin", main_install_dir);
+
+        // Create bin directory if it doesn't exist
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin_dir);
+        system(mkdir_cmd); // Ignore errors - directory might already exist
+
+        // Check if coreutils ls is already available (best option)
+        char coreutils_ls[1024];
+        snprintf(coreutils_ls, sizeof(coreutils_ls), "%s/bin/ls", main_install_dir);
+        struct stat st;
+        bool coreutils_ls_exists = (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode));
+
+        // Try to create a minimal ls binary only if coreutils ls doesn't exist
+        char ls_binary_path[1024];
+        snprintf(ls_binary_path, sizeof(ls_binary_path), "%s/ls", tsi_bin_dir);
+        bool ls_binary_exists = false;
+        if (!coreutils_ls_exists) {
+            ls_binary_exists = (stat(ls_binary_path, &st) == 0 && S_ISREG(st.st_mode));
+        }
+
+        if (!coreutils_ls_exists && !ls_binary_exists) {
+            // Try to compile a minimal ls binary from C source
+            log_info("Attempting to compile minimal ls binary for bootstrap");
+            char ls_source_path[1024];
+            snprintf(ls_source_path, sizeof(ls_source_path), "%s/ls.c", tsi_bin_dir);
+
+            // Create minimal ls C source code (same as in builder.c)
+            FILE *ls_source = fopen(ls_source_path, "w");
+            if (ls_source) {
+                fprintf(ls_source, "#include <stdio.h>\n");
+                fprintf(ls_source, "#include <stdlib.h>\n");
+                fprintf(ls_source, "#include <string.h>\n");
+                fprintf(ls_source, "#include <dirent.h>\n");
+                fprintf(ls_source, "#include <sys/stat.h>\n");
+                fprintf(ls_source, "#include <time.h>\n");
+                fprintf(ls_source, "#include <unistd.h>\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "struct file_entry {\n");
+                fprintf(ls_source, "    char *name;\n");
+                fprintf(ls_source, "    time_t mtime;\n");
+                fprintf(ls_source, "};\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "int compare_mtime(const void *a, const void *b) {\n");
+                fprintf(ls_source, "    const struct file_entry *fa = (const struct file_entry *)a;\n");
+                fprintf(ls_source, "    const struct file_entry *fb = (const struct file_entry *)b;\n");
+                fprintf(ls_source, "    return (int)(fb->mtime - fa->mtime);\n");
+                fprintf(ls_source, "}\n");
+                fprintf(ls_source, "\n");
+                fprintf(ls_source, "int main(int argc, char **argv) {\n");
+                fprintf(ls_source, "    int sort_by_time = 0;\n");
+                fprintf(ls_source, "    char *dir = \".\";\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    for (int i = 1; i < argc; i++) {\n");
+                fprintf(ls_source, "        if (strcmp(argv[i], \"-t\") == 0) {\n");
+                fprintf(ls_source, "            sort_by_time = 1;\n");
+                fprintf(ls_source, "        } else if (argv[i][0] != '-') {\n");
+                fprintf(ls_source, "            dir = argv[i];\n");
+                fprintf(ls_source, "            break;\n");
+                fprintf(ls_source, "        }\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    DIR *d = opendir(dir);\n");
+                fprintf(ls_source, "    if (!d) {\n");
+                fprintf(ls_source, "        perror(\"ls\");\n");
+                fprintf(ls_source, "        return 1;\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    struct file_entry *entries = NULL;\n");
+                fprintf(ls_source, "    size_t count = 0;\n");
+                fprintf(ls_source, "    size_t capacity = 64;\n");
+                fprintf(ls_source, "    entries = malloc(capacity * sizeof(struct file_entry));\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    struct dirent *entry;\n");
+                fprintf(ls_source, "    while ((entry = readdir(d)) != NULL) {\n");
+                fprintf(ls_source, "        if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0)\n");
+                fprintf(ls_source, "            continue;\n");
+                fprintf(ls_source, "        \n");
+                fprintf(ls_source, "        char path[1024];\n");
+                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%%s/%%s\", dir, entry->d_name);\n");
+                fprintf(ls_source, "        \n");
+                fprintf(ls_source, "        struct stat st;\n");
+                fprintf(ls_source, "        if (stat(path, &st) == 0) {\n");
+                fprintf(ls_source, "            if (count >= capacity) {\n");
+                fprintf(ls_source, "                capacity *= 2;\n");
+                fprintf(ls_source, "                entries = realloc(entries, capacity * sizeof(struct file_entry));\n");
+                fprintf(ls_source, "            }\n");
+                fprintf(ls_source, "            entries[count].name = strdup(entry->d_name);\n");
+                fprintf(ls_source, "            entries[count].mtime = st.st_mtime;\n");
+                fprintf(ls_source, "            count++;\n");
+                fprintf(ls_source, "        }\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    closedir(d);\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    if (sort_by_time) {\n");
+                fprintf(ls_source, "        qsort(entries, count, sizeof(struct file_entry), compare_mtime);\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    \n");
+                fprintf(ls_source, "    for (size_t i = 0; i < count; i++) {\n");
+                fprintf(ls_source, "        printf(\"%%s\\n\", entries[i].name);\n");
+                fprintf(ls_source, "        free(entries[i].name);\n");
+                fprintf(ls_source, "    }\n");
+                fprintf(ls_source, "    free(entries);\n");
+                fprintf(ls_source, "    return 0;\n");
+                fprintf(ls_source, "}\n");
+                fclose(ls_source);
+
+                // Try to compile it
+                char compile_cmd[2048];
+                snprintf(compile_cmd, sizeof(compile_cmd),
+                    "(gcc -o '%s' '%s' -O2 2>&1 || "
+                    "cc -o '%s' '%s' -O2 2>&1) && "
+                    "rm -f '%s'",
+                    ls_binary_path, ls_source_path,
+                    ls_binary_path, ls_source_path,
+                    ls_source_path);
+
+                int compile_result = system(compile_cmd);
+                if (compile_result == 0 && stat(ls_binary_path, &st) == 0) {
+                    log_info("Successfully compiled minimal ls binary: %s", ls_binary_path);
+                    ls_binary_exists = true;
+                } else {
+                    log_warning("Failed to compile ls binary, falling back to wrapper script");
+                    unlink(ls_source_path);
+                }
+            }
+        }
+
+        // If binary compilation failed or doesn't exist, create wrapper script as fallback
+        if (!ls_binary_exists && !coreutils_ls_exists) {
+            char ls_wrapper_path[1024];
+            snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
+
+            // Check if wrapper already exists
+            if (stat(ls_wrapper_path, &st) != 0) {
+                FILE *fp = fopen(ls_wrapper_path, "w");
+                if (fp) {
+                    fprintf(fp, "#!/bin/sh\n");
+                    fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
+                    fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
+                    fprintf(fp, "\n");
+                    fprintf(fp, "# Check if -t flag is present\n");
+                    fprintf(fp, "has_t=false\n");
+                    fprintf(fp, "dir=\".\"\n");
+                    fprintf(fp, "for arg in \"$@\"; do\n");
+                    fprintf(fp, "    case \"$arg\" in\n");
+                    fprintf(fp, "        -t) has_t=true ;;\n");
+                    fprintf(fp, "        -t*) has_t=true ;;\n");
+                    fprintf(fp, "        *-t*) has_t=true ;;\n");
+                    fprintf(fp, "        -*) : ;;\n");
+                    fprintf(fp, "        *) dir=\"$arg\" ;;\n");
+                    fprintf(fp, "    esac\n");
+                    fprintf(fp, "done\n");
+                    fprintf(fp, "\n");
+                    fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
+                    fprintf(fp, "    # Try GNU ls first if available\n");
+                    fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
+                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "    # Try system ls (might work on some systems)\n");
+                    fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
+                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
+                    fprintf(fp, "    tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
+                    fprintf(fp, "    > \"$tmp\"\n");
+                    fprintf(fp, "    for item in \"$dir\"/* \"$dir\"/.*; do\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/*\" ] && continue\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/.\" ] && continue\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/..\" ] && continue\n");
+                    fprintf(fp, "        if [ -e \"$item\" ]; then\n");
+                    fprintf(fp, "            name=$(basename \"$item\")\n");
+                    fprintf(fp, "            mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
+                    fprintf(fp, "            printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
+                    fprintf(fp, "        fi\n");
+                    fprintf(fp, "    done\n");
+                    fprintf(fp, "    sort -rn \"$tmp\" | cut -f2-\n");
+                    fprintf(fp, "    rm -f \"$tmp\"\n");
+                    fprintf(fp, "else\n");
+                    fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
+                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                    fprintf(fp, "    else\n");
+                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "fi\n");
+                    fclose(fp);
+
+                    // Make it executable
+                    char chmod_cmd[512];
+                    snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
+                    system(chmod_cmd);
+                    log_info("Created bootstrap ls wrapper: %s", ls_wrapper_path);
+                }
+            } else {
+                // Wrapper already exists, verify it's executable
+                if (!(st.st_mode & S_IXUSR)) {
+                    char chmod_cmd[512];
+                    snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
+                    system(chmod_cmd);
+                }
+            }
+        }
     }
 
     char env[4096] = "";
@@ -562,11 +770,45 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         // Standard autotools build process (per INSTALL files):
         // Step 1: './configure' to configure the package for your system
         log_debug("Running configure for package: %s", pkg->name);
-        snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s' 2>&1", source_dir, env, config->install_dir);
+
+        // CRITICAL: For BusyBox systems, we MUST ensure the ls wrapper is found
+        // Explicitly set PATH in the command itself to ensure ls wrapper is used
+        if (needs_ls_wrapper) {
+            // Verify wrapper exists before running configure
+            char verify_cmd[1024];
+            snprintf(verify_cmd, sizeof(verify_cmd), "test -x '%s/bin/ls' && echo 'exists' || echo 'missing'", main_install_dir);
+            FILE *verify = popen(verify_cmd, "r");
+            bool wrapper_verified = false;
+            if (verify) {
+                char verify_result[256];
+                if (fgets(verify_result, sizeof(verify_result), verify)) {
+                    if (strstr(verify_result, "exists") != NULL) {
+                        wrapper_verified = true;
+                        log_info("ls wrapper verified: %s/bin/ls", main_install_dir);
+                    } else {
+                        log_warning("ls wrapper NOT found at: %s/bin/ls", main_install_dir);
+                    }
+                }
+                pclose(verify);
+            }
+            if (!wrapper_verified) {
+                log_error("ls wrapper is missing! Cannot proceed with configure on BusyBox system");
+                return false;
+            }
+            // Explicitly set PATH in configure command to ensure ls wrapper is found
+            snprintf(cmd, sizeof(cmd), "cd '%s' && PATH='%s/bin:/usr/bin:/bin' %s ./configure --prefix='%s'",
+                     source_dir, main_install_dir, env, config->install_dir);
+            log_info("Running configure with explicit PATH='%s/bin:/usr/bin:/bin' (ls wrapper at %s/bin/ls)", main_install_dir, main_install_dir);
+        } else {
+            snprintf(cmd, sizeof(cmd), "cd '%s' && %s ./configure --prefix='%s'", source_dir, env, config->install_dir);
+        }
+
         for (size_t i = 0; i < pkg->configure_args_count; i++) {
             strcat(cmd, " ");
             strcat(cmd, pkg->configure_args[i]);
         }
+        strcat(cmd, " 2>&1");
+
         if (!execute_with_output(cmd, "configure", pkg->name, output_callback, userdata)) {
             log_error("Configure failed for package: %s", pkg->name);
             return false;
