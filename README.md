@@ -26,9 +26,74 @@ Add to PATH:
 export PATH="$HOME/.tsi/bin:$PATH"
 ```
 
-**Custom location:**
+#### Custom Installation Location
+
+You can install TSI to a custom location using the `--prefix` option or `PREFIX` environment variable:
+
+**Using --prefix option:**
 ```bash
+# Install to /opt/tsi (system-wide, may require root)
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi
+
+# Install to custom user location
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/my-tsi
+```
+
+**Using PREFIX environment variable:**
+```bash
+# Install to /opt/tsi (system-wide, may require root)
 PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+
+# Install to custom user location
+PREFIX=~/my-tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+```
+
+**Note:** Installing to system directories like `/opt/`, `/usr/local/`, or `/usr/` typically requires root permissions. Use `sudo` if needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh -s -- --prefix /opt/tsi
+```
+
+After installation, add the custom location to your PATH:
+```bash
+# For /opt/tsi
+export PATH="/opt/tsi/bin:$PATH"
+
+# Or add permanently to ~/.bashrc or ~/.zshrc
+echo 'export PATH="/opt/tsi/bin:$PATH"' >> ~/.bashrc
+```
+
+#### Bootstrap Options
+
+The bootstrap installer supports several command-line options and environment variables:
+
+**Command-line options:**
+- `--prefix PATH` - Installation prefix (default: `$HOME/.tsi`)
+- `--repair` - Repair/update existing TSI installation
+- `--help, -h` - Show help message
+
+**Environment variables:**
+- `PREFIX` - Installation prefix (same as `--prefix` option, default: `$HOME/.tsi`)
+- `TSI_REPO` - Custom repository URL (default: `https://github.com/PanterSoft/tsi.git`)
+- `TSI_BRANCH` - Branch to use from repository (default: `main`)
+- `INSTALL_DIR` - Temporary directory for downloading and building source (default: `$HOME/tsi-install`)
+
+**Examples:**
+
+```bash
+# Repair existing installation
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+
+# Install from a fork or different branch
+TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=develop \
+  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+
+# Custom build directory
+INSTALL_DIR=/tmp/tsi-build \
+  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+
+# Combine options
+PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
 ```
 
 ### Manual Build

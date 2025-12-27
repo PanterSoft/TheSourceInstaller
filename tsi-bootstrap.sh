@@ -208,7 +208,20 @@ main() {
                 echo "Options:"
                 echo "  --repair          Repair/update existing TSI installation"
                 echo "  --prefix PATH     Installation prefix (default: \$HOME/.tsi)"
+                echo "                    Examples:"
+                echo "                      --prefix /opt/tsi     (system-wide, requires root)"
+                echo "                      --prefix ~/.tsi       (user-local, default)"
                 echo "  --help, -h        Show this help"
+                echo ""
+                echo "Examples:"
+                echo "  # Install to default location (~/.tsi)"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo ""
+                echo "  # Install to /opt/tsi (requires root)"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi"
+                echo ""
+                echo "  # Install to custom location using environment variable"
+                echo "  PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                 echo ""
                 exit 0
                 ;;
@@ -238,6 +251,16 @@ main() {
     else
         log_info "TSI One-Line Bootstrap Installer"
         log_info "=================================="
+        log_info ""
+        log_info "Installation prefix: $PREFIX"
+        if [ "$PREFIX" != "$HOME/.tsi" ]; then
+            # Check if prefix requires root permissions
+            case "$PREFIX" in
+                /opt/*|/usr/local/*|/usr/*)
+                    log_info "Note: Installing to system directory (may require root permissions)"
+                    ;;
+            esac
+        fi
         log_info ""
 
         # Check if already installed
