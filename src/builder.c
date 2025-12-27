@@ -314,237 +314,79 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
             log_info("Creating ls wrapper script for bootstrap");
             FILE *fp = fopen(ls_wrapper_path, "w");
             if (fp) {
-                fprintf(ls_source, "#include <stdio.h>\n");
-                fprintf(ls_source, "#include <stdlib.h>\n");
-                fprintf(ls_source, "#include <string.h>\n");
-                fprintf(ls_source, "#include <dirent.h>\n");
-                fprintf(ls_source, "#include <sys/stat.h>\n");
-                fprintf(ls_source, "#include <time.h>\n");
-                fprintf(ls_source, "#include <unistd.h>\n");
-                fprintf(ls_source, "\n");
-                fprintf(ls_source, "struct file_entry {\n");
-                fprintf(ls_source, "    char *name;\n");
-                fprintf(ls_source, "    time_t mtime;\n");
-                fprintf(ls_source, "};\n");
-                fprintf(ls_source, "\n");
-                fprintf(ls_source, "int compare_mtime(const void *a, const void *b) {\n");
-                fprintf(ls_source, "    const struct file_entry *fa = (const struct file_entry *)a;\n");
-                fprintf(ls_source, "    const struct file_entry *fb = (const struct file_entry *)b;\n");
-                fprintf(ls_source, "    return (int)(fb->mtime - fa->mtime);\n");
-                fprintf(ls_source, "}\n");
-                fprintf(ls_source, "\n");
-                fprintf(ls_source, "int main(int argc, char **argv) {\n");
-                fprintf(ls_source, "    int sort_by_time = 0;\n");
-                fprintf(ls_source, "    char *target = \".\";\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    // Parse arguments\n");
-                fprintf(ls_source, "    for (int i = 1; i < argc; i++) {\n");
-                fprintf(ls_source, "        if (strcmp(argv[i], \"-t\") == 0) {\n");
-                fprintf(ls_source, "            sort_by_time = 1;\n");
-                fprintf(ls_source, "        } else if (argv[i][0] != '-') {\n");
-                fprintf(ls_source, "            target = argv[i];\n");
-                fprintf(ls_source, "            break;\n");
-                fprintf(ls_source, "        }\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    // Check if target is a file or directory\n");
-                fprintf(ls_source, "    struct stat st;\n");
-                fprintf(ls_source, "    int stat_result = stat(target, &st);\n");
-                fprintf(ls_source, "    bool is_directory = false;\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    if (stat_result == 0) {\n");
-                fprintf(ls_source, "        // Stat succeeded, check if it's a directory\n");
-                fprintf(ls_source, "        is_directory = S_ISDIR(st.st_mode);\n");
-                fprintf(ls_source, "    } else {\n");
-                fprintf(ls_source, "        // Stat failed - if target is \".\", assume it's current directory\n");
-                fprintf(ls_source, "        if (strcmp(target, \".\") == 0) {\n");
-                fprintf(ls_source, "            is_directory = true;\n");
-                fprintf(ls_source, "        } else {\n");
-                fprintf(ls_source, "            // File doesn't exist - return 0 (configure scripts expect this)\n");
-                fprintf(ls_source, "            printf(\"%%s\\n\", target);\n");
-                fprintf(ls_source, "            return 0;\n");
-                fprintf(ls_source, "        }\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    // If it's a directory, list its contents\n");
-                fprintf(ls_source, "    DIR *d = NULL;\n");
-                fprintf(ls_source, "    if (is_directory) {\n");
-                fprintf(ls_source, "        d = opendir(target);\n");
-                fprintf(ls_source, "        if (!d) {\n");
-                fprintf(ls_source, "            perror(\"ls\");\n");
-                fprintf(ls_source, "            return 1;\n");
-                fprintf(ls_source, "        }\n");
-                fprintf(ls_source, "    } else {\n");
-                fprintf(ls_source, "        // It's a file (regular, symlink, etc.), just print the filename\n");
-                fprintf(ls_source, "        printf(\"%%s\\n\", target);\n");
-                fprintf(ls_source, "        return 0;\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    struct file_entry *entries = NULL;\n");
-                fprintf(ls_source, "    size_t count = 0;\n");
-                fprintf(ls_source, "    size_t capacity = 64;\n");
-                fprintf(ls_source, "    entries = malloc(capacity * sizeof(struct file_entry));\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    struct dirent *entry;\n");
-                fprintf(ls_source, "    while ((entry = readdir(d)) != NULL) {\n");
-                fprintf(ls_source, "        if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0)\n");
-                fprintf(ls_source, "            continue;\n");
-                fprintf(ls_source, "        \n");
-                fprintf(ls_source, "        char path[1024];\n");
-                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%%s/%%s\", target, entry->d_name);\n");
-                fprintf(ls_source, "        \n");
-                fprintf(ls_source, "        struct stat st;\n");
-                fprintf(ls_source, "        if (stat(path, &st) == 0) {\n");
-                fprintf(ls_source, "            if (count >= capacity) {\n");
-                fprintf(ls_source, "                capacity *= 2;\n");
-                fprintf(ls_source, "                entries = realloc(entries, capacity * sizeof(struct file_entry));\n");
-                fprintf(ls_source, "            }\n");
-                fprintf(ls_source, "            entries[count].name = strdup(entry->d_name);\n");
-                fprintf(ls_source, "            entries[count].mtime = st.st_mtime;\n");
-                fprintf(ls_source, "            count++;\n");
-                fprintf(ls_source, "        }\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    closedir(d);\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    if (sort_by_time) {\n");
-                fprintf(ls_source, "        qsort(entries, count, sizeof(struct file_entry), compare_mtime);\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    for (size_t i = 0; i < count; i++) {\n");
-                fprintf(ls_source, "        printf(\"%%s\\n\", entries[i].name);\n");
-                fprintf(ls_source, "        free(entries[i].name);\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    free(entries);\n");
-                fprintf(ls_source, "    return 0;\n");
-                fprintf(ls_source, "}\n");
-                fclose(ls_source);
-
-                // Try to compile it
-                char compile_cmd[2048];
-                snprintf(compile_cmd, sizeof(compile_cmd),
-                    "(gcc -o '%s' '%s' -O2 -std=c99 2>&1 || "
-                    "cc -o '%s' '%s' -O2 -std=c99 2>&1) && "
-                    "rm -f '%s' && "
-                    "test -x '%s' && "
-                    "('%s' -t . >/dev/null 2>&1 || '%s' . >/dev/null 2>&1) && "
-                    "echo 'ls binary compiled and tested successfully'",
-                    ls_binary_path, ls_source_path,
-                    ls_binary_path, ls_source_path,
-                    ls_source_path,
-                    ls_binary_path,
-                    ls_binary_path, ls_binary_path);
-
-                FILE *compile = popen(compile_cmd, "r");
-                if (compile) {
-                    char compile_output[4096];
-                    size_t compile_read = 0;
-                    while (fgets(compile_output + compile_read, sizeof(compile_output) - compile_read, compile)) {
-                        compile_read += strlen(compile_output + compile_read);
-                    }
-                    int compile_status = pclose(compile);
-                    if (compile_status == 0 && strstr(compile_output, "ls binary compiled and tested successfully") != NULL) {
-                        log_info("Successfully compiled and tested minimal ls binary: %s", ls_binary_path);
-                        ls_binary_exists = true;
-    } else {
-                        log_warning("Failed to compile or test ls binary (exit: %d), falling back to wrapper script", compile_status);
-                        if (compile_read > 0) {
-                            log_debug("Compilation output: %s", compile_output);
-                        }
-                        // Remove source file and any partial binary if compilation failed
-                        unlink(ls_source_path);
-                        unlink(ls_binary_path);
-                    }
-                }
-            }
-        }
-
-        // If binary compilation failed or doesn't exist, create wrapper script as fallback
-        if (!ls_binary_exists) {
-            char ls_wrapper_path[1024];
-            snprintf(ls_wrapper_path, sizeof(ls_wrapper_path), "%s/ls", tsi_bin_dir);
-
-            // Check if wrapper already exists
-            if (stat(ls_wrapper_path, &st) != 0) {
-                FILE *fp = fopen(ls_wrapper_path, "w");
-                if (fp) {
-                    fprintf(fp, "#!/bin/sh\n");
-                    fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
-                    fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
-                    fprintf(fp, "\n");
-                    fprintf(fp, "# Check if -t flag is present\n");
-                    fprintf(fp, "has_t=false\n");
-                    fprintf(fp, "dir=\".\"\n");
-                    fprintf(fp, "for arg in \"$@\"; do\n");
-                    fprintf(fp, "    case \"$arg\" in\n");
-                    fprintf(fp, "        -t) has_t=true ;;\n");
-                    fprintf(fp, "        -t*) has_t=true ;;\n");
-                    fprintf(fp, "        *-t*) has_t=true ;;\n");
-                    fprintf(fp, "        -*) : ;;\n");
-                    fprintf(fp, "        *) dir=\"$arg\" ;;\n");
-                    fprintf(fp, "    esac\n");
-                    fprintf(fp, "done\n");
-                    fprintf(fp, "\n");
-                    fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
-                    fprintf(fp, "    # Try GNU ls first if available\n");
-                    fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
-                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
-                    fprintf(fp, "    fi\n");
-                    fprintf(fp, "    # Try system ls (might work on some systems)\n");
-                    fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
-                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
-                    fprintf(fp, "    fi\n");
-                    fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
-                    fprintf(fp, "    # Create temp file to collect results (avoid subshell issues)\n");
-                    fprintf(fp, "    tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
-                    fprintf(fp, "    > \"$tmp\"\n");
-                    fprintf(fp, "    # Use find to list files and get mtime with stat\n");
-                    fprintf(fp, "    for item in \"$dir\"/* \"$dir\"/.*; do\n");
-                    fprintf(fp, "        [ \"$item\" = \"$dir/*\" ] && continue\n");
-                    fprintf(fp, "        [ \"$item\" = \"$dir/.\" ] && continue\n");
-                    fprintf(fp, "        [ \"$item\" = \"$dir/..\" ] && continue\n");
-                    fprintf(fp, "        if [ -e \"$item\" ]; then\n");
-                    fprintf(fp, "            name=$(basename \"$item\")\n");
-                    fprintf(fp, "            # Get mtime - try Linux format first, then BSD\n");
-                    fprintf(fp, "            mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
-                    fprintf(fp, "            printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
-                    fprintf(fp, "        fi\n");
-                    fprintf(fp, "    done\n");
-                    fprintf(fp, "    # Sort by mtime (descending) and output names only\n");
-                    fprintf(fp, "    sort -rn \"$tmp\" | cut -f2-\n");
-                    fprintf(fp, "    rm -f \"$tmp\"\n");
-                    fprintf(fp, "else\n");
-                    fprintf(fp, "    # No -t flag, just use system ls\n");
-                    fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
-                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
-                    fprintf(fp, "    else\n");
-                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
-                    fprintf(fp, "    fi\n");
-                    fprintf(fp, "fi\n");
-                    fclose(fp);
+                fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
+                fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
+                fprintf(fp, "\n");
+                fprintf(fp, "# Check if -t flag is present\n");
+                fprintf(fp, "has_t=false\n");
+                fprintf(fp, "dir=\".\"\n");
+                fprintf(fp, "for arg in \"$@\"; do\n");
+                fprintf(fp, "    case \"$arg\" in\n");
+                fprintf(fp, "        -t) has_t=true ;;\n");
+                fprintf(fp, "        -t*) has_t=true ;;\n");
+                fprintf(fp, "        *-t*) has_t=true ;;\n");
+                fprintf(fp, "        -*) : ;;\n");
+                fprintf(fp, "        *) dir=\"$arg\" ;;\n");
+                fprintf(fp, "    esac\n");
+                fprintf(fp, "done\n");
+                fprintf(fp, "\n");
+                fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
+                fprintf(fp, "    # Try GNU ls first if available\n");
+                fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
+                fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                fprintf(fp, "    fi\n");
+                fprintf(fp, "    # Try system ls (might work on some systems)\n");
+                fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
+                fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                fprintf(fp, "    fi\n");
+                fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
+                fprintf(fp, "    tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
+                fprintf(fp, "    > \"$tmp\"\n");
+                fprintf(fp, "    for item in \"$dir\"/* \"$dir\"/.*; do\n");
+                fprintf(fp, "        [ \"$item\" = \"$dir/*\" ] && continue\n");
+                fprintf(fp, "        [ \"$item\" = \"$dir/.\" ] && continue\n");
+                fprintf(fp, "        [ \"$item\" = \"$dir/..\" ] && continue\n");
+                fprintf(fp, "        if [ -e \"$item\" ]; then\n");
+                fprintf(fp, "            name=$(basename \"$item\")\n");
+                fprintf(fp, "            mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
+                fprintf(fp, "            printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
+                fprintf(fp, "        fi\n");
+                fprintf(fp, "    done\n");
+                fprintf(fp, "    # Sort by mtime (descending) and output names only\n");
+                fprintf(fp, "    sort -rn \"$tmp\" | cut -f2-\n");
+                fprintf(fp, "    rm -f \"$tmp\"\n");
+                fprintf(fp, "else\n");
+                fprintf(fp, "    # No -t flag, just use system ls\n");
+                fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
+                fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                fprintf(fp, "    else\n");
+                fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                fprintf(fp, "    fi\n");
+                fprintf(fp, "fi\n");
+                fclose(fp);
 
                 // Make it executable
                 char chmod_cmd[512];
                 snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
-                int chmod_result = system(chmod_cmd);
-                if (chmod_result != 0) {
-                    log_warning("Failed to make ls wrapper executable: %s (exit code: %d)", ls_wrapper_path, WEXITSTATUS(chmod_result));
-                } else {
-                    log_info("Created bootstrap ls wrapper: %s", ls_wrapper_path);
-                    log_developer("ls wrapper is executable and ready for use");
+                system(chmod_cmd);
+
+                // Verify it was created
+                if (stat(ls_wrapper_path, &st) == 0 && S_ISREG(st.st_mode)) {
+                    log_info("Successfully created ls wrapper script: %s", ls_wrapper_path);
+                    ls_wrapper_exists = true;
+    } else {
+                    log_warning("Failed to create ls wrapper script");
                 }
             } else {
-                log_warning("Failed to create ls wrapper file: %s", ls_wrapper_path);
+                log_warning("Failed to open ls wrapper script for writing: %s", ls_wrapper_path);
             }
-        } else {
-            // Wrapper already exists, verify it's executable
-            if (!(st.st_mode & S_IXUSR)) {
-                log_info("ls wrapper exists but is not executable, making it executable");
-                char chmod_cmd[512];
-                snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x '%s'", ls_wrapper_path);
-                system(chmod_cmd);
-            }
-            log_developer("ls wrapper already exists: %s", ls_wrapper_path);
-            }
+        }
+
+        // Update needs_ls_wrapper based on whether wrapper was created
+        if (ls_wrapper_exists) {
+            needs_ls_wrapper = true;
+        } else if (coreutils_ls_exists) {
+            needs_ls_wrapper = false; // coreutils ls exists, no need for wrapper
         }
     }
 
