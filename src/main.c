@@ -2,10 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #include "package.h"
 #include "database.h"
 #include "resolver.h"
@@ -223,7 +228,7 @@ static int cmd_install(int argc, char **argv) {
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
 
     char db_dir[1024];
-    len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
+    int len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
     if (len < 0 || (size_t)len >= sizeof(db_dir)) {
         fprintf(stderr, "Error: Path too long\n");
         return 1;
@@ -1441,8 +1446,7 @@ static int cmd_info(int argc, char **argv) {
     }
 
     // Check if package is installed
-    char tsi_prefix[1024];
-    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
+    // tsi_prefix already declared at the start of this function
     char db_dir[1024];
     snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
     Database *db = database_new(db_dir);
@@ -1495,7 +1499,7 @@ static int cmd_update(int argc, char **argv) {
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
 
     char repo_dir[1024];
-    len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
+    int len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
     if (len < 0 || (size_t)len >= sizeof(repo_dir)) {
         fprintf(stderr, "Error: Path too long\n");
         return 1;
