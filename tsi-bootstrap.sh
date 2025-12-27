@@ -333,7 +333,6 @@ main() {
                         log_info "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                         exit 0
                     fi
-                    log_info ""
                 else
                     # No terminal available - can't be interactive
                     log_error "TSI is already installed. Cannot proceed in non-interactive mode."
@@ -917,6 +916,8 @@ main() {
                 echo "" >> "$SHELL_CONFIG"
                 echo "# TSI package manager" >> "$SHELL_CONFIG"
                 echo "export PATH=\"$PREFIX/bin:\$PATH\"" >> "$SHELL_CONFIG"
+                # Mark that we added PATH so completion can be added under same comment later
+                PATH_ADDED_IN_SESSION=true
                 log_info "✓ Added PATH to $SHELL_CONFIG"
             fi
             log_info ""
@@ -933,26 +934,26 @@ main() {
                 if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
                     SHELL_CONFIG="$HOME/.zshrc"
                     COMPLETION_FILE="$PREFIX/share/completions/tsi.zsh"
-                    if [ -f "$COMPLETION_FILE" ]; then
-                        if grep -q "source $COMPLETION_FILE" "$SHELL_CONFIG" 2>/dev/null; then
-                            log_info "Autocompletion already configured in $SHELL_CONFIG"
-                        else
-                            echo "source $COMPLETION_FILE" >> "$SHELL_CONFIG"
-                            log_info "✓ Added autocompletion to $SHELL_CONFIG"
-                            log_info "  Run 'source $SHELL_CONFIG' to enable in current session"
-                        fi
-                    fi
                 else
                     SHELL_CONFIG="$HOME/.bashrc"
                     COMPLETION_FILE="$PREFIX/share/completions/tsi.bash"
-                    if [ -f "$COMPLETION_FILE" ]; then
-                        if grep -q "source $COMPLETION_FILE" "$SHELL_CONFIG" 2>/dev/null; then
-                            log_info "Autocompletion already configured in $SHELL_CONFIG"
+                fi
+                if [ -f "$COMPLETION_FILE" ]; then
+                    if grep -q "source $COMPLETION_FILE" "$SHELL_CONFIG" 2>/dev/null; then
+                        log_info "Autocompletion already configured in $SHELL_CONFIG"
+                    else
+                        # If PATH was added in this session, add completion under the same comment
+                        if [ "${PATH_ADDED_IN_SESSION:-false}" = "true" ]; then
+                            echo "source $COMPLETION_FILE" >> "$SHELL_CONFIG"
+                            log_info "✓ Added autocompletion to $SHELL_CONFIG (under TSI package manager section)"
                         else
+                            # PATH wasn't added, add completion with its own comment
+                            echo "" >> "$SHELL_CONFIG"
+                            echo "# TSI package manager" >> "$SHELL_CONFIG"
                             echo "source $COMPLETION_FILE" >> "$SHELL_CONFIG"
                             log_info "✓ Added autocompletion to $SHELL_CONFIG"
-                            log_info "  Run 'source $SHELL_CONFIG' to enable in current session"
                         fi
+                        log_info "  Run 'source $SHELL_CONFIG' to enable in current session"
                     fi
                 fi
                 log_info ""

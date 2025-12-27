@@ -6,6 +6,8 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <stdint.h>
+#include <limits.h>
 
 // Helper function to parse package@version string
 static void parse_package_version(const char *dep_spec, char **name_out, char **version_out) {
@@ -617,14 +619,42 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
     while (*result_count < packages_count) {
         log_developer("Topological sort iteration: *result_count=%zu, packages_count=%zu", *result_count, packages_count);
         bool found = false;
+        // First pass: look for coreutils (bootstrap priority - provides ls needed by make)
+        size_t selected_idx = SIZE_MAX;
         for (size_t i = 0; i < packages_count; i++) {
             if (!added[i] && in_degree[i] == 0) {
-                log_developer("Adding package %zu: '%s' (in_degree=0)", *result_count, packages[i]);
-                char *dup_str = strdup(packages[i]);
-                if (!dup_str) {
-                    log_error("strdup failed for '%s'", packages[i]);
-                    continue;
+                char *pkg_name = NULL;
+                char *pkg_version = NULL;
+                parse_package_version(packages[i], &pkg_name, &pkg_version);
+                const char *actual_name = pkg_name ? pkg_name : packages[i];
+                if (strcmp(actual_name, "coreutils") == 0) {
+                    selected_idx = i;
+                    if (pkg_name) free(pkg_name);
+                    if (pkg_version) free(pkg_version);
+                    break;
                 }
+                if (pkg_name) free(pkg_name);
+                if (pkg_version) free(pkg_version);
+            }
+        }
+        // Second pass: if coreutils not found, pick first available
+        if (selected_idx == SIZE_MAX) {
+            for (size_t i = 0; i < packages_count; i++) {
+                if (!added[i] && in_degree[i] == 0) {
+                    selected_idx = i;
+                    break;
+                }
+            }
+        }
+        // Add selected package
+        if (selected_idx != SIZE_MAX) {
+            size_t i = selected_idx;
+            log_developer("Adding package %zu: '%s' (in_degree=0)", *result_count, packages[i]);
+            char *dup_str = strdup(packages[i]);
+            if (!dup_str) {
+                log_error("strdup failed for '%s'", packages[i]);
+                // Continue to next iteration
+            } else {
                 result[*result_count] = dup_str;
                 log_developer("  Assigned result[%zu] = '%s' (pointer: %p)", *result_count, result[*result_count], (void*)result[*result_count]);
                 (*result_count)++;
