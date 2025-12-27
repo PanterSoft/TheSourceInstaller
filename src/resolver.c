@@ -588,13 +588,8 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
 
         Package *pkg = pkg_version ? repository_get_package_version(resolver->repository, actual_name, pkg_version) : repository_get_package(resolver->repository, actual_name);
         if (pkg) {
-            for (size_t j = 0; j < pkg->dependencies_count; j++) {
-                if (!pkg->dependencies[j]) continue;
-                int dep_idx = find_package_index(packages, packages_count, pkg->dependencies[j]);
-                if (dep_idx >= 0) {
-                    in_degree[i]++;
-                }
-            }
+            // For build order, only consider build_dependencies, not runtime dependencies
+            // Runtime dependencies are needed at runtime but don't affect build order
             for (size_t j = 0; j < pkg->build_dependencies_count; j++) {
                 if (!pkg->build_dependencies[j]) continue;
                 int dep_idx = find_package_index(packages, packages_count, pkg->build_dependencies[j]);
@@ -673,35 +668,20 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
                             Package *other = repository_get_package(resolver->repository, other_name);
                             if (other) {
                                 // Check if other package depends on added package
-                                // Need to check both dependencies and build_dependencies, handling package@version format
+                                // For build order, only check build_dependencies (not runtime dependencies)
                                 bool has_dep = false;
-                                for (size_t k = 0; k < other->dependencies_count; k++) {
-                                    if (!other->dependencies[k]) continue;
-                                    char *dep_name = NULL;
-                                    char *dep_version = NULL;
-                                    parse_package_version(other->dependencies[k], &dep_name, &dep_version);
-                                    const char *dep_name_str = dep_name ? dep_name : other->dependencies[k];
-                                    if (strcmp(dep_name_str, added_name) == 0) {
+                                for (size_t k = 0; k < other->build_dependencies_count; k++) {
+                                    if (!other->build_dependencies[k]) continue;
+                                    char *build_dep_name = NULL;
+                                    char *build_dep_version = NULL;
+                                    parse_package_version(other->build_dependencies[k], &build_dep_name, &build_dep_version);
+                                    const char *build_dep_name_str = build_dep_name ? build_dep_name : other->build_dependencies[k];
+                                    if (strcmp(build_dep_name_str, added_name) == 0) {
                                         has_dep = true;
                                     }
-                                    if (dep_name) free(dep_name);
-                                    if (dep_version) free(dep_version);
+                                    if (build_dep_name) free(build_dep_name);
+                                    if (build_dep_version) free(build_dep_version);
                                     if (has_dep) break;
-                                }
-                                if (!has_dep) {
-                                    for (size_t k = 0; k < other->build_dependencies_count; k++) {
-                                        if (!other->build_dependencies[k]) continue;
-                                        char *build_dep_name = NULL;
-                                        char *build_dep_version = NULL;
-                                        parse_package_version(other->build_dependencies[k], &build_dep_name, &build_dep_version);
-                                        const char *build_dep_name_str = build_dep_name ? build_dep_name : other->build_dependencies[k];
-                                        if (strcmp(build_dep_name_str, added_name) == 0) {
-                                            has_dep = true;
-                                        }
-                                        if (build_dep_name) free(build_dep_name);
-                                        if (build_dep_version) free(build_dep_version);
-                                        if (has_dep) break;
-                                    }
                                 }
                                 if (has_dep) {
                                     log_developer("  Package '%s' depends on '%s', decreasing in_degree[%zu] from %d to %d",
