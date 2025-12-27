@@ -1830,24 +1830,35 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Initialize logging (file logging disabled by default to prevent hangs)
-    const char *enable_console_log = getenv("TSI_LOG_TO_CONSOLE");
-        log_set_file(false);
-        log_set_console(enable_console_log && strcmp(enable_console_log, "1") == 0);
-    if (log_get_level() == LOG_LEVEL_NONE) {
-        log_set_level(LOG_LEVEL_DEVELOPER);
+    // ============================================================================
+    // LOGGING INITIALIZATION - Must happen before config loading
+    // ============================================================================
+    // Initialize logging system from environment variables first
+    // This allows early logging before config is loaded
+    log_init_from_env();
+
+    // Enable console logging by default if not explicitly disabled
+    // This ensures users see INFO, WARNING, and ERROR messages
+    const char *console_setting = getenv("TSI_LOG_TO_CONSOLE");
+    if (!console_setting) {
+        log_set_console(true);  // Enable by default
+        log_set_level(LOG_LEVEL_INFO);  // Default to INFO level (shows INFO, WARNING, ERROR)
     }
 
     // ============================================================================
     // CONFIGURATION LOADING - Central to TSI's operation
     // ============================================================================
     // Configuration is a fundamental part of TSI. The config file (tsi.cfg) controls
-    // core behavior like strict isolation mode. Config is loaded early here so it's
-    // available to all commands and subsystems throughout TSI's execution.
+    // core behavior like strict isolation mode and logging settings. Config is loaded
+    // early here so it's available to all commands and subsystems throughout TSI's execution.
     // ============================================================================
     char tsi_prefix[1024];
     get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
     config_load(tsi_prefix);
+
+    // Apply logging configuration from config file (overrides environment and defaults)
+    // This happens after config_load so we can read logging settings from tsi.cfg
+    config_apply_logging_settings();
 
     if (argc < 2) {
         print_usage(argv[0]);

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>  // For strcasecmp
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -80,6 +81,25 @@ static bool config_create_default(const char *tsi_prefix) {
     fprintf(fp, "# During bootstrap, minimal system tools (gcc, /bin/sh) are still used\n");
     fprintf(fp, "# Set to 'true' to enable strict isolation, 'false' to disable (default)\n");
     fprintf(fp, "strict_isolation=false\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "# Logging Configuration\n");
+    fprintf(fp, "# Log level: DEVELOPER, DEBUG, INFO, WARNING, ERROR, or NONE\n");
+    fprintf(fp, "# Default: INFO (shows INFO, WARNING, ERROR messages)\n");
+    fprintf(fp, "log_level=INFO\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "# Enable console logging (output to stderr)\n");
+    fprintf(fp, "# Set to 'true' to enable, 'false' to disable\n");
+    fprintf(fp, "# Default: true (enabled)\n");
+    fprintf(fp, "log_to_console=true\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "# Enable file logging (output to log file)\n");
+    fprintf(fp, "# Set to 'true' to enable, 'false' to disable\n");
+    fprintf(fp, "# Default: false (disabled to prevent hangs on some systems)\n");
+    fprintf(fp, "log_to_file=false\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "# Log file path (only used if log_to_file=true)\n");
+    fprintf(fp, "# Default: $HOME/.tsi/tsi.log or /opt/tsi/logs/tsi.log\n");
+    fprintf(fp, "# log_file_path=\n");
 
     fclose(fp);
     log_info("Created default config file: %s", config_path);
@@ -177,12 +197,47 @@ bool config_load(const char *tsi_prefix) {
                 log_warning("Invalid value for strict_isolation in config: %s (expected true/false/1/0/yes/no)", value);
             }
         }
+        // Parse logging settings (stored for later application)
+        else if (strcmp(key, "log_level") == 0) {
+            LogLevel level = log_level_from_string(value);
+            if (level != LOG_LEVEL_NONE || strcasecmp(value, "NONE") == 0) {
+                log_set_level(level);
+                log_debug("Log level set to: %s", value);
+            } else {
+                log_warning("Invalid log level in config: %s (expected DEVELOPER/DEBUG/INFO/WARNING/ERROR/NONE)", value);
+            }
+        }
+        else if (strcmp(key, "log_to_console") == 0) {
+            bool enable = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0 || strcmp(value, "yes") == 0);
+            log_set_console(enable);
+            log_debug("Console logging %s", enable ? "enabled" : "disabled");
+        }
+        else if (strcmp(key, "log_to_file") == 0) {
+            bool enable = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0 || strcmp(value, "yes") == 0);
+            log_set_file(enable);
+            log_debug("File logging %s", enable ? "enabled" : "disabled");
+        }
+        else if (strcmp(key, "log_file_path") == 0 && strlen(value) > 0) {
+            if (log_set_file_path(value) == 0) {
+                log_debug("Log file path set to: %s", value);
+            } else {
+                log_warning("Failed to set log file path: %s", value);
+            }
+        }
     }
 
     fclose(fp);
     g_config.initialized = true;
     log_debug("Config loaded successfully (strict_isolation=%s)", g_config.strict_isolation ? "true" : "false");
     return true;
+}
+
+// Apply logging settings from config file
+// This is called after config_load to ensure logging settings from tsi.cfg are applied
+void config_apply_logging_settings(void) {
+    // Settings are already applied during config_load parsing
+    // This function exists for future extensibility and to make the API clear
+    log_debug("Logging settings applied from config file");
 }
 
 bool config_is_strict_isolation(void) {
