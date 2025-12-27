@@ -253,12 +253,30 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
             main_install_dir[sizeof(main_install_dir) - 1] = '\0';
         }
 
-    // For all autotools packages, create a minimal ls wrapper if needed
-    // This helps when building on systems with BusyBox ls that doesn't support -t
-    // Configure scripts need ls -t to check build environment sanity
+    // For all autotools packages, we need ls -t for configure scripts
+    // The best solution: ensure coreutils is installed first (it provides ls)
+    // Only create minimal ls binary/wrapper if coreutils is not available and we're not building coreutils itself
     const char *build_system_check = pkg->build_system ? pkg->build_system : "autotools";
-    bool needs_ls_wrapper = (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0);
+    bool needs_ls = (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0);
+    bool is_coreutils = (strcmp(pkg->name, "coreutils") == 0);
+
+    if (needs_ls && !is_coreutils) {
+        // Check if coreutils ls is available
+        char coreutils_ls[1024];
+        snprintf(coreutils_ls, sizeof(coreutils_ls), "%s/bin/ls", main_install_dir);
+        struct stat st;
+        bool coreutils_ls_exists = (stat(coreutils_ls, &st) == 0 && S_ISREG(st.st_mode));
+
+        if (!coreutils_ls_exists) {
+            // Check if coreutils is installed in database
+            // Note: We can't easily check the database here without passing it as a parameter
+            // So we'll just check if the binary exists and create minimal ls if not
+            log_info("coreutils ls not found - will use minimal ls binary/wrapper for bootstrap");
+        }
+    }
+
     // Also check if system make is available - if not, we'll need to bootstrap make differently
+    bool needs_ls_wrapper = needs_ls; // Keep old name for compatibility with rest of code
     if (needs_ls_wrapper) {
         // Check if system make is available
         int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
@@ -406,59 +424,61 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
             // Check if wrapper already exists
             if (stat(ls_wrapper_path, &st) != 0) {
                 FILE *fp = fopen(ls_wrapper_path, "w");
-            if (fp) {
-                fprintf(fp, "#!/bin/sh\n");
-                fprintf(fp, "# Minimal ls wrapper for bootstrap builds\n");
-                fprintf(fp, "# Tries GNU ls first, then falls back to system ls with workaround for -t\n");
-                fprintf(fp, "if [ -x /usr/bin/ls ] && /usr/bin/ls -t / >/dev/null 2>&1; then\n");
-                fprintf(fp, "    exec /usr/bin/ls \"$@\"\n");
-                fprintf(fp, "elif [ -x /bin/ls ]; then\n");
-                fprintf(fp, "    # Check if -t flag is present (standalone or combined)\n");
-                fprintf(fp, "    has_t=false\n");
-                fprintf(fp, "    for arg in \"$@\"; do\n");
-                fprintf(fp, "        case \"$arg\" in\n");
-                fprintf(fp, "            -t) has_t=true; break ;;\n");
-                fprintf(fp, "            -t*) has_t=true; break ;;\n");
-                fprintf(fp, "            *-t*) has_t=true; break ;;\n");
-                fprintf(fp, "        esac\n");
-                fprintf(fp, "    done\n");
-                fprintf(fp, "    if [ \"$has_t\" = \"true\" ]; then\n");
-                fprintf(fp, "        # Try system ls first (use explicit path to avoid recursion)\n");
-                fprintf(fp, "        if /bin/ls \"$@\" 2>/dev/null; then\n");
-                fprintf(fp, "            exit 0\n");
-                fprintf(fp, "        fi\n");
-                fprintf(fp, "        # Workaround for BusyBox ls that doesn't support -t\n");
-                fprintf(fp, "        # Parse arguments to find directory\n");
-                fprintf(fp, "        dir=\".\"\n");
-                fprintf(fp, "        skip_next=false\n");
-                fprintf(fp, "        for arg in \"$@\"; do\n");
-                fprintf(fp, "            if [ \"$skip_next\" = \"true\" ]; then\n");
-                fprintf(fp, "                dir=\"$arg\"\n");
-                fprintf(fp, "                break\n");
-                fprintf(fp, "            fi\n");
-                fprintf(fp, "            case \"$arg\" in\n");
-                fprintf(fp, "                -t) skip_next=true ;;\n");
-                fprintf(fp, "                -t*) dir=\".\" ;;\n");
-                fprintf(fp, "                -*) continue ;;\n");
-                fprintf(fp, "                *) dir=\"$arg\"; break ;;\n");
-                fprintf(fp, "            esac\n");
-                fprintf(fp, "        done\n");
-                fprintf(fp, "        # Use find + stat to implement ls -t\n");
-                fprintf(fp, "        find \"$dir\" -maxdepth 1 ! -name \".\" ! -name \"..\" 2>/dev/null | while read item; do\n");
-                fprintf(fp, "            if [ -f \"$item\" ] || [ -d \"$item\" ]; then\n");
-                fprintf(fp, "                mtime=$(stat -c \"%%Y\" \"$item\" 2>/dev/null || stat -f \"%%m\" \"$item\" 2>/dev/null || echo \"0\")\n");
-                fprintf(fp, "                printf \"%%s\\t%%s\\n\" \"$mtime\" \"$(basename \"$item\")\"\n");
-                fprintf(fp, "            fi\n");
-                fprintf(fp, "        done | sort -rn | cut -f2-\n");
-                fprintf(fp, "    else\n");
-                fprintf(fp, "        # No -t flag, use system ls directly (avoid recursion)\n");
-                fprintf(fp, "        exec /bin/ls \"$@\"\n");
-                fprintf(fp, "    fi\n");
-                fprintf(fp, "else\n");
-                fprintf(fp, "    echo 'ls: command not found' >&2\n");
-                fprintf(fp, "    exit 1\n");
-                fprintf(fp, "fi\n");
-                fclose(fp);
+                if (fp) {
+                    fprintf(fp, "#!/bin/sh\n");
+                    fprintf(fp, "# Minimal ls wrapper for bootstrap builds on BusyBox\n");
+                    fprintf(fp, "# Implements ls -t using find + stat for BusyBox systems\n");
+                    fprintf(fp, "\n");
+                    fprintf(fp, "# Check if -t flag is present\n");
+                    fprintf(fp, "has_t=false\n");
+                    fprintf(fp, "dir=\".\"\n");
+                    fprintf(fp, "for arg in \"$@\"; do\n");
+                    fprintf(fp, "    case \"$arg\" in\n");
+                    fprintf(fp, "        -t) has_t=true ;;\n");
+                    fprintf(fp, "        -t*) has_t=true ;;\n");
+                    fprintf(fp, "        *-t*) has_t=true ;;\n");
+                    fprintf(fp, "        -*) : ;;\n");
+                    fprintf(fp, "        *) dir=\"$arg\" ;;\n");
+                    fprintf(fp, "    esac\n");
+                    fprintf(fp, "done\n");
+                    fprintf(fp, "\n");
+                    fprintf(fp, "if [ \"$has_t\" = \"true\" ]; then\n");
+                    fprintf(fp, "    # Try GNU ls first if available\n");
+                    fprintf(fp, "    if [ -x /usr/bin/ls ] && /usr/bin/ls -t \"$dir\" >/dev/null 2>&1; then\n");
+                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "    # Try system ls (might work on some systems)\n");
+                    fprintf(fp, "    if /bin/ls \"$@\" >/dev/null 2>&1; then\n");
+                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "    # BusyBox ls doesn't support -t, implement it with find + stat\n");
+                    fprintf(fp, "    # Create temp file to collect results (avoid subshell issues)\n");
+                    fprintf(fp, "    tmp=$(mktemp 2>/dev/null || echo /tmp/ls-tmp-$$)\n");
+                    fprintf(fp, "    > \"$tmp\"\n");
+                    fprintf(fp, "    # Use find to list files and get mtime with stat\n");
+                    fprintf(fp, "    for item in \"$dir\"/* \"$dir\"/.*; do\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/*\" ] && continue\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/.\" ] && continue\n");
+                    fprintf(fp, "        [ \"$item\" = \"$dir/..\" ] && continue\n");
+                    fprintf(fp, "        if [ -e \"$item\" ]; then\n");
+                    fprintf(fp, "            name=$(basename \"$item\")\n");
+                    fprintf(fp, "            # Get mtime - try Linux format first, then BSD\n");
+                    fprintf(fp, "            mtime=$(stat -c '%%Y' \"$item\" 2>/dev/null || stat -f '%%m' \"$item\" 2>/dev/null || echo 0)\n");
+                    fprintf(fp, "            printf '%%s\\t%%s\\n' \"$mtime\" \"$name\" >> \"$tmp\"\n");
+                    fprintf(fp, "        fi\n");
+                    fprintf(fp, "    done\n");
+                    fprintf(fp, "    # Sort by mtime (descending) and output names only\n");
+                    fprintf(fp, "    sort -rn \"$tmp\" | cut -f2-\n");
+                    fprintf(fp, "    rm -f \"$tmp\"\n");
+                    fprintf(fp, "else\n");
+                    fprintf(fp, "    # No -t flag, just use system ls\n");
+                    fprintf(fp, "    if [ -x /usr/bin/ls ]; then\n");
+                    fprintf(fp, "        exec /usr/bin/ls \"$@\"\n");
+                    fprintf(fp, "    else\n");
+                    fprintf(fp, "        exec /bin/ls \"$@\"\n");
+                    fprintf(fp, "    fi\n");
+                    fprintf(fp, "fi\n");
+                    fclose(fp);
 
                 // Make it executable
                 char chmod_cmd[512];

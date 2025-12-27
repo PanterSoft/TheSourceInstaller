@@ -797,12 +797,57 @@ install_package:
         installed = database_list_installed(db, &installed_count);
     }
 
+    // CRITICAL: For autotools packages (except coreutils itself), ensure coreutils is available first
+    // Coreutils provides ls which is needed for configure scripts on BusyBox systems
+    Package *pkg_check = package_version ? repository_get_package_version(repo, package_name, package_version) : repository_get_package(repo, package_name);
+    bool needs_coreutils = false;
+    if (pkg_check) {
+        const char *build_system = pkg_check->build_system ? pkg_check->build_system : "autotools";
+        bool needs_ls = (strcmp(pkg_check->name, "make") == 0 || strcmp(build_system, "autotools") == 0);
+        bool is_coreutils = (strcmp(pkg_check->name, "coreutils") == 0);
+        needs_coreutils = (needs_ls && !is_coreutils);
+    }
+
     // Resolve dependencies
     log_debug("Resolving dependencies for package: %s@%s", package_name, package_version ? package_version : "latest");
     log_developer("Installed packages count: %zu", installed_count);
     size_t deps_count = 0;
     char **deps = resolver_resolve(resolver, package_name, installed, installed_count, &deps_count);
     log_debug("Dependency resolution returned %zu dependencies", deps_count);
+
+    // If package needs ls -t and coreutils isn't already a dependency, add it
+    if (needs_coreutils) {
+        bool coreutils_in_deps = false;
+        bool coreutils_installed = false;
+
+        // Check if coreutils is installed
+        for (size_t i = 0; i < installed_count; i++) {
+            if (installed[i] && strncmp(installed[i], "coreutils", 9) == 0 && (installed[i][9] == '\0' || installed[i][9] == '@')) {
+                coreutils_installed = true;
+                break;
+            }
+        }
+
+        // Check if coreutils is already in dependencies
+        if (deps) {
+            for (size_t i = 0; i < deps_count; i++) {
+                if (!deps[i]) continue;
+                if (strncmp(deps[i], "coreutils", 9) == 0 && (deps[i][9] == '\0' || deps[i][9] == '@')) {
+                    coreutils_in_deps = true;
+                    break;
+                }
+            }
+        }
+
+        if (!coreutils_in_deps && !coreutils_installed) {
+            log_info("Package %s needs ls -t for configure, adding coreutils as dependency", package_name);
+            deps = realloc(deps, sizeof(char*) * (deps_count + 1));
+            if (deps) {
+                deps[deps_count++] = strdup("coreutils");
+                log_info("Added coreutils to dependency list (now %zu dependencies)", deps_count);
+            }
+        }
+    }
 
     if (!deps) {
         // Package exists but dependency resolution failed
