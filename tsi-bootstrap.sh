@@ -316,44 +316,35 @@ main() {
                 log_error "Or use environment variable (recommended):"
                 log_error "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                 exit 1
-            elif [ -t 0 ] && [ -t 1 ]; then
-                # Interactive terminal - ask for confirmation
-                log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
-                log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
-                read -r user_response
-                if [ "$user_response" != "yes" ]; then
-                    log_info "Installation cancelled."
-                    log_info ""
-                    log_info "To update your existing installation, use:"
-                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
-                    log_info "  # Or use environment variable:"
-                    log_info "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
-                    exit 0
-                fi
-                log_info ""
             else
-                # Not a terminal, but not explicitly non-interactive - try to be interactive anyway
-                # This handles cases where stdin might not be a TTY but we still want to prompt
-                log_warn "Warning: Not running in a terminal, but attempting interactive mode."
-                log_warn "If this fails, use --non-interactive flag or set NON_INTERACTIVE=1"
-                log_info ""
-                log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
-                log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
-                read -r user_response || {
-                    log_error "Failed to read user input. Use --non-interactive flag or set NON_INTERACTIVE=1"
+                # Interactive mode - check if we can read from terminal
+                # When piping (curl ... | sh), stdin is the pipe, but we can read from /dev/tty
+                if [ -t 1 ] && [ -c /dev/tty ] 2>/dev/null; then
+                    # We have a terminal - read from /dev/tty to bypass stdin pipe
+                    log_info "Do you want to proceed with a fresh installation? (this will rebuild TSI)"
+                    log_info "Type 'yes' to continue, or press Ctrl+C to cancel: "
+                    read -r user_response < /dev/tty
+                    if [ "$user_response" != "yes" ]; then
+                        log_info "Installation cancelled."
+                        log_info ""
+                        log_info "To update your existing installation, use:"
+                        log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                        log_info "  # Or use environment variable:"
+                        log_info "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                        exit 0
+                    fi
+                    log_info ""
+                else
+                    # No terminal available - can't be interactive
+                    log_error "TSI is already installed. Cannot proceed in non-interactive mode."
                     log_error ""
                     log_error "To update your existing installation, use:"
                     log_error "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
+                    log_error ""
+                    log_error "Or use environment variable (recommended):"
+                    log_error "  REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                     exit 1
-                }
-                if [ "$user_response" != "yes" ]; then
-                    log_info "Installation cancelled."
-                    log_info ""
-                    log_info "To update your existing installation, use:"
-                    log_info "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s repair"
-                    exit 0
                 fi
-                log_info ""
             fi
         fi
     fi
@@ -754,7 +745,7 @@ main() {
     # Initialize package repository
     # Copy basic set of packages so TSI works immediately without git
     # Do this for both fresh installs and repairs (to ensure packages are available)
-    log_info ""
+        log_info ""
     log_info "Setting up package repository..."
     mkdir -p "$PREFIX/packages"
 
@@ -840,7 +831,11 @@ main() {
 
         # Prompt for permanent PATH setup
         log_info "Add TSI to PATH permanently in your shell config? (y/n): "
-        read -r permanent_path_response
+        if [ -c /dev/tty ] 2>/dev/null; then
+            read -r permanent_path_response < /dev/tty
+        else
+            read -r permanent_path_response
+        fi
         if [ "$permanent_path_response" = "y" ] || [ "$permanent_path_response" = "Y" ] || [ "$permanent_path_response" = "yes" ]; then
             if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
                 SHELL_CONFIG="$HOME/.zshrc"
@@ -866,7 +861,11 @@ main() {
         # Prompt for autocompletion
         if [ -f "$PREFIX/share/completions/tsi.bash" ] || [ -f "$PREFIX/share/completions/tsi.zsh" ]; then
             log_info "Enable shell autocompletion for TSI? (y/n): "
-            read -r autocomplete_response
+            if [ -c /dev/tty ] 2>/dev/null; then
+                read -r autocomplete_response < /dev/tty
+            else
+                read -r autocomplete_response
+            fi
             if [ "$autocomplete_response" = "y" ] || [ "$autocomplete_response" = "Y" ] || [ "$autocomplete_response" = "yes" ]; then
                 if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
                     SHELL_CONFIG="$HOME/.zshrc"
