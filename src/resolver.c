@@ -720,6 +720,35 @@ char** resolver_get_build_order(DependencyResolver *resolver, char **packages, s
         }
         if (!found) {
             log_warning("No package found with in_degree=0, but *result_count=%zu < packages_count=%zu", *result_count, packages_count);
+            // Circular dependency detected - report which packages are stuck
+            log_error("Circular dependency detected! Remaining packages with dependencies:");
+            for (size_t i = 0; i < packages_count; i++) {
+                if (!added[i]) {
+                    char *pkg_name = NULL;
+                    char *pkg_version = NULL;
+                    parse_package_version(packages[i], &pkg_name, &pkg_version);
+                    const char *actual_name = pkg_name ? pkg_name : packages[i];
+                    Package *pkg = repository_get_package(resolver->repository, actual_name);
+                    if (pkg) {
+                        log_error("  %s (in_degree=%d)", actual_name, in_degree[i]);
+                        if (pkg->dependencies_count > 0 || pkg->build_dependencies_count > 0) {
+                            log_error("    Dependencies:");
+                            for (size_t j = 0; j < pkg->dependencies_count; j++) {
+                                if (pkg->dependencies[j]) {
+                                    log_error("      - %s (runtime)", pkg->dependencies[j]);
+                                }
+                            }
+                            for (size_t j = 0; j < pkg->build_dependencies_count; j++) {
+                                if (pkg->build_dependencies[j]) {
+                                    log_error("      - %s (build)", pkg->build_dependencies[j]);
+                                }
+                            }
+                        }
+                    }
+                    if (pkg_name) free(pkg_name);
+                    if (pkg_version) free(pkg_version);
+                }
+            }
             // Circular dependency or error - check if we added all packages
             if (*result_count < packages_count) {
                 // Failed to add all packages - free result and return NULL

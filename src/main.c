@@ -116,7 +116,7 @@ static void print_usage(const char *prog_name) {
     printf("Usage: %s <command> [options]\n\n", prog_name);
     printf("Commands:\n");
     printf("  install [--force] [--prefix PATH] <package>  Install a package\n");
-    printf("  remove <package>                             Remove an installed package\n");
+    printf("  remove <package> [package...]                Remove installed package(s)\n");
     printf("  list                                         List installed packages\n");
     printf("  info <package>                               Show package information\n");
     printf("  versions <package>                           List all available versions\n");
@@ -178,6 +178,73 @@ static bool run_command_with_window(const char *overview, const char *detail, co
     }
 
     return status == 0;
+}
+
+static int cmd_remove(int argc, char **argv) {
+    const char *prefix = NULL;
+    int package_count = 0;
+    const char **packages = NULL;
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--prefix") == 0 && i + 1 < argc) {
+            prefix = argv[++i];
+        } else if (argv[i][0] != '-') {
+            // Not an option, treat as package name
+            package_count++;
+            packages = realloc((void*)packages, sizeof(const char*) * package_count);
+            if (!packages) {
+                fprintf(stderr, "Error: Memory allocation failed\n");
+                return 1;
+            }
+            packages[package_count - 1] = argv[i];
+        }
+    }
+
+    if (package_count == 0) {
+        fprintf(stderr, "Error: at least one package name required\n");
+        fprintf(stderr, "Usage: tsi remove [--prefix PATH] <package> [package...]\n");
+        if (packages) free((void*)packages);
+        return 1;
+    }
+
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
+
+    char db_dir[1024];
+    int len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
+    if (len < 0 || (size_t)len >= sizeof(db_dir)) {
+        fprintf(stderr, "Error: Path too long\n");
+        if (packages) free((void*)packages);
+        return 1;
+    }
+
+    Database *db = database_new(db_dir);
+    if (!db) {
+        fprintf(stderr, "Error: Failed to open database\n");
+        if (packages) free((void*)packages);
+        return 1;
+    }
+
+    int success_count = 0;
+    int fail_count = 0;
+
+    // Remove each package
+    for (int i = 0; i < package_count; i++) {
+        if (database_remove_package(db, packages[i])) {
+            printf("Removed %s\n", packages[i]);
+            success_count++;
+        } else {
+            fprintf(stderr, "Warning: Package %s is not installed\n", packages[i]);
+            fail_count++;
+        }
+    }
+
+    database_free(db);
+    if (packages) free((void*)packages);
+
+    // Return 0 if all succeeded, 1 if any failed
+    return (fail_count > 0) ? 1 : 0;
 }
 
 static int cmd_install(int argc, char **argv) {
@@ -1749,32 +1816,7 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "install") == 0) {
         return cmd_install(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "remove") == 0) {
-        if (argc < 3) {
-            fprintf(stderr, "Error: package name required\n");
-            return 1;
-        }
-        char tsi_prefix[1024];
-        get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
-        char db_dir[1024];
-        int len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
-        if (len < 0 || (size_t)len >= sizeof(db_dir)) {
-            fprintf(stderr, "Error: Path too long\n");
-            return 1;
-        }
-        Database *db = database_new(db_dir);
-        if (database_remove_package(db, argv[2])) {
-            char msg[256];
-            snprintf(msg, sizeof(msg), "Removed %s", argv[2]);
-            printf("%s\n", msg);
-            database_free(db);
-            return 0;
-        } else {
-            char warn_msg[256];
-            snprintf(warn_msg, sizeof(warn_msg), "Package %s is not installed", argv[2]);
-            fprintf(stderr, "Warning: %s\n", warn_msg);
-            database_free(db);
-            return 1;
-        }
+        return cmd_remove(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "list") == 0) {
         return cmd_list(argc - 1, argv + 1);
     } else if (strcmp(argv[1], "info") == 0) {

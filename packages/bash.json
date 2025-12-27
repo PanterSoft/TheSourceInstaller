@@ -7,7 +7,6 @@
     "url": "https://ftp.gnu.org/gnu/bash/bash-5.2.21.tar.gz"
   },
   "dependencies": [
-    "readline",
     "ncurses"
   ],
   "build_dependencies": ["m4", "ncurses"],

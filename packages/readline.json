@@ -10,8 +10,9 @@
     "ncurses"
   ],
   "build_dependencies": [
-    "make",
-    "coreutils"
+    "m4",
+    "coreutils",
+    "make"
   ],
   "build_system": "autotools",
   "configure_args": [],

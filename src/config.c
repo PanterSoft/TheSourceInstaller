@@ -26,6 +26,7 @@ void config_get_path(char *path, size_t size, const char *tsi_prefix) {
 }
 
 // Create default config file if it doesn't exist
+// IMPORTANT: Never overwrites existing config file - user modifications are preserved
 static bool config_create_default(const char *tsi_prefix) {
     if (!tsi_prefix) {
         return false;
@@ -34,16 +35,27 @@ static bool config_create_default(const char *tsi_prefix) {
     char config_path[1024];
     config_get_path(config_path, sizeof(config_path), tsi_prefix);
 
-    // Check if config file already exists
+    // Check if config file already exists - NEVER overwrite existing config
     struct stat st;
     if (stat(config_path, &st) == 0) {
-        log_debug("Config file already exists: %s", config_path);
-        return true; // Already exists, nothing to do
+        log_debug("Config file already exists: %s (preserving user configuration)", config_path);
+        return true; // Already exists, preserve user configuration
     }
 
-    // Create default config file
+    // Create default config file only if it doesn't exist
+    // Double-check file doesn't exist (race condition protection)
+    if (stat(config_path, &st) == 0) {
+        log_debug("Config file was created between checks, preserving it");
+        return true; // File exists now, preserve it
+    }
+
     FILE *fp = fopen(config_path, "w");
     if (!fp) {
+        // Final check - file might have been created between stat and fopen
+        if (stat(config_path, &st) == 0) {
+            log_debug("Config file was created by another process, preserving it");
+            return true; // File exists now, preserve it
+        }
         log_warning("Failed to create default config file: %s", config_path);
         return false;
     }

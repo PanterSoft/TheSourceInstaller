@@ -740,7 +740,8 @@ main() {
         log_warn "  Completion scripts not found (optional)"
     fi
 
-    # Create default config file
+    # Create default config file (only if it doesn't exist)
+    # IMPORTANT: Never overwrites existing config file - user modifications are preserved
     log_info ""
     log_info "Creating default configuration..."
     if [ ! -f "$PREFIX/tsi.cfg" ]; then
@@ -756,7 +757,7 @@ strict_isolation=false
 EOF
         log_info "  Created default config file: $PREFIX/tsi.cfg"
     else
-        log_info "  Config file already exists: $PREFIX/tsi.cfg"
+        log_info "  Config file already exists: $PREFIX/tsi.cfg (preserving user configuration)"
     fi
 
     # Initialize package repository

@@ -184,8 +184,8 @@ fi
 # If static linking didn't work or we're not on Linux, try dynamic linking
 if [ "$LINK_SUCCESS" = false ]; then
     if ! $CC $OBJECTS -o bin/tsi -w 2>&1; then
-        echo -e "${RED}✗ Linking failed${RESET}"
-        exit 1
+    echo -e "${RED}✗ Linking failed${RESET}"
+    exit 1
     fi
 fi
 
@@ -205,7 +205,7 @@ echo -e "${GREEN}${BOLD}═══>${RESET} ${GREEN}📥 Installing TSI to $TSI_P
 # Create directories
 mkdir -p "$TSI_PREFIX/bin"
 mkdir -p "$TSI_PREFIX/share/completions"
-mkdir -p "$TSI_PREFIX/repos"
+mkdir -p "$TSI_PREFIX/packages"
 
 # Copy binary
 cp src/bin/tsi "$TSI_PREFIX/bin/tsi"
@@ -225,13 +225,44 @@ if [ -f "completions/tsi.zsh" ]; then
     echo -e "  ${GREEN}✓${RESET} Installed zsh completion"
 fi
 
+# Create default config file (only if it doesn't exist)
+# IMPORTANT: Never overwrites existing config file - user modifications are preserved
+echo -e "  ${BLUE}Creating default configuration...${RESET}"
+if [ ! -f "$TSI_PREFIX/tsi.cfg" ]; then
+    cat > "$TSI_PREFIX/tsi.cfg" << 'EOF'
+# TSI Configuration File
+# This file controls TSI behavior
+#
+# Strict Isolation Mode
+# When enabled, TSI will only use TSI-installed packages after bootstrap
+# During bootstrap, minimal system tools (gcc, /bin/sh) are still used
+# Set to 'true' to enable strict isolation, 'false' to disable (default)
+strict_isolation=false
+EOF
+    echo -e "  ${GREEN}✓${RESET} Created default config file: $TSI_PREFIX/tsi.cfg"
+else
+    echo -e "  ${BLUE}✓${RESET} Config file already exists: $TSI_PREFIX/tsi.cfg (preserving user configuration)"
+fi
+
 # Copy local packages to repository (for testing local package changes)
+echo -e "  ${BLUE}Setting up package repository...${RESET}"
 if [ -d "packages" ]; then
-    PACKAGE_COUNT=$(find packages -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
+    PACKAGE_COUNT=0
+    for pkg_file in packages/*.json; do
+        if [ -f "$pkg_file" ]; then
+            pkg_name=$(basename "$pkg_file")
+            cp "$pkg_file" "$TSI_PREFIX/packages/$pkg_name" 2>/dev/null || true
+            PACKAGE_COUNT=$((PACKAGE_COUNT + 1))
+        fi
+    done
     if [ "$PACKAGE_COUNT" -gt 0 ]; then
-        cp packages/*.json "$TSI_PREFIX/repos/" 2>/dev/null || true
-        echo -e "  ${GREEN}✓${RESET} Synced $PACKAGE_COUNT package definitions to repository"
+        echo -e "  ${GREEN}✓${RESET} Installed $PACKAGE_COUNT package definitions"
+        echo -e "  ${GREEN}✓${RESET} Package repository is ready to use!"
+    else
+        echo -e "  ${YELLOW}⚠${RESET} No package definitions found in packages/"
     fi
+else
+    echo -e "  ${YELLOW}⚠${RESET} Packages directory not found, repository will be empty"
 fi
 
 echo ""
