@@ -322,9 +322,8 @@ main() {
                 if [ -t 1 ] && [ -c /dev/tty ] 2>/dev/null; then
                     # We have a terminal - read from /dev/tty to bypass stdin pipe
                     # Write prompt to /dev/tty so it appears on the terminal
-                    printf "[INFO] Do you want to proceed with a fresh installation? (this will rebuild TSI)\n" > /dev/tty
-                    printf "[INFO] Type 'yes' to continue, or press Ctrl+C to cancel: " > /dev/tty
-                    read -r user_response < /dev/tty
+                    # Use a single printf to avoid multiple history entries
+                    { printf "[INFO] Do you want to proceed with a fresh installation? (this will rebuild TSI)\n[INFO] Type 'yes' to continue, or press Ctrl+C to cancel: " > /dev/tty; read -r user_response < /dev/tty; printf "\n" > /dev/tty; }
                     if [ "$user_response" != "yes" ]; then
                         log_info "Installation cancelled."
                         log_info ""
@@ -889,12 +888,8 @@ main() {
 
         # Prompt for current session PATH export
         # Write prompt to /dev/tty so it appears on the terminal
-        printf "[INFO] Add TSI to PATH for this terminal session? (y/n): " > /dev/tty
-        if [ -c /dev/tty ] 2>/dev/null; then
-            read -r export_path_response < /dev/tty
-        else
-            read -r export_path_response
-        fi
+        # Use command grouping to prevent history recording
+        { printf "[INFO] Add TSI to PATH for this terminal session? (y/n): " > /dev/tty; if [ -c /dev/tty ] 2>/dev/null; then read -r export_path_response < /dev/tty; else read -r export_path_response; fi; printf "\n" > /dev/tty; }
         if [ "$export_path_response" = "y" ] || [ "$export_path_response" = "Y" ] || [ "$export_path_response" = "yes" ]; then
             export PATH="$PREFIX/bin:$PATH"
             log_info "✓ Added TSI to PATH for current terminal session"
@@ -906,12 +901,8 @@ main() {
         fi
 
         # Prompt for permanent PATH setup
-        printf "Add TSI to PATH permanently in your shell config? (y/n): " > /dev/tty
-        if [ -c /dev/tty ] 2>/dev/null; then
-            read -r permanent_path_response < /dev/tty
-        else
-            read -r permanent_path_response
-        fi
+        # Use command grouping to prevent history recording
+        { printf "[INFO] Add TSI to PATH permanently in your shell config? (y/n): " > /dev/tty; if [ -c /dev/tty ] 2>/dev/null; then read -r permanent_path_response < /dev/tty; else read -r permanent_path_response; fi; printf "\n" > /dev/tty; }
         if [ "$permanent_path_response" = "y" ] || [ "$permanent_path_response" = "Y" ] || [ "$permanent_path_response" = "yes" ]; then
             if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
                 SHELL_CONFIG="$HOME/.zshrc"
@@ -936,12 +927,8 @@ main() {
 
         # Prompt for autocompletion
         if [ -f "$PREFIX/share/completions/tsi.bash" ] || [ -f "$PREFIX/share/completions/tsi.zsh" ]; then
-            printf "Enable shell autocompletion for TSI? (y/n): " > /dev/tty
-            if [ -c /dev/tty ] 2>/dev/null; then
-                read -r autocomplete_response < /dev/tty
-            else
-                read -r autocomplete_response
-            fi
+            # Use command grouping to prevent history recording
+            { printf "[INFO] Enable shell autocompletion for TSI? (y/n): " > /dev/tty; if [ -c /dev/tty ] 2>/dev/null; then read -r autocomplete_response < /dev/tty; else read -r autocomplete_response; fi; printf "\n" > /dev/tty; }
             if [ "$autocomplete_response" = "y" ] || [ "$autocomplete_response" = "Y" ] || [ "$autocomplete_response" = "yes" ]; then
                 if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
                     SHELL_CONFIG="$HOME/.zshrc"

@@ -184,7 +184,13 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
     // For bootstrap packages (like make), create a minimal ls wrapper if needed
     // This helps when building make on systems with BusyBox ls that doesn't support -t
+    // Also check if system make is available - if not, we'll need to bootstrap make differently
     if (strcmp(pkg->name, "make") == 0) {
+        // Check if system make is available
+        int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
+        if (!has_system_make) {
+            log_info("System make not found - will bootstrap make from C compiler only");
+        }
         char main_install_dir[1024];
         char *last_slash = strrchr(config->install_dir, '/');
         if (last_slash) {
@@ -368,6 +374,31 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     log_developer("Install directory: %s", config->install_dir);
 
     if (strcmp(build_system, "autotools") == 0) {
+        // Special bootstrap handling for make: if no system make available, try direct compilation
+        if (strcmp(pkg->name, "make") == 0) {
+            int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
+            if (!has_system_make) {
+                log_info("Bootstrap mode: No system make found, attempting direct compilation from C source");
+                // Try to compile make directly - GNU Make can be built this way
+                char bootstrap_cmd[2048];
+                snprintf(bootstrap_cmd, sizeof(bootstrap_cmd),
+                    "cd '%s' && "
+                    "(gcc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
+                    "cc -o make *.c -I. -DHAVE_CONFIG_H 2>&1 || "
+                    "gcc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1 || "
+                    "cc -o make src/*.c -I. -Isrc -DHAVE_CONFIG_H 2>&1) && "
+                    "mkdir -p '%s/bin' && cp make '%s/bin/make'",
+                    source_dir, main_install_dir, main_install_dir);
+                int bootstrap_result = execute_build_command(bootstrap_cmd, "bootstrap make", pkg->name);
+                if (bootstrap_result == 0) {
+                    log_info("Bootstrap make compiled successfully - installed to %s/bin", main_install_dir);
+                    // Now we have make, continue with normal autotools build
+                } else {
+                    log_warning("Direct bootstrap compilation failed, will try configure approach");
+                }
+            }
+        }
+
         // Check for configure script
         char configure[512];
         snprintf(configure, sizeof(configure), "%s/configure", source_dir);

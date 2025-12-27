@@ -7,7 +7,7 @@
     "url": "https://ftp.gnu.org/gnu/coreutils/coreutils-9.9.tar.xz"
   },
   "dependencies": [],
-  "build_dependencies": ["make"],
+  "build_dependencies": [],
   "build_system": "autotools",
   "configure_args": [],
   "env": {}
