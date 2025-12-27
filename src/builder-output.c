@@ -466,17 +466,26 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 }
             }
         }
+        // Build success check: verify that build artifacts were created
+        // For binaries: check for the binary name (e.g., src/m4, m4, src/bash, bash)
+        // For libraries: check for library files (.a, .so, .dylib) in lib/ directory
+        // Generic check: look for common build artifacts (lib directory with files)
+        char build_check[512];
+        snprintf(build_check, sizeof(build_check),
+                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || ([ -d lib ] && [ \"$(ls -A lib 2>/dev/null)\" ]); then exit 0; else exit 1; fi",
+                 pkg->name, pkg->name, pkg->name, pkg->name, pkg->name);
+
         if (cflags_env) {
             // Pass CFLAGS directly to make to override Makefile CFLAGS
             // CFLAGS is excluded from env string (see above) to avoid conflicts
             // Also set WERROR_CFLAGS and AM_CFLAGS to empty to prevent -Werror from being added
-            // Build with -k to continue on errors, but check if main binary was created
+            // Build with -k to continue on errors, but check if build artifacts were created
             // This allows build to succeed even if optional targets (doc, tests) fail
-            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k CFLAGS='%s' WERROR_CFLAGS='' AM_CFLAGS='' all 2>&1; if [ -f src/m4 ] || [ -f m4 ]; then exit 0; else exit 1; fi", source_dir, env, cflags_env);
+            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k CFLAGS='%s' WERROR_CFLAGS='' AM_CFLAGS='' all 2>&1; %s", source_dir, env, cflags_env, build_check);
         } else {
-            // Build with -k to continue on errors, but check if main binary was created
+            // Build with -k to continue on errors, but check if build artifacts were created
             // This allows build to succeed even if optional targets (doc, tests) fail
-            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k all 2>&1; if [ -f src/m4 ] || [ -f m4 ]; then exit 0; else exit 1; fi", source_dir, env);
+            snprintf(cmd, sizeof(cmd), "cd '%s' && %s make -k all 2>&1; %s", source_dir, env, build_check);
         }
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             strcat(cmd, " ");

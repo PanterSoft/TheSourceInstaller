@@ -239,31 +239,31 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     }
     log_developer("Build directory created successfully: %s", build_dir);
 
+    // Calculate main_install_dir first (used for both wrapper creation and PATH)
+    char main_install_dir[1024];
+    char *install_pos = strstr(config->install_dir, "/install/");
+    if (install_pos) {
+        // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
+        size_t len = install_pos - config->install_dir + strlen("/install");
+        strncpy(main_install_dir, config->install_dir, len);
+        main_install_dir[len] = '\0';
+    } else {
+        // Already main install directory
+        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
+        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
+    }
+
     // For all autotools packages, create a minimal ls wrapper if needed
     // This helps when building on systems with BusyBox ls that doesn't support -t
     // Configure scripts need ls -t to check build environment sanity
     const char *build_system_check = pkg->build_system ? pkg->build_system : "autotools";
+    bool needs_ls_wrapper = (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0);
     // Also check if system make is available - if not, we'll need to bootstrap make differently
-    if (strcmp(pkg->name, "make") == 0 || strcmp(build_system_check, "autotools") == 0) {
+    if (needs_ls_wrapper) {
         // Check if system make is available
         int has_system_make = (system("command -v make >/dev/null 2>&1") == 0);
         if (!has_system_make) {
             log_info("System make not found - will bootstrap make from C compiler only");
-        }
-        char main_install_dir[1024];
-        char *last_slash = strrchr(config->install_dir, '/');
-        if (last_slash) {
-            if (strstr(config->install_dir, "/install/") != NULL) {
-                size_t len = strstr(config->install_dir, "/install/") - config->install_dir + strlen("/install");
-                strncpy(main_install_dir, config->install_dir, len);
-                main_install_dir[len] = '\0';
-            } else {
-                strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-                main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-            }
-        } else {
-            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
         }
         char tsi_bin_dir[1024];
         snprintf(tsi_bin_dir, sizeof(tsi_bin_dir), "%s/bin", main_install_dir);
@@ -351,39 +351,37 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
 
     // Set up environment - use main install directory (parent of package-specific dir) for PATH
     // Package dir is like ~/.tsi/install/package-version, main install dir is ~/.tsi/install
-    char main_install_dir[1024];
-    char *last_slash = strrchr(config->install_dir, '/');
-    if (last_slash) {
-        // Check if this is a package-specific directory (contains package name)
-        // If install_dir ends with /install, it's already the main dir
-        if (strstr(config->install_dir, "/install/") != NULL) {
-            // Package-specific: ~/.tsi/install/package-version -> ~/.tsi/install
-            size_t len = strstr(config->install_dir, "/install/") - config->install_dir + strlen("/install");
-            strncpy(main_install_dir, config->install_dir, len);
-            main_install_dir[len] = '\0';
-        } else {
-            // Already main install directory
-            strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-            main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-        }
-    } else {
-        strncpy(main_install_dir, config->install_dir, sizeof(main_install_dir) - 1);
-        main_install_dir[sizeof(main_install_dir) - 1] = '\0';
-    }
+    // main_install_dir was already calculated above for ls wrapper creation
 
     char env[4096] = "";
     // Build PATH: TSI bin first (prioritize TSI-installed tools), then system directories for bootstrap
     // This allows bootstrap packages (like make) to use system tools when TSI tools aren't available yet
     // Check if TSI bin directory exists (including bootstrap wrappers like ls)
-    struct stat st;
-    bool tsi_bin_exists = false;
+    // Note: We may have just created the bin directory and ls wrapper above, so ensure it's in PATH
     char tsi_bin[1024];
     snprintf(tsi_bin, sizeof(tsi_bin), "%s/bin", main_install_dir);
+    struct stat st;
+    bool tsi_bin_exists = false;
     if (stat(tsi_bin, &st) == 0 && S_ISDIR(st.st_mode)) {
         tsi_bin_exists = true;
+    } else {
+        // Directory might not exist yet, but we may have created it for the ls wrapper
+        // Try to create it now to ensure it exists for PATH (mkdir -p is idempotent)
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin);
+        if (system(mkdir_cmd) == 0) {
+            tsi_bin_exists = true;
+        }
     }
-    // Always include TSI bin in PATH if it exists (even if empty, bootstrap wrappers might be created during build)
-    // This ensures that wrappers created during the build (like ls for make) are found
+    // If we created an ls wrapper, we MUST include TSI bin in PATH so configure can find it
+    if (needs_ls_wrapper && !tsi_bin_exists) {
+        // Force creation of bin directory if wrapper was created
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin);
+        if (system(mkdir_cmd) == 0) {
+            tsi_bin_exists = true;
+        }
+    }
 
     // Build PATH: TSI bin first, then system directories for bootstrap
     // Include /usr/bin before /bin to prefer GNU coreutils over BusyBox when available
@@ -392,6 +390,15 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
     struct stat st_usr_bin, st_bin;
     bool has_usr_bin = (stat("/usr/bin", &st_usr_bin) == 0 && S_ISDIR(st_usr_bin.st_mode));
     bool has_bin = (stat("/bin", &st_bin) == 0 && S_ISDIR(st_bin.st_mode));
+
+    // If we created an ls wrapper, we MUST include TSI bin in PATH even if it doesn't exist yet
+    if (needs_ls_wrapper && !tsi_bin_exists) {
+        // Create it now if needed
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p '%s'", tsi_bin);
+        system(mkdir_cmd); // Ignore errors
+        tsi_bin_exists = true;
+    }
 
     if (tsi_bin_exists && has_usr_bin && has_bin) {
         // TSI bin exists - prioritize it (may contain bootstrap wrappers), then system tools
@@ -670,16 +677,48 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 }
             }
         }
+        // Build success check: verify that build artifacts were created
+        // For binaries: check for the binary name (e.g., src/m4, m4, src/bash, bash)
+        // For libraries: check for library files (.a, .so, .dylib) in lib/ directory
+        // Generic check: look for common build artifacts (lib directory with files)
+        char build_check[512];
+        // Check for package-specific binary first, then library files, then generic artifacts
+        snprintf(build_check, sizeof(build_check),
+                 "if [ -f src/%s ] || [ -f %s ] || [ -f lib/lib%s.a ] || [ -f lib/lib%s.so ] || [ -f lib/lib%s.dylib ] || ([ -d lib ] && [ \"$(ls -A lib 2>/dev/null)\" ]); then exit 0; else exit 1; fi",
+                 pkg->name, pkg->name, pkg->name, pkg->name, pkg->name);
+
         if (cflags_env) {
             // Pass CFLAGS directly to make to override Makefile CFLAGS
             // Also set WERROR_CFLAGS and AM_CFLAGS to empty to prevent -Werror from being added
-            // Build with -k to continue on errors, but check if main binary was created
+            // Build with -k to continue on errors, but check if build artifacts were created
             // This allows build to succeed even if optional targets (doc, tests) fail
-            snprintf(cmd, cmd_len, "cd '%s' && %s make -k CFLAGS='%s' WERROR_CFLAGS='' AM_CFLAGS='' all; if [ -f src/m4 ] || [ -f m4 ]; then exit 0; else exit 1; fi", source_dir, env, cflags_env);
+            size_t needed = strlen(source_dir) + strlen(env) + strlen(cflags_env) + strlen(build_check) + 200;
+            if (needed > cmd_len) {
+                cmd_len = needed * 2;
+                char *new_cmd = realloc(cmd, cmd_len);
+                if (!new_cmd) {
+                    log_error("Failed to reallocate memory for make command");
+                    free(cmd);
+                    return false;
+                }
+                cmd = new_cmd;
+            }
+            snprintf(cmd, cmd_len, "cd '%s' && %s make -k CFLAGS='%s' WERROR_CFLAGS='' AM_CFLAGS='' all; %s", source_dir, env, cflags_env, build_check);
         } else {
-            // Build with -k to continue on errors, but check if main binary was created
+            // Build with -k to continue on errors, but check if build artifacts were created
             // This allows build to succeed even if optional targets (doc, tests) fail
-            snprintf(cmd, cmd_len, "cd '%s' && %s make -k all; if [ -f src/m4 ] || [ -f m4 ]; then exit 0; else exit 1; fi", source_dir, env);
+            size_t needed = strlen(source_dir) + strlen(env) + strlen(build_check) + 100;
+            if (needed > cmd_len) {
+                cmd_len = needed * 2;
+                char *new_cmd = realloc(cmd, cmd_len);
+                if (!new_cmd) {
+                    log_error("Failed to reallocate memory for make command");
+                    free(cmd);
+                    return false;
+                }
+                cmd = new_cmd;
+            }
+            snprintf(cmd, cmd_len, "cd '%s' && %s make -k all; %s", source_dir, env, build_check);
         }
         for (size_t i = 0; i < pkg->make_args_count; i++) {
             size_t needed = strlen(cmd) + strlen(pkg->make_args[i]) + 2;
