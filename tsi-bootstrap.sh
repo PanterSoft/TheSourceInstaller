@@ -14,15 +14,9 @@ TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
 REPAIR_MODE=false
 
-# Ensure basic system directories are in PATH (needed for minimal systems)
-# Add common system directories if not already present
-case ":${PATH}:" in
-    *:/bin:*) ;;
-    *) export PATH="/bin:/usr/bin:${PATH}" ;;
-esac
-
 # Isolate TSI: prioritize TSI's bin directory in PATH
 # This ensures TSI uses its own installed tools when available
+# Only add TSI to PATH, don't modify existing PATH
 if [ -d "${PREFIX}/bin" ]; then
     export PATH="${PREFIX}/bin:${PATH}"
 fi
@@ -755,6 +749,7 @@ main() {
     # Check if we're in an interactive shell (not piped)
     if [ -t 0 ] && [ -t 1 ]; then
         # Interactive terminal - export PATH for current session
+        # Only prepend TSI, leave existing PATH untouched
         export PATH="$PREFIX/bin:$PATH"
         log_info "✓ Added TSI to PATH for current terminal session"
         log_info ""
@@ -765,11 +760,15 @@ main() {
         log_info "To use TSI in this terminal session, run:"
         log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
         log_info ""
+        log_info "This command only adds TSI to your PATH and leaves everything else unchanged."
+        log_info ""
     fi
 
     log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log_info "To add TSI to PATH permanently:"
     log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info ""
+    log_info "The commands below only add TSI to your PATH and leave everything else unchanged."
     log_info ""
     if [ -n "$ZSH_VERSION" ] || [ -n "$ZSH" ]; then
         log_info "For zsh, add to ~/.zshrc:"
@@ -796,6 +795,7 @@ main() {
         log_info "  echo 'source $PREFIX/share/completions/tsi.bash' >> ~/.bashrc"
         log_info "  source ~/.bashrc"
     fi
+    log_info ""
     log_info ""
     if [ "$REPAIR_MODE" != true ]; then
         log_info "Package repository is ready! Try: tsi list"
