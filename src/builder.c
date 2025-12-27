@@ -366,7 +366,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 fprintf(ls_source, "            continue;\n");
                 fprintf(ls_source, "        \n");
                 fprintf(ls_source, "        char path[1024];\n");
-                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%s/%s\", dir, entry->d_name);\n");
+                fprintf(ls_source, "        snprintf(path, sizeof(path), \"%%s/%%s\", dir, entry->d_name);\n");
                 fprintf(ls_source, "        \n");
                 fprintf(ls_source, "        struct stat st;\n");
                 fprintf(ls_source, "        if (stat(path, &st) == 0) {\n");
@@ -710,6 +710,29 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
         log_developer("Checking for configure script at: %s", configure);
         if (stat(configure, &st) != 0) {
             log_info("Configure script not found at: %s", configure);
+
+            // First, verify the source directory has content (extraction might have failed)
+            DIR *dir_check = opendir(source_dir);
+            size_t file_count = 0;
+            if (dir_check) {
+                struct dirent *entry;
+                while ((entry = readdir(dir_check)) != NULL) {
+                    if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                        file_count++;
+                    }
+                }
+                closedir(dir_check);
+            }
+
+            if (file_count == 0) {
+                log_error("Source directory is empty: %s", source_dir);
+                log_error("Archive extraction appears to have failed completely");
+                log_error("Please check the download and extraction logs above for errors");
+                return false;
+            } else {
+                log_info("Source directory contains %zu files, but configure script is missing", file_count);
+            }
+
             // Configure script not found - try bootstrap scripts first
             log_info("Configure script not found, checking for bootstrap scripts");
 
@@ -756,6 +779,30 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                 bool has_configure_in = (stat(configure_in, &st) == 0);
 
                 if (!has_configure_ac && !has_configure_in) {
+                    // Check if source directory is empty or has very few files (extraction might have failed)
+                    DIR *dir_check = opendir(source_dir);
+                    size_t file_count = 0;
+                    if (dir_check) {
+                        struct dirent *entry;
+                        while ((entry = readdir(dir_check)) != NULL) {
+                            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                                file_count++;
+                            }
+                        }
+                        closedir(dir_check);
+                    }
+
+                    if (file_count == 0) {
+                        log_error("Source directory is empty: %s", source_dir);
+                        log_error("Archive extraction appears to have failed completely");
+                        log_error("Please check the download and extraction logs above for errors");
+                        return false;
+                    } else if (file_count < 5) {
+                        log_error("Source directory has very few files (%zu) - extraction may have failed", file_count);
+                        log_error("Source directory: %s", source_dir);
+                        log_error("Expected files like configure, Makefile.in, README, etc. are missing");
+                    }
+
                     log_error("No configure script found and no configure.ac or configure.in found in source directory");
                     log_error("This strongly suggests that archive extraction failed or was incomplete");
                     log_error("Source directory: %s", source_dir);
@@ -763,6 +810,7 @@ bool builder_build(BuilderConfig *config, Package *pkg, const char *source_dir, 
                     log_error("  1. The archive was downloaded completely");
                     log_error("  2. The archive extraction succeeded (check for errors above)");
                     log_error("  3. The source directory contains the expected files");
+                    log_error("  4. For coreutils, the tarball should include a pre-generated configure script");
                     return false;
                 }
 
