@@ -8,11 +8,18 @@ set -e
 # Note: We don't use 'set -u' because some shells handle $@ differently
 # and we use parameter expansion with defaults like ${VAR:-default}
 
-PREFIX="${PREFIX:-$HOME/.tsi}"
+PREFIX="${PREFIX:-/opt/tsi}"
 TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
 REPAIR_MODE=false
+
+# Ensure basic system directories are in PATH (needed for minimal systems)
+# Add common system directories if not already present
+case ":${PATH}:" in
+    *:/bin:*) ;;
+    *) export PATH="/bin:/usr/bin:${PATH}" ;;
+esac
 
 # Isolate TSI: prioritize TSI's bin directory in PATH
 # This ensures TSI uses its own installed tools when available
@@ -207,21 +214,21 @@ main() {
                 echo ""
                 echo "Options:"
                 echo "  --repair          Repair/update existing TSI installation"
-                echo "  --prefix PATH     Installation prefix (default: \$HOME/.tsi)"
+                echo "  --prefix PATH     Installation prefix (default: /opt/tsi)"
                 echo "                    Examples:"
                 echo "                      --prefix /opt/tsi     (system-wide, requires root)"
                 echo "                      --prefix ~/.tsi       (user-local, default)"
                 echo "  --help, -h        Show this help"
                 echo ""
                 echo "Examples:"
-                echo "  # Install to default location (~/.tsi)"
-                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo "  # Install to default location (/opt/tsi, requires root)"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sudo sh"
                 echo ""
-                echo "  # Install to /opt/tsi (requires root)"
-                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi"
+                echo "  # Install to user location (~/.tsi)"
+                echo "  curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/.tsi"
                 echo ""
                 echo "  # Install to custom location using environment variable"
-                echo "  PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
+                echo "  PREFIX=~/my-tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh"
                 echo ""
                 exit 0
                 ;;
@@ -253,14 +260,12 @@ main() {
         log_info "=================================="
         log_info ""
         log_info "Installation prefix: $PREFIX"
-        if [ "$PREFIX" != "$HOME/.tsi" ]; then
-            # Check if prefix requires root permissions
-            case "$PREFIX" in
-                /opt/*|/usr/local/*|/usr/*)
-                    log_info "Note: Installing to system directory (may require root permissions)"
-                    ;;
-            esac
-        fi
+        # Check if prefix requires root permissions
+        case "$PREFIX" in
+            /opt/*|/usr/local/*|/usr/*)
+                log_info "Note: Installing to system directory (may require root permissions)"
+                ;;
+        esac
         log_info ""
 
         # Check if already installed
@@ -695,13 +700,23 @@ main() {
         mkdir -p "$PREFIX/repos"
 
         # Find packages directory (could be in tsi/ or parent)
+        # We're currently in src/ directory, so packages could be:
+        # - ../packages (from tsi/packages)
+        # - ../../packages (if we're deeper)
+        # - packages (if in root)
         PACKAGES_DIR=""
+        # Try relative to current directory (src/)
         if [ -d "../packages" ]; then
             PACKAGES_DIR="../packages"
-        elif [ -d "packages" ]; then
-            PACKAGES_DIR="packages"
+        # Try from install directory root
         elif [ -d "../../packages" ]; then
             PACKAGES_DIR="../../packages"
+        # Try from tsi root (if we're in tsi/src)
+        elif [ -d "packages" ]; then
+            PACKAGES_DIR="packages"
+        # Try absolute path from INSTALL_DIR
+        elif [ -d "$INSTALL_DIR/tsi/packages" ]; then
+            PACKAGES_DIR="$INSTALL_DIR/tsi/packages"
         fi
 
         if [ -n "$PACKAGES_DIR" ] && [ -d "$PACKAGES_DIR" ]; then

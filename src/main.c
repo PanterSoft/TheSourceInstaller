@@ -1455,8 +1455,9 @@ static int cmd_update(int argc, char **argv) {
     }
 
     // Create repo directory if it doesn't exist
+    // Use absolute path to mkdir to avoid PATH issues
     char cmd[2048];
-    int cmd_len = snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", repo_dir);
+    int cmd_len = snprintf(cmd, sizeof(cmd), "/bin/mkdir -p '%s' 2>/dev/null || /usr/bin/mkdir -p '%s' 2>/dev/null || true", repo_dir, repo_dir);
     if (cmd_len >= 0 && (size_t)cmd_len < sizeof(cmd)) {
         system(cmd);
     }
