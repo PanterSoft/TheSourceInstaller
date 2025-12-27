@@ -306,6 +306,13 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
         bool ls_binary_exists = false;
         if (!coreutils_ls_exists) {
             ls_binary_exists = (stat(ls_binary_path, &st) == 0 && S_ISREG(st.st_mode));
+            // Always recompile the ls binary to ensure it has the latest fixes
+            // Remove old binary if it exists so we can recompile with updated code
+            if (ls_binary_exists) {
+                log_debug("Removing old ls binary to recompile with latest fixes");
+                unlink(ls_binary_path);
+                ls_binary_exists = false;
+            }
         }
 
         if (!coreutils_ls_exists && !ls_binary_exists) {
@@ -356,17 +363,18 @@ bool builder_build_with_output(BuilderConfig *config, Package *pkg, const char *
                 fprintf(ls_source, "        return 1;\n");
                 fprintf(ls_source, "    }\n");
                 fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    // If it's a file, just print the filename\n");
-                fprintf(ls_source, "    if (S_ISREG(st.st_mode)) {\n");
+                fprintf(ls_source, "    // If it's a directory, list its contents\n");
+                fprintf(ls_source, "    DIR *d = NULL;\n");
+                fprintf(ls_source, "    if (S_ISDIR(st.st_mode)) {\n");
+                fprintf(ls_source, "        d = opendir(target);\n");
+                fprintf(ls_source, "        if (!d) {\n");
+                fprintf(ls_source, "            perror(\"ls\");\n");
+                fprintf(ls_source, "            return 1;\n");
+                fprintf(ls_source, "        }\n");
+                fprintf(ls_source, "    } else {\n");
+                fprintf(ls_source, "        // It's a file (regular, symlink, etc.), just print the filename\n");
                 fprintf(ls_source, "        printf(\"%%s\\n\", target);\n");
                 fprintf(ls_source, "        return 0;\n");
-                fprintf(ls_source, "    }\n");
-                fprintf(ls_source, "    \n");
-                fprintf(ls_source, "    // It's a directory, list its contents\n");
-                fprintf(ls_source, "    DIR *d = opendir(target);\n");
-                fprintf(ls_source, "    if (!d) {\n");
-                fprintf(ls_source, "        perror(\"ls\");\n");
-                fprintf(ls_source, "        return 1;\n");
                 fprintf(ls_source, "    }\n");
                 fprintf(ls_source, "    \n");
                 fprintf(ls_source, "    struct file_entry *entries = NULL;\n");
