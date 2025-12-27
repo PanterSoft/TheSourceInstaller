@@ -40,6 +40,71 @@ static const char *get_home_dir(void) {
     return home ? home : "/root";
 }
 
+// Get TSI installation prefix by detecting where the binary is located
+// Returns the prefix (e.g., /opt/tsi or ~/.tsi) or NULL if detection fails
+static const char *get_tsi_prefix(void) {
+    static char prefix[1024] = {0};
+    static bool initialized = false;
+
+    if (initialized) {
+        return prefix[0] ? prefix : NULL;
+    }
+    initialized = true;
+
+    // Try to get the full path to the executable
+    char exe_path[1024] = {0};
+    ssize_t len = 0;
+
+#ifdef __APPLE__
+    uint32_t size = sizeof(exe_path);
+    if (_NSGetExecutablePath(exe_path, &size) == 0) {
+        len = strlen(exe_path);
+    }
+#else
+    // Linux: try /proc/self/exe first (most reliable)
+    len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+#endif
+
+    if (len > 0 && len < (ssize_t)sizeof(exe_path)) {
+        exe_path[len] = '\0';
+        // Find the last /bin/tsi pattern and extract prefix
+        char *bin_pos = strstr(exe_path, "/bin/tsi");
+        if (bin_pos) {
+            size_t prefix_len = bin_pos - exe_path;
+            if (prefix_len > 0 && prefix_len < sizeof(prefix)) {
+                strncpy(prefix, exe_path, prefix_len);
+                prefix[prefix_len] = '\0';
+                return prefix;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+// Get TSI prefix with fallback to default location
+// This is the main function to use - it auto-detects or falls back to $HOME/.tsi
+static void get_tsi_prefix_with_fallback(char *tsi_prefix, size_t size, const char *user_prefix) {
+    if (user_prefix) {
+        // User explicitly provided prefix
+        strncpy(tsi_prefix, user_prefix, size - 1);
+        tsi_prefix[size - 1] = '\0';
+        return;
+    }
+
+    // Try to auto-detect from binary location
+    const char *detected = get_tsi_prefix();
+    if (detected) {
+        strncpy(tsi_prefix, detected, size - 1);
+        tsi_prefix[size - 1] = '\0';
+        return;
+    }
+
+    // Fallback to default location
+    const char *home = get_home_dir();
+    snprintf(tsi_prefix, size, "%s/.tsi", home);
+}
+
 static void print_usage(const char *prog_name) {
     printf("TSI - TheSourceInstaller\n");
     printf("Usage: %s <command> [options]\n\n", prog_name);
@@ -154,20 +219,8 @@ static int cmd_install(int argc, char **argv) {
         return 1;
     }
 
-    const char *home = get_home_dir();
-
     char tsi_prefix[1024];
-    int len;
-    if (prefix) {
-        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
-        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
-    } else {
-        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
-        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
-            fprintf(stderr, "Error: Path too long\n");
-            return 1;
-        }
-    }
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
 
     char db_dir[1024];
     len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
@@ -287,11 +340,12 @@ static int cmd_install(int argc, char **argv) {
                         char script_path[2048];
                         // Try to find script relative to repo (assuming we're in a TSI installation)
                         // First try: scripts/discover-versions.py (if running from repo root)
-                        // Second try: ~/.tsi/scripts/discover-versions.py (if installed)
-                        const char *home = get_home_dir();
+                        // Second try: TSI_PREFIX/scripts/discover-versions.py (if installed)
+                        char tsi_prefix[1024];
+                        get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
                         // Try installed location first
-                        len = snprintf(script_path, sizeof(script_path), "%s/.tsi/scripts/discover-versions.py", home);
+                        len = snprintf(script_path, sizeof(script_path), "%s/scripts/discover-versions.py", tsi_prefix);
                         if (len >= 0 && (size_t)len < sizeof(script_path)) {
                             struct stat st;
                             if (stat(script_path, &st) != 0) {
@@ -1065,10 +1119,11 @@ cleanup:
 static int cmd_list(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    const char *home = get_home_dir();
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
     char db_dir[1024];
-    snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+    snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
 
     Database *db = database_new(db_dir);
     if (!db) {
@@ -1105,10 +1160,11 @@ static int cmd_versions(int argc, char **argv) {
     }
 
     const char *package_name = argv[1];
-    const char *home = get_home_dir();
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
     char repo_dir[1024];
-    snprintf(repo_dir, sizeof(repo_dir), "%s/.tsi/repos", home);
+    snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
@@ -1186,10 +1242,11 @@ static int cmd_info(int argc, char **argv) {
     }
 
     const char *package_name = argv[1];
-    const char *home = get_home_dir();
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
 
     char repo_dir[1024];
-    snprintf(repo_dir, sizeof(repo_dir), "%s/.tsi/repos", home);
+    snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
 
     Repository *repo = repository_new(repo_dir);
     if (!repo) {
@@ -1384,8 +1441,10 @@ static int cmd_info(int argc, char **argv) {
     }
 
     // Check if package is installed
+    char tsi_prefix[1024];
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
     char db_dir[1024];
-    snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+    snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
     Database *db = database_new(db_dir);
     if (db) {
         InstalledPackage *installed_pkg = database_get_package(db, pkg->name);
@@ -1432,20 +1491,8 @@ static int cmd_update(int argc, char **argv) {
         }
     }
 
-    const char *home = get_home_dir();
-
     char tsi_prefix[1024];
-    int len;
-    if (prefix) {
-        strncpy(tsi_prefix, prefix, sizeof(tsi_prefix) - 1);
-        tsi_prefix[sizeof(tsi_prefix) - 1] = '\0';
-    } else {
-        len = snprintf(tsi_prefix, sizeof(tsi_prefix), "%s/.tsi", home);
-        if (len < 0 || (size_t)len >= sizeof(tsi_prefix)) {
-            fprintf(stderr, "Error: Path too long\n");
-            return 1;
-        }
-    }
+    get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), prefix);
 
     char repo_dir[1024];
     len = snprintf(repo_dir, sizeof(repo_dir), "%s/repos", tsi_prefix);
@@ -1686,9 +1733,10 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Error: package name required\n");
             return 1;
         }
-        const char *home = get_home_dir();
+        char tsi_prefix[1024];
+        get_tsi_prefix_with_fallback(tsi_prefix, sizeof(tsi_prefix), NULL);
         char db_dir[1024];
-        int len = snprintf(db_dir, sizeof(db_dir), "%s/.tsi/db", home);
+        int len = snprintf(db_dir, sizeof(db_dir), "%s/db", tsi_prefix);
         if (len < 0 || (size_t)len >= sizeof(db_dir)) {
             fprintf(stderr, "Error: Path too long\n");
             return 1;
