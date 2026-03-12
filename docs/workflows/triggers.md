@@ -42,16 +42,16 @@ This document explains when each workflow runs and what triggers them.
 
 **Manual Trigger:** Yes, via `workflow_dispatch`
 
-## Validate Packages Workflow
+## Package Validation Workflow
 
-**File:** `.github/workflows/validate-packages.yml`
+**File:** `.github/workflows/package-validation.yml`
 
 **Purpose:** Validates package JSON files and ensures TSI can parse them
 
 **Triggers:**
 - ✅ **Only runs when package files change:**
   - `packages/**/*.json` - Package definition files
-  - `.github/workflows/validate-packages.yml` - The workflow file itself
+  - `.github/workflows/package-validation.yml` - The workflow file itself
 
 - ❌ **Does NOT run when:**
   - TSI source code changes
@@ -111,7 +111,7 @@ This document explains when each workflow runs and what triggers them.
 |----------|-------------------------|---------------------|------------------|-----------------|-----------|
 | TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Documentation | ❌ No | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| Validate Packages | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| Package Validation | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Release (binaries + docs) | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | Discover Versions | ❌ No | ❌ No | ❌ No | ❌ No | ✅ Weekly |
 | Sync External | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
@@ -134,7 +134,7 @@ git commit -am "test: source code change"
 git push
 ```
 
-**Expected:** TSI Tests workflow runs, Validate Packages does NOT run
+**Expected:** TSI Tests workflow runs, Package Validation does NOT run
 
 ### Test 2: Package File Change
 
@@ -145,7 +145,7 @@ git commit -am "test: package change"
 git push
 ```
 
-**Expected:** Both TSI Tests and Validate Packages workflows run (both trigger on `packages/**`)
+**Expected:** Both TSI Tests and Package Validation workflows run (both trigger on `packages/**`)
 
 ### Test 3: Documentation Change
 
