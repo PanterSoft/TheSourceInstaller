@@ -6,28 +6,22 @@ This document explains when each workflow runs and what triggers them.
 
 **File:** `.github/workflows/test.yml`
 
-**Purpose:** Tests the TSI source code (C implementation, builds, linting)
+**Purpose:** Tests the TSI source code (Rust implementation, builds, linting)
 
 **Triggers:**
-- ✅ **Only runs when TSI source code changes:**
+- ✅ **Runs when:**
   - `src/**` - Source code files
-  - `docker/**` - Docker test configurations
-  - `scripts/**` - Utility scripts
-  - `Makefile` - Build configuration
-  - `tsi-bootstrap.sh` - Bootstrap script
-  - `completions/**` - Shell completion scripts
+  - `Cargo.toml` - Build configuration
+  - `packages/**` - Package files
   - `.github/workflows/test.yml` - The workflow file itself
 
 - ❌ **Does NOT run when:**
-  - Package files change (`packages/**`)
   - Documentation changes (`docs/**`, `README.md`)
-  - Only package versions are updated
+  - Only other workflow files change
 
 **Jobs:**
-- `test-c`: Tests C/C++ version build and functionality
-- `build-c`: Builds TSI for multiple architectures
-- `lint`: Lints C code
-- `test-all`: Runs full test suite
+- `test`: Tests Rust build and functionality (matrix: ubuntu-latest, macos-latest, windows-latest); runs `cargo build --release`, `cargo test`, `cargo clippy`, `cargo fmt --check`
+- `lint`: Runs `cargo clippy` and `cargo fmt --check`
 
 **Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
 
@@ -81,7 +75,7 @@ This document explains when each workflow runs and what triggers them.
 
 | Workflow | Triggers on Source Code | Triggers on Packages | Scheduled |
 |----------|-------------------------|---------------------|-----------|
-| TSI Tests | ✅ Yes | ❌ No | ❌ No |
+| TSI Tests | ✅ Yes | ✅ Yes | ❌ No |
 | Validate Packages | ❌ No | ✅ Yes | ❌ No |
 | Discover Versions | ❌ No | ❌ No | ✅ Weekly |
 | Sync External | ❌ No | ❌ No | ❌ No |
@@ -99,7 +93,7 @@ This document explains when each workflow runs and what triggers them.
 
 ```bash
 # Make a change to source code
-echo "// test" >> src/main.c
+echo "// test" >> src/main.rs
 git commit -am "test: source code change"
 git push
 ```
@@ -115,7 +109,7 @@ git commit -am "test: package change"
 git push
 ```
 
-**Expected:** Validate Packages workflow runs, TSI Tests does NOT run
+**Expected:** Both TSI Tests and Validate Packages workflows run (both trigger on `packages/**`)
 
 ### Test 3: Documentation Change
 
