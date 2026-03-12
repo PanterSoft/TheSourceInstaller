@@ -21,7 +21,6 @@ This document explains when each workflow runs and what triggers them.
 
 **Jobs:**
 - `test`: Tests Rust build and functionality (matrix: ubuntu-latest, macos-latest, windows-latest); runs `cargo build --release`, `cargo test`, `cargo clippy`, `cargo fmt --check`
-- `lint`: Runs `cargo clippy` and `cargo fmt --check`
 
 **Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
 
@@ -45,7 +44,7 @@ This document explains when each workflow runs and what triggers them.
 - `validate-format`: Validates JSON syntax and structure
 - `validate-tsi-parsing`: Tests that TSI can parse all packages
 - `validate-dependencies`: Validates package dependencies
-- `test-package-install`: Tests package installation in Docker
+- `test-package-install`: Smoke tests TSI commands (info, list, search, doctor, install)
 
 **Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
 
