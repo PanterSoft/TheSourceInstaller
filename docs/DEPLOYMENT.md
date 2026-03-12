@@ -1,34 +1,24 @@
 # Documentation Deployment
 
-The TSI documentation is built with MkDocs and automatically deployed to GitHub Pages.
+The TSI documentation is built with MkDocs and deployed to GitHub Pages as part of the **Release** workflow.
 
-## Automatic Deployment
+## When Documentation Is Deployed
 
-The documentation is automatically built and deployed when:
-- Changes are pushed to the `main` branch in:
-  - `docs/` directory
-  - `mkdocs.yml`
-  - `requirements-docs.txt`
-  - `.github/workflows/docs.yml`
+Documentation is built and deployed **only when a new version tag is pushed** (e.g. `v0.2.0`, `v1.0.0`). The same Release workflow that builds the TSI binaries also builds the docs and deploys them to GitHub Pages.
+
+To update the live documentation:
+
+1. Push a new tag: `git tag v0.2.0 && git push origin v0.2.0`
+2. The Release workflow runs: builds binaries, builds docs, creates the GitHub Release, and deploys docs to Pages.
 
 ## GitHub Pages Setup
 
 To enable GitHub Pages for this repository:
 
 1. Go to **Settings** → **Pages**
-2. Under **Source**, select:
-   - **Source**: `GitHub Actions`
+2. Under **Source**, select **GitHub Actions**
 3. The documentation will be available at:
    - `https://pantersoft.github.io/TheSourceInstaller/`
-
-## Manual Deployment
-
-You can also manually trigger the deployment workflow:
-
-1. Go to **Actions** → **Build and Deploy Documentation**
-2. Click **Run workflow**
-3. Select the branch (usually `main`)
-4. Click **Run workflow**
 
 ## Local Development
 
@@ -61,7 +51,6 @@ The documentation will be available at `http://127.0.0.1:8000/`
 
 ### Pages Not Updating
 
-- Verify GitHub Pages is enabled in repository settings
-- Check that the workflow has `pages: write` permission
-- Ensure the workflow completed successfully in Actions tab
-
+- Documentation deploys only on tag push. Ensure you pushed a tag and the Release workflow completed.
+- Verify GitHub Pages is enabled in repository settings (Source: GitHub Actions).
+- Check that the Release workflow completed successfully in the Actions tab.

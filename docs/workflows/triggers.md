@@ -70,14 +70,32 @@ This document explains when each workflow runs and what triggers them.
 - **Manual:** Via `workflow_dispatch`
 - **Webhook:** Via `repository_dispatch` (for external triggers)
 
+## Release Workflow
+
+**File:** `.github/workflows/release.yml`
+
+**Purpose:** Builds release binaries and documentation, creates the GitHub Release, and deploys docs to GitHub Pages
+
+**Triggers:**
+- **Tag push:** When a tag matching `v*` is pushed (e.g. `v0.2.0`, `v1.0.0`)
+
+**Jobs:**
+- `build`: Builds TSI binaries for all platforms (linux, macos, windows; x86_64 and aarch64)
+- `docs`: Builds MkDocs documentation and uploads the site artifact
+- `release`: Creates the GitHub Release with the binary artifacts and generated release notes
+- `deploy-docs`: Deploys the built documentation to GitHub Pages
+
+**Note:** There is no manual trigger. To cut a release (binaries + docs), push a tag.
+
 ## Summary
 
-| Workflow | Triggers on Source Code | Triggers on Packages | Scheduled |
-|----------|-------------------------|---------------------|-----------|
-| TSI Tests | ✅ Yes | ✅ Yes | ❌ No |
-| Validate Packages | ❌ No | ✅ Yes | ❌ No |
-| Discover Versions | ❌ No | ❌ No | ✅ Weekly |
-| Sync External | ❌ No | ❌ No | ❌ No |
+| Workflow | Triggers on Source Code | Triggers on Packages | Triggers on Tag | Scheduled |
+|----------|-------------------------|---------------------|-----------------|-----------|
+| TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
+| Validate Packages | ❌ No | ✅ Yes | ❌ No | ❌ No |
+| Release (binaries + docs) | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| Discover Versions | ❌ No | ❌ No | ❌ No | ✅ Weekly |
+| Sync External | ❌ No | ❌ No | ❌ No | ❌ No |
 
 ## Benefits
 
