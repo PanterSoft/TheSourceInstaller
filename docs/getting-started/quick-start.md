@@ -10,9 +10,6 @@ tsi install <package-name>
 tsi install <package-name>@<version>
 # Example: tsi install curl@8.7.1
 
-# Install from a package manifest file
-tsi install ./packages/example.json
-
 # List installed packages
 tsi list
 
@@ -23,16 +20,21 @@ tsi info <package-name>
 tsi info <package-name>@<version>
 
 # Remove a package
-tsi remove <package-name>
+tsi uninstall <package-name>
+
+# Search available packages
+tsi search <query>
+
+# Upgrade installed packages
+tsi upgrade
+
+# Check system health
+tsi doctor
 
 # Update package repository
 tsi update                                    # Update from default TSI repository
 tsi update --repo https://github.com/user/repo.git  # Update from custom repository
 tsi update --local /path/to/packages          # Update from local directory
-
-# Uninstall TSI (removes everything including all data)
-tsi uninstall                                 # Remove TSI and all data (packages, database, etc.)
-tsi uninstall --prefix /opt/tsi              # Uninstall from custom location
 ```
 
 ## Example: Installing curl

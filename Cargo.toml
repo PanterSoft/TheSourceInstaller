@@ -1,0 +1,38 @@
+[package]
+name = "tsi"
+version = "0.2.0"
+edition = "2021"
+description = "The Source Installer - A cross-platform source-based package manager"
+license = "MIT"
+repository = "https://github.com/PanterSoft/tsi"
+
+[lib]
+name = "tsi"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tsi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+indicatif = "0.17"
+console = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ureq = { version = "2.9", default-features = false, features = ["tls"] }
+tar = "0.4"
+flate2 = "1.0"
+xz2 = "0.1"
+bzip2 = "0.4"
+zip = "0.6"
+anyhow = "1.0"
+thiserror = "1.0"
+walkdir = "2.4"
+dirs = "5.0"
+log = "0.4"
+env_logger = "0.11"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3.10"

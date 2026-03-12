@@ -1,6 +1,20 @@
 # Zsh completion script for TSI
 # Source this file or add to your fpath
 
+_tsi_versions() {
+    local repo_dir="$1" pkg_name="$2"
+    [[ -z "$repo_dir" || -z "$pkg_name" ]] && return
+    local versions=()
+    for f in "$repo_dir"/*.json; do
+        [[ -f "$f" ]] || continue
+        grep -q "\"name\"[[:space:]]*:[[:space:]]*\"${pkg_name}\"" "$f" 2>/dev/null || continue
+        local v
+        v=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+        [[ -n "$v" ]] && versions+=("$v")
+    done
+    (( ${#versions[@]} > 0 )) && echo "${versions[@]}"
+}
+
 _tsi() {
     local context state line
     typeset -A opt_args
@@ -13,11 +27,13 @@ _tsi() {
         command)
             local commands=(
                 "install:Install a package"
-                "remove:Remove an installed package"
+                "uninstall:Remove an installed package"
+                "upgrade:Upgrade installed packages"
                 "list:List installed packages"
+                "search:Search available packages"
                 "info:Show package information"
                 "update:Update package repository"
-                "uninstall:Uninstall TSI"
+                "doctor:Check system health"
                 "--help:Show help"
                 "--version:Show version"
             )
@@ -31,12 +47,24 @@ _tsi() {
                         "--prefix[Installation prefix]:directory:_files -/" \
                         "*:package:->packages"
                     ;;
-                remove)
+                uninstall)
                     _arguments \
+                        "--prefix[Installation prefix]:directory:_files -/" \
                         "*:package:->installed_packages"
+                    ;;
+                upgrade)
+                    _arguments \
+                        "--prefix[Installation prefix]:directory:_files -/" \
+                        "*:package:->installed_packages"
+                    ;;
+                search)
+                    _arguments \
+                        "--prefix[Installation prefix]:directory:_files -/" \
+                        "1:query: "
                     ;;
                 info)
                     _arguments \
+                        "--prefix[Installation prefix]:directory:_files -/" \
                         "*:package:->packages"
                     ;;
                 update)
@@ -45,16 +73,11 @@ _tsi() {
                         "--local[Local path]:directory:_files -/" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
-                uninstall)
+                doctor|list)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
-                list)
-                    # List command takes no arguments
-                    _arguments
-                    ;;
                 --help|--version|-h|-v)
-                    # These take no arguments
                     _arguments
                     ;;
             esac
@@ -65,28 +88,12 @@ _tsi() {
         install|info)
             if [[ $state == packages ]]; then
                 local cur="${words[CURRENT]}"
+                local repo_dir="${HOME}/.tsi/packages"
                 if [[ $cur == *@ ]]; then
-                    # User typed package@, show versions
                     local pkg_name="${cur%@}"
-                    local repo_dir="${HOME}/.tsi/packages"
-                    if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
-                        local versions=($(python3 -c "
-import json, os, sys
-repo_dir = os.path.expanduser('$repo_dir')
-pkg_name = '$pkg_name'
-versions = []
-for f in os.listdir(repo_dir):
-    if f.endswith('.json'):
-        try:
-            with open(os.path.join(repo_dir, f), 'r') as file:
-                data = json.load(file)
-                if data.get('name') == pkg_name:
-                    versions.append(data.get('version', 'latest'))
-        except:
-            pass
-print(' '.join(sorted(set(versions), reverse=True)))
-" 2>/dev/null))
-                        if [ ${#versions[@]} -gt 0 ]; then
+                    if [[ -d "$repo_dir" && -n "$pkg_name" ]]; then
+                        local versions=($(_tsi_versions "$repo_dir" "$pkg_name"))
+                        if (( ${#versions[@]} > 0 )); then
                             local version_completions=()
                             for v in "${versions[@]}"; do
                                 version_completions+=("${pkg_name}@${v}")
@@ -95,57 +102,30 @@ print(' '.join(sorted(set(versions), reverse=True)))
                         fi
                     fi
                 elif [[ $cur == *@* ]]; then
-                    # User typed package@version, complete version part
                     local pkg_name="${cur%%@*}"
                     local version_part="${cur#*@}"
-                    local repo_dir="${HOME}/.tsi/packages"
-                    if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
-                        local versions=($(python3 -c "
-import json, os, sys
-repo_dir = os.path.expanduser('$repo_dir')
-pkg_name = '$pkg_name'
-versions = []
-for f in os.listdir(repo_dir):
-    if f.endswith('.json'):
-        try:
-            with open(os.path.join(repo_dir, f), 'r') as file:
-                data = json.load(file)
-                if data.get('name') == pkg_name:
-                    versions.append(data.get('version', 'latest'))
-        except:
-            pass
-print(' '.join(sorted(set(versions), reverse=True)))
-" 2>/dev/null))
-                        if [ ${#versions[@]} -gt 0 ]; then
+                    if [[ -d "$repo_dir" && -n "$pkg_name" ]]; then
+                        local versions=($(_tsi_versions "$repo_dir" "$pkg_name"))
+                        if (( ${#versions[@]} > 0 )); then
                             local version_completions=()
                             for v in "${versions[@]}"; do
-                                if [[ "$v" == "$version_part"* ]]; then
-                                    version_completions+=("${pkg_name}@${v}")
-                                fi
+                                [[ "$v" == "$version_part"* ]] && version_completions+=("${pkg_name}@${v}")
                             done
-                            if [ ${#version_completions[@]} -gt 0 ]; then
-                                _describe 'version' version_completions
-                            fi
+                            (( ${#version_completions[@]} > 0 )) && _describe 'version' version_completions
                         fi
                     fi
                 else
-                    # List packages from repository
-                    local repo_dir="${HOME}/.tsi/packages"
-                    if [ -d "$repo_dir" ]; then
+                    if [[ -d "$repo_dir" ]]; then
                         local packages=($(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null))
-                        if [ ${#packages[@]} -gt 0 ]; then
-                            _describe 'package' packages
-                        fi
+                        (( ${#packages[@]} > 0 )) && _describe 'package' packages
                     fi
                 fi
             fi
             ;;
-        remove)
+        uninstall|upgrade)
             if [[ $state == installed_packages ]]; then
                 local installed=($(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null))
-                if [ ${#installed[@]} -gt 0 ]; then
-                    _describe 'installed package' installed
-                fi
+                (( ${#installed[@]} > 0 )) && _describe 'installed package' installed
             fi
             ;;
     esac

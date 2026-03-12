@@ -87,6 +87,26 @@ tsi list
 tsi list --prefix /opt/tsi
 ```
 
+## Searching Packages
+
+```bash
+# Search available packages
+tsi search <query>
+
+# Search with custom prefix
+tsi search <query> --prefix /opt/tsi
+```
+
+## Upgrading Packages
+
+```bash
+# Upgrade all installed packages
+tsi upgrade
+
+# Upgrade specific packages
+tsi upgrade <package1> <package2>
+```
+
 ## Package Information
 
 ```bash
@@ -101,10 +121,13 @@ tsi info <package-name>@<version>
 
 ```bash
 # Remove a package
-tsi remove <package-name>
+tsi uninstall <package-name>
+
+# Remove multiple packages
+tsi uninstall <package1> <package2>
 
 # Remove with custom prefix
-tsi remove <package-name> --prefix /opt/tsi
+tsi uninstall <package-name> --prefix /opt/tsi
 ```
 
 **Note**: Removing a package does not remove its dependencies. Dependencies are only removed if no other packages depend on them.

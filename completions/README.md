@@ -24,9 +24,6 @@ cp completions/tsi.bash ~/.tsi/share/completions/
 
 # Source in your ~/.bashrc
 echo 'source ~/.tsi/share/completions/tsi.bash' >> ~/.bashrc
-
-# Or install system-wide
-sudo cp completions/tsi.bash /etc/bash_completion.d/tsi
 ```
 
 **Zsh:**
@@ -47,44 +44,47 @@ autoload -U compinit && compinit
 ## Features
 
 ### Command Completion
+
 - `tsi <TAB>` - Shows all available commands:
   - `install` - Install a package
-  - `remove` - Remove an installed package
+  - `uninstall` - Remove an installed package
+  - `upgrade` - Upgrade installed packages
   - `list` - List installed packages
+  - `search` - Search available packages
   - `info` - Show package information
   - `update` - Update package repository
-  - `uninstall` - Uninstall TSI
+  - `doctor` - Check system health
   - `--help`, `--version` - Help and version
 
 ### Package Completion
-- `tsi install <TAB>` - Shows available packages from repository (`~/.tsi/repos/*.json`)
+
+- `tsi install <TAB>` - Shows available packages from repository (`~/.tsi/packages/*.json`)
 - `tsi install --force <TAB>` - Shows available packages (after --force)
 - `tsi info <TAB>` - Shows available packages from repository
-- `tsi remove <TAB>` - Shows installed packages (from `tsi list` output)
+- `tsi uninstall <TAB>` - Shows installed packages (from `tsi list` output)
+- `tsi search <TAB>` - Completes search query
 
 ### Option Completion
+
 - `tsi install --<TAB>` - Shows options: `--force`, `--prefix`
 - `tsi install --prefix <TAB>` - Completes directory paths
 - `tsi update --<TAB>` - Shows options: `--repo`, `--local`, `--prefix`
 - `tsi update --local <TAB>` - Completes directory paths
 - `tsi update --prefix <TAB>` - Completes directory paths
-- `tsi uninstall --<TAB>` - Shows options: `--all`, `--prefix`
 - `tsi uninstall --prefix <TAB>` - Completes directory paths
-
-### Multi-Word Command Completion
-- `tsi install --force <TAB>` - Completes packages after --force
-- `tsi install --prefix /path <TAB>` - Completes packages after --prefix
-- All commands support proper option and argument completion
+- `tsi doctor --prefix <TAB>` - Completes directory paths
 
 ## How It Works
 
 ### Bash Completion
+
 The bash completion script uses the standard bash completion mechanism:
-- Reads package names from `~/.tsi/repos/*.json` files
+- Reads package names from `~/.tsi/packages/*.json` files
 - Reads installed packages from `tsi list` command output
 - Provides context-aware completion based on the current command
 
 ### Zsh Completion
+
 The zsh completion script uses zsh's advanced completion system:
 - Uses `_describe` for command descriptions
 - Uses `_arguments` for option parsing
@@ -120,8 +120,9 @@ The zsh completion script uses zsh's advanced completion system:
 
 ### No Packages Showing
 
-- Ensure you have packages in `~/.tsi/repos/` directory
+- Ensure you have packages in `~/.tsi/packages/` directory
 - Package files should be named `*.json`
+- Run `tsi update` to fetch package definitions
 - For installed packages, ensure `tsi list` works correctly
 
 ### Zsh Completion Issues
@@ -131,11 +132,3 @@ If using zsh, ensure completion system is initialized:
 autoload -U compinit
 compinit
 ```
-
-## Customization
-
-You can customize the completion behavior by modifying the completion scripts:
-- Change repository directory path
-- Add custom package sources
-- Modify completion behavior for specific commands
-

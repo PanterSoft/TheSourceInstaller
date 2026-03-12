@@ -4,24 +4,27 @@ TSI supports a strict isolation mode that enforces complete independence from sy
 
 ## Configuration
 
-Strict isolation is configured via a `tsi.cfg` file in your TSI installation directory (e.g., `/opt/tsi/tsi.cfg` or `~/.tsi/tsi.cfg`).
+Strict isolation is configured via a `tsi.toml` file in your TSI installation directory (e.g., `/opt/tsi/tsi.toml` or `~/.tsi/tsi.toml`).
 
-**Note:** The `tsi.cfg` file is created automatically during installation with default settings. You can edit it at any time to change the configuration.
+**Note:** You can create the `tsi.toml` file manually. If it does not exist, strict isolation defaults to disabled.
 
 ### Config File Format
 
-The `tsi.cfg` file is automatically created during installation with the following default format:
+Create `tsi.toml` in your TSI prefix with the following format:
 
-```ini
+```toml
 # TSI Configuration File
 # Enable strict isolation mode (only use TSI packages after bootstrap)
-strict_isolation=true
+strict_isolation = true
+
+# Optional: log level (info, debug, etc.)
+log_level = "info"
 ```
 
 ### Valid Values
 
-- `strict_isolation=true` or `strict_isolation=1` or `strict_isolation=yes` - Enable strict isolation
-- `strict_isolation=false` or `strict_isolation=0` or `strict_isolation=no` - Disable strict isolation (default)
+- `strict_isolation = true` - Enable strict isolation
+- `strict_isolation = false` - Disable strict isolation (default)
 
 ## How It Works
 
@@ -44,10 +47,10 @@ Once bootstrap packages are installed, strict isolation mode:
 
 1. **Enable strict isolation:**
    ```bash
-   # Edit the config file (created automatically during installation)
-   nano /opt/tsi/tsi.cfg
+   # Create or edit the config file
+   nano /opt/tsi/tsi.toml
    # or
-   echo "strict_isolation=true" > /opt/tsi/tsi.cfg
+   echo 'strict_isolation = true' > /opt/tsi/tsi.toml
    ```
 
 2. **Install packages:**
@@ -81,7 +84,7 @@ Once bootstrap packages are installed, strict isolation mode:
 ## Disabling Strict Isolation
 
 To disable strict isolation, either:
-1. Remove the `strict_isolation` line from `tsi.cfg`
-2. Set `strict_isolation=false` in `tsi.cfg`
-3. Delete the `tsi.cfg` file
+1. Remove the `strict_isolation` line from `tsi.toml`
+2. Set `strict_isolation = false` in `tsi.toml`
+3. Delete the `tsi.toml` file
 

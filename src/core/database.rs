@@ -1,0 +1,112 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::path::Path;
+
+const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstalledPackage {
+    pub name: String,
+    pub version: String,
+    pub install_path: String,
+    pub installed_at: i64,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DatabaseFile {
+    #[serde(default)]
+    schema_version: u32,
+    installed: Vec<InstalledPackage>,
+}
+
+pub struct Database {
+    path: std::path::PathBuf,
+    packages: Vec<InstalledPackage>,
+}
+
+impl Database {
+    pub fn new(db_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(db_dir).context("Failed to create database directory")?;
+        let path = db_dir.join("installed.json");
+        let packages = if path.exists() {
+            let json = std::fs::read_to_string(&path)
+                .context("Failed to read database")?;
+            let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
+                schema_version: SCHEMA_VERSION,
+                installed: vec![],
+            });
+            db.installed
+        } else {
+            vec![]
+        };
+        Ok(Self { path, packages })
+    }
+
+    pub fn load(&mut self) -> Result<()> {
+        if self.path.exists() {
+            let json = std::fs::read_to_string(&self.path).context("Failed to read database")?;
+            let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
+                schema_version: SCHEMA_VERSION,
+                installed: vec![],
+            });
+            self.packages = db.installed;
+        }
+        Ok(())
+    }
+
+    fn save(&self) -> Result<()> {
+        let db = DatabaseFile {
+            schema_version: SCHEMA_VERSION,
+            installed: self.packages.clone(),
+        };
+        let json = serde_json::to_string_pretty(&db).context("Failed to serialize database")?;
+        std::fs::write(&self.path, json).context("Failed to write database")?;
+        Ok(())
+    }
+
+    pub fn is_installed(&self, name: &str) -> bool {
+        self.packages.iter().any(|p| p.name == name)
+    }
+
+    pub fn add(&mut self, name: &str, version: &str, install_path: &Path, deps: &[String]) -> Result<()> {
+        if self.is_installed(name) {
+            return Ok(());
+        }
+        self.packages.push(InstalledPackage {
+            name: name.to_string(),
+            version: version.to_string(),
+            install_path: install_path.to_string_lossy().to_string(),
+            installed_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
+            dependencies: deps.to_vec(),
+        });
+        self.save()
+    }
+
+    pub fn remove(&mut self, name: &str) -> Result<bool> {
+        if let Some(pos) = self.packages.iter().position(|p| p.name == name) {
+            self.packages.remove(pos);
+            self.save()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<&InstalledPackage> {
+        self.packages.iter().find(|p| p.name == name)
+    }
+
+    pub fn list(&self) -> &[InstalledPackage] {
+        &self.packages
+    }
+
+    pub fn installed_set(&self) -> HashSet<String> {
+        self.packages.iter().map(|p| p.name.clone()).collect()
+    }
+}

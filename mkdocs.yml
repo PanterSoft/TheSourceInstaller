@@ -57,6 +57,7 @@ nav:
     - Version Discovery: user-guide/version-discovery.md
   - Developer Guide:
     - Architecture: developer-guide/architecture.md
+    - OS-Specific Config: developer-guide/os-specific-config.md
     - Repository: developer-guide/repository.md
     - Maintenance: developer-guide/maintenance.md
     - Documentation Deployment: DEPLOYMENT.md
@@ -68,6 +69,7 @@ nav:
     - Triggers: workflows/triggers.md
     - Trigger Workflow: workflows/trigger-workflow.md
   - Reference:
+    - CLI Reference: reference/cli-reference.md
     - Package Repository: reference/package-repository.md
     - Scripts: reference/scripts.md
     - Bootstrap Options: reference/bootstrap-options.md

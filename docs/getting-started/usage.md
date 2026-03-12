@@ -11,9 +11,6 @@ tsi install <package-name>
 # Install specific version
 tsi install <package-name>@<version>
 
-# Install from local package file
-tsi install ./packages/example.json
-
 # Install with custom prefix
 tsi install <package-name> --prefix /opt/tsi
 
@@ -34,14 +31,40 @@ tsi info <package-name>
 tsi info <package-name>@<version>
 ```
 
-### Remove Packages
+### Uninstall Packages
 
 ```bash
 # Remove a package
-tsi remove <package-name>
+tsi uninstall <package-name>
+
+# Remove multiple packages
+tsi uninstall <package1> <package2>
 
 # Remove with custom prefix
-tsi remove <package-name> --prefix /opt/tsi
+tsi uninstall <package-name> --prefix /opt/tsi
+```
+
+### Search Packages
+
+```bash
+# Search available packages
+tsi search <query>
+
+# Search with custom prefix
+tsi search <query> --prefix /opt/tsi
+```
+
+### Upgrade Packages
+
+```bash
+# Upgrade all installed packages
+tsi upgrade
+
+# Upgrade specific packages
+tsi upgrade <package1> <package2>
+
+# Upgrade with custom prefix
+tsi upgrade --prefix /opt/tsi
 ```
 
 ### Update Repository
@@ -60,17 +83,14 @@ tsi update --local /path/to/packages
 tsi update --prefix /opt/tsi
 ```
 
-### Uninstall TSI
+### System Health
 
 ```bash
-# Uninstall TSI (preserves data)
-tsi uninstall
+# Check your system for potential problems
+tsi doctor
 
-# Uninstall everything including data
-tsi uninstall --all
-
-# Uninstall from custom location
-tsi uninstall --prefix /opt/tsi
+# Check with custom prefix
+tsi doctor --prefix /opt/tsi
 ```
 
 ## Package Versioning
@@ -93,9 +113,9 @@ tsi info git
 
 TSI automatically sets up environment variables for installed packages:
 
-- `PATH`: Includes `~/.tsi/install/bin`
+- `PATH`: Includes `~/.tsi/install/bin` (or `%USERPROFILE%\.tsi\install\bin` on Windows)
 - `PKG_CONFIG_PATH`: Includes `~/.tsi/install/lib/pkgconfig`
-- `LD_LIBRARY_PATH`: Includes `~/.tsi/install/lib`
+- `LD_LIBRARY_PATH`: Includes `~/.tsi/install/lib` (Unix)
 - `CPPFLAGS`: Includes `-I~/.tsi/install/include`
 - `LDFLAGS`: Includes `-L~/.tsi/install/lib`
 
@@ -112,8 +132,8 @@ tsi install curl --prefix /opt/tsi
 # List packages in custom prefix
 tsi list --prefix /opt/tsi
 
-# Remove from custom prefix
-tsi remove curl --prefix /opt/tsi
+# Uninstall from custom prefix
+tsi uninstall curl --prefix /opt/tsi
 ```
 
 ## Examples
@@ -150,8 +170,8 @@ tsi info git
 # Install specific version
 tsi install git@2.45.0
 
-# Install different version
-tsi install git@2.44.0
+# Upgrade to latest
+tsi upgrade git
 ```
 
 ## Troubleshooting
@@ -162,13 +182,16 @@ tsi install git@2.44.0
 # Update repository first
 tsi update
 
+# Search for the package
+tsi search <query>
+
 # Then try installing again
 tsi install <package-name>
 ```
 
 ### Build Failures
 
-- Check that you have required build tools (gcc, make, etc.)
+- Run `tsi doctor` to check for required build tools (gcc, make, etc.)
 - Verify dependencies are installed
 - Check package definition for correct source URL
 
@@ -176,4 +199,3 @@ tsi install <package-name>
 
 - Use `--prefix` to install to a writable location
 - Or use `sudo` for system-wide installation
-

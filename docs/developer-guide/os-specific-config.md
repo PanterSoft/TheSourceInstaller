@@ -8,19 +8,17 @@ Package JSON files can include OS-specific fields using the pattern: `<field>_<o
 
 ## Supported OS Names
 
-OS names are detected automatically via `uname()` and normalized to lowercase:
+OS names are detected at compile time (Rust `target_os`):
 
 - **`darwin`** - macOS (Apple's Unix-based operating system)
 - **`linux`** - All Linux distributions (Debian, Ubuntu, RedHat, Alpine, Arch, etc.)
+- **`windows`** - Microsoft Windows
 - **`freebsd`** - FreeBSD
 - **`openbsd`** - OpenBSD
 - **`netbsd`** - NetBSD
-- **`sunos`** - Solaris/Illumos
-- **`aix`** - IBM AIX
-- **`hp-ux`** - HP-UX
-- **Other Unix variants** - Any other Unix-like system detected by `uname()`
+- **Other targets** - Any other target supported by Rust
 
-**Note:** If OS detection fails, TSI defaults to `linux` as the most common Unix-like system.
+**Note:** On Windows, use `configure_args_windows`, `env_windows`, etc. for Windows-specific package configuration.
 
 ## Supported OS-Specific Fields
 
@@ -72,13 +70,13 @@ In this example:
 
 ## OS Detection Details
 
-- **macOS**: Always detected as `darwin` (the kernel name)
-- **Linux**: All Linux distributions are detected as `linux` (regardless of distribution)
-- **Other Unix variants**: Detected via `uname()` system call
-- **Fallback**: If detection fails, defaults to `linux`
+- **macOS**: Detected as `darwin`
+- **Linux**: All Linux distributions detected as `linux`
+- **Windows**: Detected as `windows`
+- **Other targets**: FreeBSD, OpenBSD, NetBSD, etc.
 
 This design allows you to:
-1. Target specific OS families (e.g., `darwin` for macOS, `linux` for all Linux)
+1. Target specific OS families (e.g., `darwin` for macOS, `linux` for all Linux, `windows` for Windows)
 2. Support specific Unix variants (e.g., `freebsd`, `openbsd`)
 3. Have a base configuration that works for all systems
 4. Override only where necessary for specific OS differences
