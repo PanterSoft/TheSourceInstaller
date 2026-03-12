@@ -1,3 +1,6 @@
+# GitLab CI: mirrors the Rust CI steps from .github/workflows/rust-ci.yml.
+# Primary CI is GitHub Actions; this file is for GitLab-based mirrors and forks.
+
 stages:
   - test
   - lint

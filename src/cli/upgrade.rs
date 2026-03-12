@@ -48,13 +48,20 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                     let mut db_mut = Database::new(&db_dir)?;
                     crate::ops::uninstall::uninstall_package(name, &prefix, &mut db_mut)?;
                     let installed_set = db_mut.installed_set();
-                    let packages = resolver::resolve(&registry, &format!("{}@{}", name, latest.version), &installed_set)?;
+                    let packages = resolver::resolve(
+                        &registry,
+                        &format!("{}@{}", name, latest.version),
+                        &installed_set,
+                    )?;
                     let order = resolver::get_build_order(&packages);
                     for pkg in &order {
                         ops_install::install_package(pkg, &prefix, &mut db_mut, true)?;
                     }
                 } else {
-                    ui::output::detail(format!("{} {} is already up to date", name, installed.version));
+                    ui::output::detail(format!(
+                        "{} {} is already up to date",
+                        name, installed.version
+                    ));
                 }
             }
         } else {

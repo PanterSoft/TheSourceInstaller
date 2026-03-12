@@ -19,7 +19,11 @@ fn test_os_name_is_non_empty() {
 fn test_default_prefix_contains_tsi() {
     let prefix = platform::default_prefix();
     let s = prefix.to_string_lossy();
-    assert!(s.contains(".tsi"), "default_prefix should contain .tsi: {}", s);
+    assert!(
+        s.contains(".tsi"),
+        "default_prefix should contain .tsi: {}",
+        s
+    );
 }
 
 #[test]

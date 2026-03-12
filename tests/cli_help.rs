@@ -10,7 +10,11 @@ fn tsi_cmd(args: &[&str]) -> (std::process::Output, bool) {
 #[test]
 fn test_tsi_help() {
     let (output, success) = tsi_cmd(&["--help"]);
-    assert!(success, "tsi --help should succeed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        success,
+        "tsi --help should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("TSI"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("install"));
 }

@@ -61,7 +61,11 @@ pub fn resolve_prefix(user_prefix: Option<&str>) -> PathBuf {
 fn detect_prefix_from_binary() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_str = exe.to_string_lossy();
-    let bin_tsi = if cfg!(windows) { r"\bin\tsi.exe" } else { "/bin/tsi" };
+    let bin_tsi = if cfg!(windows) {
+        r"\bin\tsi.exe"
+    } else {
+        "/bin/tsi"
+    };
     if let Some(pos) = exe_str.find(bin_tsi) {
         let prefix = exe_str[..pos].to_string();
         if !prefix.is_empty() {

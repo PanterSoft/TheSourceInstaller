@@ -23,7 +23,12 @@ pub fn run(args: ListArgs) -> Result<()> {
     }
 
     ui::output::section("Installed packages:");
-    let max_name = packages.iter().map(|p| p.name.len()).max().unwrap_or(0).max(20);
+    let max_name = packages
+        .iter()
+        .map(|p| p.name.len())
+        .max()
+        .unwrap_or(0)
+        .max(20);
     for pkg in packages {
         ui::output::detail(format!(
             "{} {}",

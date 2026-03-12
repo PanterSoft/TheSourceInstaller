@@ -11,7 +11,14 @@ pub fn resolve(
     let mut result = Vec::new();
     let mut visited = HashSet::new();
     let mut stack = HashSet::new();
-    resolve_recursive(registry, spec, installed, &mut result, &mut visited, &mut stack)?;
+    resolve_recursive(
+        registry,
+        spec,
+        installed,
+        &mut result,
+        &mut visited,
+        &mut stack,
+    )?;
     Ok(result)
 }
 

@@ -22,7 +22,10 @@ pub fn run(args: InstallArgs) -> Result<()> {
 
     if !packages_dir.exists() {
         ui::output::error("No package definitions found. Run 'tsi update' first.");
-        return Err(anyhow::anyhow!("Package directory not found: {}", packages_dir.display()));
+        return Err(anyhow::anyhow!(
+            "Package directory not found: {}",
+            packages_dir.display()
+        ));
     }
 
     let registry = Registry::load_from_dir(&packages_dir)?;
@@ -41,7 +44,11 @@ pub fn run(args: InstallArgs) -> Result<()> {
     ui::output::section(format!(
         "Installing {} packages: {}",
         order.len(),
-        order.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")
+        order
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     ));
 
     for pkg in order.iter() {
@@ -51,14 +58,16 @@ pub fn run(args: InstallArgs) -> Result<()> {
 
         ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
         ops_install::install_package(pkg, &prefix, &mut db, args.force)?;
-        ui::output::section(format!("Linking {} {} into {}", pkg.name, pkg.version, prefix.display()));
+        ui::output::section(format!(
+            "Linking {} {} into {}",
+            pkg.name,
+            pkg.version,
+            prefix.display()
+        ));
     }
 
     ui::output::section("Summary");
-    ui::output::detail(format!(
-        "{} packages installed successfully.",
-        order.len()
-    ));
+    ui::output::detail(format!("{} packages installed successfully.", order.len()));
     if let Some(last) = order.last() {
         ui::output::detail(format!("{} {} is ready to use.", last.name, last.version));
     }
