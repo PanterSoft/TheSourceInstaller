@@ -24,6 +24,9 @@ wheels/
 .tsi/
 *.tsi
 
+# Package repository (separate repo; content in tsi-packages/ for initial push)
+tsi-packages/
+
 # IDE
 .vscode/
 .idea/

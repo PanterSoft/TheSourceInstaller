@@ -1,0 +1,14 @@
+{
+  "name": "curl",
+  "version": "8.0.0",
+  "description": "Command-line tool and library for transferring data",
+  "source": {
+    "type": "tarball",
+    "url": "https://curl.se/download/curl-8.0.0.tar.gz"
+  },
+  "dependencies": ["zlib", "openssl"],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}
