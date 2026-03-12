@@ -53,7 +53,49 @@ The repair mode will:
 
 ## Uninstalling TSI
 
-TSI does not provide a self-uninstall command. To remove TSI, manually delete the installation directory.
+### Uninstall with `tsi remove`
+
+If TSI is already installed and on your PATH, you can uninstall it with:
+
+```bash
+tsi remove
+```
+
+You will be asked to confirm. This removes the entire installation prefix (binary, completions, package database, and all installed packages). To skip the prompt (e.g. in scripts), use `--yes`. For a custom prefix, use `--prefix /path/to/tsi`.
+
+### Full Uninstall (Bootstrap)
+
+If you installed via the bootstrap script, use it to remove TSI completely:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
+```
+
+**Custom prefix:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall --prefix /opt/tsi
+```
+
+**Non-interactive (no confirmation prompt):**
+```bash
+UNINSTALL=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall --non-interactive
+```
+
+This removes the entire installation directory (binary, completions, package database, installed packages, and all data).
+
+### Full Uninstall (Makefile)
+
+If you installed from source with `make install`, you can remove only the TSI binary and completions:
+
+```bash
+make uninstall PREFIX=~/.tsi
+```
+
+To remove the entire prefix including all TSI data (db, installed packages, etc.), delete the directory:
+
+```bash
+rm -rf ~/.tsi
+```
 
 ### Basic Uninstall (Preserve Data)
 

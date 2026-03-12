@@ -117,4 +117,4 @@ source ~/.tsi/share/completions/tsi.zsh
 echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
 ```
 
-**Supported commands:** install, uninstall, upgrade, list, search, info, update, doctor
+**Supported commands:** install, uninstall, upgrade, list, search, info, update, doctor, remove

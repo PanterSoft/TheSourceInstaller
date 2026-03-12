@@ -34,6 +34,7 @@ _tsi() {
                 "info:Show package information"
                 "update:Update package repository"
                 "doctor:Check system health"
+                "remove:Uninstall TSI from the system"
                 "--help:Show help"
                 "--version:Show version"
             )
@@ -76,6 +77,11 @@ _tsi() {
                 doctor|list)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/"
+                    ;;
+                remove)
+                    _arguments \
+                        "--prefix[Installation prefix to remove]:directory:_files -/" \
+                        "--yes[Skip confirmation]"
                     ;;
                 --help|--version|-h|-v)
                     _arguments

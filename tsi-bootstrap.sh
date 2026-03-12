@@ -17,6 +17,13 @@ else
     REPAIR_MODE=false
 fi
 
+UNINSTALL_MODE="${UNINSTALL:-false}"
+if [ "$UNINSTALL_MODE" = "true" ] || [ "$UNINSTALL_MODE" = "1" ] || [ "$UNINSTALL_MODE" = "yes" ]; then
+    UNINSTALL_MODE=true
+else
+    UNINSTALL_MODE=false
+fi
+
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ] || [ "$NON_INTERACTIVE" = "yes" ]; then
     NON_INTERACTIVE=true
@@ -60,7 +67,42 @@ download_file() {
 check_tsi_installed() {
     tsi_bin="${PREFIX}/bin/tsi"
     [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ] && return 0
+    [ -f "${PREFIX}/bin/tsi.exe" ] && [ -x "${PREFIX}/bin/tsi.exe" ] && return 0
     return 1
+}
+
+run_uninstall() {
+    PREFIX_ABS="$PREFIX"
+    firstchar="${PREFIX_ABS%"${PREFIX_ABS#?}"}"
+    if [ "$firstchar" = "~" ]; then
+        if [ "$PREFIX_ABS" = "~" ]; then
+            PREFIX_ABS="$HOME"
+        else
+            PREFIX_ABS="$HOME/${PREFIX_ABS#?}"
+        fi
+    fi
+    if [ ! -d "$PREFIX_ABS" ]; then
+        log_error "No TSI installation found at $PREFIX_ABS"
+        exit 1
+    fi
+    if [ ! -f "$PREFIX_ABS/bin/tsi" ] && [ ! -f "$PREFIX_ABS/bin/tsi.exe" ]; then
+        log_error "No TSI binary under $PREFIX_ABS. Refusing to remove (not a TSI install?)."
+        exit 1
+    fi
+    if [ "$NON_INTERACTIVE" != true ]; then
+        if [ -t 1 ] && [ -c /dev/tty ] 2>/dev/null; then
+            { printf "Remove TSI and all data at %s? (yes to continue): " "$PREFIX_ABS" > /dev/tty
+              read -r r < /dev/tty; printf "\n" > /dev/tty; }
+            [ "$r" != "yes" ] && { log_info "Cancelled."; exit 0; }
+        else
+            log_error "Uninstall requires confirmation. Use --non-interactive and UNINSTALL=1 to skip prompt."
+            exit 1
+        fi
+    fi
+    log_info "Removing $PREFIX_ABS..."
+    rm -rf "$PREFIX_ABS"
+    log_info "TSI uninstalled."
+    log_info "Remove from your shell profile: export PATH=\"\$HOME/.tsi/bin:\$PATH\""
 }
 
 detect_arch() {
@@ -85,6 +127,7 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --repair|repair) REPAIR_MODE=true; shift ;;
+            --uninstall) UNINSTALL_MODE=true; shift ;;
             --non-interactive|--yes|-y) NON_INTERACTIVE=true; shift ;;
             --prefix)
                 [ $# -lt 2 ] && { log_error "--prefix requires a path"; exit 1; }
@@ -97,6 +140,7 @@ main() {
                 echo ""
                 echo "Options:"
                 echo "  --repair          Repair/update existing TSI installation"
+                echo "  --uninstall       Remove TSI completely from the system"
                 echo "  --prefix PATH     Installation prefix (default: ~/.tsi)"
                 echo "  --non-interactive Run without prompts"
                 echo "  --help, -h        Show this help"
@@ -104,11 +148,17 @@ main() {
                 echo "Examples:"
                 echo "  PREFIX=~/.tsi curl -fsSL .../tsi-bootstrap.sh | sh"
                 echo "  REPAIR=1 curl -fsSL .../tsi-bootstrap.sh | sh"
+                echo "  curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall"
                 exit 0
                 ;;
             *) log_error "Unknown option: $1"; exit 1 ;;
         esac
     done
+
+    if [ "$UNINSTALL_MODE" = true ]; then
+        run_uninstall
+        return
+    fi
 
     if [ "$REPAIR_MODE" = true ]; then
         log_info "TSI Repair/Update Mode"

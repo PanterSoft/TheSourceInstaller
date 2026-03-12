@@ -56,6 +56,27 @@ tsi uninstall zlib
 tsi uninstall curl openssl
 ```
 
+### Remove
+
+Uninstall TSI from the system. Removes the installation prefix (binary, completions, package database, and all installed packages). You will be asked to confirm unless `--yes` is used.
+
+```bash
+tsi remove [options]
+```
+
+**Options:**
+
+- `--prefix PATH` - Installation prefix to remove (default: detected from binary location)
+- `--yes` - Skip confirmation prompt
+
+**Examples:**
+
+```bash
+tsi remove                    # Interactive: prompts for confirmation
+tsi remove --prefix /opt/tsi   # Remove custom prefix
+tsi remove --yes              # Non-interactive (e.g. scripts)
+```
+
 ### Upgrade
 
 Upgrade installed packages to latest versions.

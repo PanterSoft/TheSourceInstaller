@@ -3,7 +3,7 @@
 PREFIX ?= $(HOME)/.tsi
 export PATH := $(HOME)/.cargo/bin:$(PATH)
 
-.PHONY: help test build clean install lint fmt deps dev run
+.PHONY: help test build clean install uninstall lint fmt deps dev run
 
 help:
 	@echo "TSI Makefile"
@@ -18,11 +18,13 @@ help:
 	@echo "  fmt           - Check code formatting"
 	@echo "  clean         - Clean build artifacts"
 	@echo "  install       - Install TSI to PREFIX (default: ~/.tsi)"
+	@echo "  uninstall     - Remove TSI from PREFIX (default: ~/.tsi)"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make deps     # First-time: install Rust, fetch crates"
 	@echo "  make dev      # Development build"
 	@echo "  make install PREFIX=/opt/tsi"
+	@echo "  make uninstall PREFIX=/opt/tsi"
 
 deps:
 	@if command -v cargo >/dev/null 2>&1; then \
@@ -71,3 +73,11 @@ install: build
 	@test -f completions/tsi.bash && cp completions/tsi.bash $(PREFIX)/share/completions/ || true
 	@test -f completions/tsi.zsh && cp completions/tsi.zsh $(PREFIX)/share/completions/ || true
 	@echo "Installed. Add to PATH: export PATH=\"$(PREFIX)/bin:\$$PATH\""
+
+uninstall:
+	@echo "Uninstalling TSI from $(PREFIX)..."
+	@rm -f $(PREFIX)/bin/tsi $(PREFIX)/bin/tsi.exe
+	@rm -rf $(PREFIX)/share/completions
+	@-rmdir $(PREFIX)/share 2>/dev/null || true
+	@-rmdir $(PREFIX)/bin 2>/dev/null || true
+	@echo "TSI uninstalled. Remove $(PREFIX)/bin from your PATH if present."
