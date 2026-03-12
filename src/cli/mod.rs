@@ -9,6 +9,24 @@ mod upgrade;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+use crate::platform;
+use crate::ui;
+
+/// Resolves prefix and packages directory; errors if packages dir does not exist.
+pub fn resolve_packages_dir(prefix: Option<&str>) -> Result<(PathBuf, PathBuf)> {
+    let prefix = platform::resolve_prefix(prefix);
+    let packages_dir = prefix.join("packages");
+    if !packages_dir.exists() {
+        ui::output::error("No package definitions found. Run 'tsi update' first.");
+        return Err(anyhow::anyhow!(
+            "Package directory not found: {}",
+            packages_dir.display()
+        ));
+    }
+    Ok((prefix, packages_dir))
+}
 
 #[derive(Parser)]
 #[command(name = "tsi")]

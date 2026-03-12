@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Source location and type (git, tarball, zip, local).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PackageSource {
     #[serde(rename = "type")]
@@ -12,6 +13,7 @@ pub struct PackageSource {
     pub path: Option<String>,
 }
 
+/// Single version definition within a package.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PackageVersion {
     pub version: String,
@@ -70,6 +72,7 @@ pub struct MultiVersionPackageFile {
     pub versions: Vec<PackageVersion>,
 }
 
+/// Resolved package with a single version (name, version, source, deps, build config).
 #[derive(Debug, Clone)]
 pub struct Package {
     pub name: String,

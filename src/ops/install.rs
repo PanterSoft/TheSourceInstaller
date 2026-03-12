@@ -6,6 +6,7 @@ use crate::ops::link;
 use anyhow::{Context, Result};
 use std::path::Path;
 
+/// Fetches, builds, links, and records a package under prefix.
 pub fn install_package(pkg: &Package, prefix: &Path, db: &mut Database, force: bool) -> Result<()> {
     let sources_dir = prefix.join("sources");
     let build_dir = prefix

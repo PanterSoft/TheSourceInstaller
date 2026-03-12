@@ -5,13 +5,20 @@ import json
 import sys
 
 def validate_versions(pkg_file):
-    """Validate all versions in a multi-version package file."""
-    with open(pkg_file, 'r') as f:
-        data = json.load(f)
+    """Validate structure and required fields of each version in a multi-version package file."""
+    try:
+        with open(pkg_file, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File not found: {pkg_file}")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in {pkg_file}: {e}")
+        sys.exit(1)
 
     versions = data.get('versions', [])
     valid_types = ['git', 'tarball', 'zip', 'local']
-    valid_build_systems = ['autotools', 'cmake', 'meson', 'make', 'cargo', 'custom']
+    valid_build_systems = ['autotools', 'cmake', 'meson', 'make', 'custom']
     array_fields = ['dependencies', 'build_dependencies', 'configure_args', 'cmake_args', 'make_args', 'patches']
 
     failed = False
@@ -28,7 +35,10 @@ def validate_versions(pkg_file):
             continue
 
         source = version.get('source', {})
-        if not isinstance(source, dict) or 'type' not in source or 'url' not in source:
+        has_url = isinstance(source, dict) and 'type' in source and (
+            'url' in source or (source.get('type') == 'local' and 'path' in source)
+        )
+        if not has_url:
             print(f'❌ Version {i+1} has invalid or missing source object in {pkg_file}')
             failed = True
             continue

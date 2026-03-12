@@ -71,6 +71,7 @@ nav:
   - Reference:
     - CLI Reference: reference/cli-reference.md
     - Package Repository: reference/package-repository.md
+    - Basic Packages: Basic_Packages.md
     - Scripts: reference/scripts.md
     - Bootstrap Options: reference/bootstrap-options.md
 

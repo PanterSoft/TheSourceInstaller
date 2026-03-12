@@ -18,7 +18,7 @@ TSI is implemented in Rust with a single static binary and zero runtime dependen
 
 - **Language**: Rust (edition 2021)
 - **Build System**: Cargo
-- **Dependencies**: Minimal crates (serde, clap, reqwest, etc.)
+- **Dependencies**: Minimal crates (serde, clap, ureq, etc.)
 - **Output**: Single executable (`tsi` or `tsi.exe`)
 
 ### Module Layout

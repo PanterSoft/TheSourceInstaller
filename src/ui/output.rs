@@ -5,7 +5,7 @@ const ARROW: &str = "==>";
 const INDENT: &str = "   ";
 const OK_MARKER: &str = "[ok]";
 const WARN_MARKER: &str = "[!!]";
-const ERROR_MARKER: &str = "[!!]";
+const ERROR_MARKER: &str = "[XX]";
 
 fn is_tty() -> bool {
     console::Term::stderr().features().is_attended()
