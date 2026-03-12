@@ -27,33 +27,28 @@ pub struct Database {
     packages: Vec<InstalledPackage>,
 }
 
+fn read_db_file(path: &Path) -> Result<Vec<InstalledPackage>> {
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let json = std::fs::read_to_string(path).context("Failed to read database")?;
+    let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
+        schema_version: SCHEMA_VERSION,
+        installed: vec![],
+    });
+    Ok(db.installed)
+}
+
 impl Database {
     pub fn new(db_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(db_dir).context("Failed to create database directory")?;
         let path = db_dir.join("installed.json");
-        let packages = if path.exists() {
-            let json = std::fs::read_to_string(&path)
-                .context("Failed to read database")?;
-            let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
-                schema_version: SCHEMA_VERSION,
-                installed: vec![],
-            });
-            db.installed
-        } else {
-            vec![]
-        };
+        let packages = read_db_file(&path)?;
         Ok(Self { path, packages })
     }
 
     pub fn load(&mut self) -> Result<()> {
-        if self.path.exists() {
-            let json = std::fs::read_to_string(&self.path).context("Failed to read database")?;
-            let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
-                schema_version: SCHEMA_VERSION,
-                installed: vec![],
-            });
-            self.packages = db.installed;
-        }
+        self.packages = read_db_file(&self.path)?;
         Ok(())
     }
 
@@ -71,18 +66,27 @@ impl Database {
         self.packages.iter().any(|p| p.name == name)
     }
 
-    pub fn add(&mut self, name: &str, version: &str, install_path: &Path, deps: &[String]) -> Result<()> {
+    pub fn add(
+        &mut self,
+        name: &str,
+        version: &str,
+        install_path: &Path,
+        deps: &[String],
+    ) -> Result<()> {
         if self.is_installed(name) {
             return Ok(());
         }
+        let installed_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
         self.packages.push(InstalledPackage {
             name: name.to_string(),
             version: version.to_string(),
             install_path: install_path.to_string_lossy().to_string(),
-            installed_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
+            installed_at,
             dependencies: deps.to_vec(),
         });
         self.save()

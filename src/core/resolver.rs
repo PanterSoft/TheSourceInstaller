@@ -3,6 +3,7 @@ use crate::core::registry::Registry;
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 
+/// Resolves a package spec (name or name@version) and its dependencies into a build order.
 pub fn resolve(
     registry: &Registry,
     spec: &str,
@@ -11,7 +12,14 @@ pub fn resolve(
     let mut result = Vec::new();
     let mut visited = HashSet::new();
     let mut stack = HashSet::new();
-    resolve_recursive(registry, spec, installed, &mut result, &mut visited, &mut stack)?;
+    resolve_recursive(
+        registry,
+        spec,
+        installed,
+        &mut result,
+        &mut visited,
+        &mut stack,
+    )?;
     Ok(result)
 }
 
@@ -53,6 +61,7 @@ fn resolve_recursive(
     Ok(())
 }
 
+/// Returns packages in topological build order (dependencies before dependents).
 pub fn get_build_order(packages: &[Package]) -> Vec<Package> {
     let name_to_pkg: HashMap<String, &Package> =
         packages.iter().map(|p| (p.name.clone(), p)).collect();

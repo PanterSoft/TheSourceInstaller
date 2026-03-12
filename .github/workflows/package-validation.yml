@@ -1,10 +1,10 @@
-name: Validate Packages
+name: Package Validation
 
 on:
   push:
     paths:
       - 'packages/**/*.json'
-      - '.github/workflows/validate-packages.yml'
+      - '.github/workflows/package-validation.yml'
   pull_request:
     paths:
       - 'packages/**/*.json'
@@ -85,10 +85,16 @@ jobs:
                   fi
                 done
 
-                # Validate source object
-                if ! python3 -c "import json, sys; data = json.load(open('$pkg')); sys.exit(0 if isinstance(data.get('source'), dict) and 'type' in data.get('source', {}) and 'url' in data.get('source', {}) else 1)" 2>/dev/null; then
+                # Validate source object (url for git/tarball/zip; path for type local)
+                if ! python3 -c "
+import json, sys
+data = json.load(open('$pkg'))
+s = data.get('source', {})
+ok = isinstance(s, dict) and 'type' in s and ('url' in s or (s.get('type') == 'local' and 'path' in s))
+sys.exit(0 if ok else 1)
+" 2>/dev/null; then
                   echo "❌ Invalid or missing 'source' object in $pkg"
-                  echo "  Source must be an object with 'type' and 'url' fields"
+                  echo "  Source must have 'type' and either 'url' (git/tarball/zip) or 'path' (local)"
                   FAILED=1
                 fi
 
@@ -187,6 +193,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
       - name: Test package parsing
         run: cargo test test_parse_all_packages
 
@@ -262,6 +273,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
       - name: Build TSI
         run: cargo build --release
 
@@ -285,4 +301,3 @@ jobs:
 
           echo "Testing dependency resolution for zlib..."
           tsi install zlib --force 2>&1 | head -30 || echo "Install test completed (may have build errors, but resolution worked)"
-

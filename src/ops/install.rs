@@ -6,14 +6,12 @@ use crate::ops::link;
 use anyhow::{Context, Result};
 use std::path::Path;
 
-pub fn install_package(
-    pkg: &Package,
-    prefix: &Path,
-    db: &mut Database,
-    force: bool,
-) -> Result<()> {
+/// Fetches, builds, links, and records a package under prefix.
+pub fn install_package(pkg: &Package, prefix: &Path, db: &mut Database, force: bool) -> Result<()> {
     let sources_dir = prefix.join("sources");
-    let build_dir = prefix.join("build").join(format!("{}-{}", pkg.name, pkg.version));
+    let build_dir = prefix
+        .join("build")
+        .join(format!("{}-{}", pkg.name, pkg.version));
     let install_dir = prefix
         .join("install")
         .join(format!("{}-{}", pkg.name, pkg.version));
@@ -23,13 +21,7 @@ pub fn install_package(
 
     let source_dir = fetch::fetch(pkg, &sources_dir, force)?;
 
-    build::build(
-        pkg,
-        &source_dir,
-        &build_dir,
-        &install_dir,
-        &main_install,
-    )?;
+    build::build(pkg, &source_dir, &build_dir, &install_dir, &main_install)?;
 
     link::create_symlinks(&install_dir, &main_install)?;
 

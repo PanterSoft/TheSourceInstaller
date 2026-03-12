@@ -2,7 +2,6 @@ use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::core::resolver;
 use crate::ops::install as ops_install;
-use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
@@ -14,14 +13,8 @@ pub struct UpgradeArgs {
 }
 
 pub fn run(args: UpgradeArgs) -> Result<()> {
-    let prefix = platform::resolve_prefix(args.prefix.as_deref());
-    let packages_dir = prefix.join("packages");
+    let (prefix, packages_dir) = crate::cli::resolve_packages_dir(args.prefix.as_deref())?;
     let db_dir = prefix.join("db");
-
-    if !packages_dir.exists() {
-        ui::output::error("No package definitions found. Run 'tsi update' first.");
-        return Err(anyhow::anyhow!("Package directory not found"));
-    }
 
     let registry = Registry::load_from_dir(&packages_dir)?;
     let db = Database::new(&db_dir)?;
@@ -48,13 +41,20 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                     let mut db_mut = Database::new(&db_dir)?;
                     crate::ops::uninstall::uninstall_package(name, &prefix, &mut db_mut)?;
                     let installed_set = db_mut.installed_set();
-                    let packages = resolver::resolve(&registry, &format!("{}@{}", name, latest.version), &installed_set)?;
+                    let packages = resolver::resolve(
+                        &registry,
+                        &format!("{}@{}", name, latest.version),
+                        &installed_set,
+                    )?;
                     let order = resolver::get_build_order(&packages);
                     for pkg in &order {
                         ops_install::install_package(pkg, &prefix, &mut db_mut, true)?;
                     }
                 } else {
-                    ui::output::detail(format!("{} {} is already up to date", name, installed.version));
+                    ui::output::detail(format!(
+                        "{} {} is already up to date",
+                        name, installed.version
+                    ));
                 }
             }
         } else {

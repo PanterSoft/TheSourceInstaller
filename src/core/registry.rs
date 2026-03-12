@@ -14,6 +14,7 @@ impl Registry {
         Self::default()
     }
 
+    /// Loads all package JSON files from a directory. Parse errors are logged and skipped (best-effort).
     pub fn load_from_dir(dir: &Path) -> Result<Self> {
         let mut registry = Self::new();
         for entry in WalkDir::new(dir)
@@ -36,7 +37,7 @@ impl Registry {
                         }
                     }
                     Err(e) => {
-                        log::warn!("Failed to parse {}: {}", path.display(), e);
+                        log::warn!("Skipping {} (parse error): {}", path.display(), e);
                     }
                 }
             }
@@ -75,8 +76,7 @@ impl Registry {
             .values()
             .filter_map(|versions| versions.first())
             .filter(|p| {
-                p.name.to_lowercase().contains(&q)
-                    || p.description.to_lowercase().contains(&q)
+                p.name.to_lowercase().contains(&q) || p.description.to_lowercase().contains(&q)
             })
             .collect();
         results.sort_by(|a, b| a.name.cmp(&b.name));

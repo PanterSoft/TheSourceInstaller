@@ -1,5 +1,4 @@
 use crate::core::registry::Registry;
-use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
@@ -11,13 +10,7 @@ pub struct SearchArgs {
 }
 
 pub fn run(args: SearchArgs) -> Result<()> {
-    let prefix = platform::resolve_prefix(args.prefix.as_deref());
-    let packages_dir = prefix.join("packages");
-
-    if !packages_dir.exists() {
-        ui::output::error("No package definitions found. Run 'tsi update' first.");
-        return Err(anyhow::anyhow!("Package directory not found"));
-    }
+    let (_prefix, packages_dir) = crate::cli::resolve_packages_dir(args.prefix.as_deref())?;
 
     let registry = Registry::load_from_dir(&packages_dir)?;
     let results = registry.search(&args.query);
@@ -28,7 +21,12 @@ pub fn run(args: SearchArgs) -> Result<()> {
         return Ok(());
     }
 
-    let max_name = results.iter().map(|p| p.name.len()).max().unwrap_or(0).max(20);
+    let max_name = results
+        .iter()
+        .map(|p| p.name.len())
+        .max()
+        .unwrap_or(0)
+        .max(20);
     for pkg in results {
         ui::output::detail(format!(
             "{} {}  {}",

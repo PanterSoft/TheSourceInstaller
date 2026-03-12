@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
 
+/// Fetches package sources (archive, git, or local) into dest_dir and returns the source tree path.
 pub fn fetch(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::PathBuf> {
     let source_dir = dest_dir.join(format!("{}-{}", pkg.name, pkg.version));
     if source_dir.exists() && !force {
@@ -14,7 +15,10 @@ pub fn fetch(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
         "tarball" | "zip" => fetch_archive(pkg, dest_dir, force),
         "git" => fetch_git(pkg, dest_dir, force),
         "local" => fetch_local(pkg, dest_dir),
-        _ => Err(anyhow::anyhow!("Unknown source type: {}", pkg.source.source_type)),
+        _ => Err(anyhow::anyhow!(
+            "Unknown source type: {}",
+            pkg.source.source_type
+        )),
     }
 }
 
@@ -63,7 +67,8 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
                 let dest = target_dir.join(e.file_name());
                 std::fs::rename(&p, &dest).context("Move extracted dir")?;
             } else {
-                std::fs::rename(&p, target_dir.join(e.file_name())).context("Move extracted file")?;
+                std::fs::rename(&p, target_dir.join(e.file_name()))
+                    .context("Move extracted file")?;
             }
         }
     }
@@ -103,10 +108,7 @@ pub fn download_file(url: &str, dest: &Path) -> Result<()> {
 }
 
 fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
-    let ext = archive
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = archive.extension().and_then(|e| e.to_str()).unwrap_or("");
     let path_str = archive.to_string_lossy();
 
     if path_str.ends_with(".zip") {
@@ -125,35 +127,33 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+fn extract_tar_with<R: Read>(reader: R, dest: &Path) -> Result<()> {
+    let mut tar = tar::Archive::new(reader);
+    tar.unpack(dest).context("Extract tar")?;
+    Ok(())
+}
+
 fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive).context("Open archive")?;
     let dec = flate2::read::GzDecoder::new(BufReader::new(file));
-    let mut tar = tar::Archive::new(dec);
-    tar.unpack(dest).context("Extract tar.gz")?;
-    Ok(())
+    extract_tar_with(dec, dest)
 }
 
 fn extract_tar_xz(archive: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive).context("Open archive")?;
     let dec = xz2::read::XzDecoder::new(BufReader::new(file));
-    let mut tar = tar::Archive::new(dec);
-    tar.unpack(dest).context("Extract tar.xz")?;
-    Ok(())
+    extract_tar_with(dec, dest)
 }
 
 fn extract_tar_bz2(archive: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive).context("Open archive")?;
     let dec = bzip2::read::BzDecoder::new(BufReader::new(file));
-    let mut tar = tar::Archive::new(dec);
-    tar.unpack(dest).context("Extract tar.bz2")?;
-    Ok(())
+    extract_tar_with(dec, dest)
 }
 
 fn extract_tar(archive: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive).context("Open archive")?;
-    let mut tar = tar::Archive::new(file);
-    tar.unpack(dest).context("Extract tar")?;
-    Ok(())
+    extract_tar_with(BufReader::new(file), dest)
 }
 
 fn extract_zip(archive: &Path, dest: &Path) -> Result<()> {

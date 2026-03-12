@@ -22,28 +22,11 @@ permissions:
 
 jobs:
   test:
-    name: Test Rust
-    runs-on: ${{ matrix.os }}
+    name: Test Rust (${{ matrix.os }})
+    uses: ./.github/workflows/rust-ci.yml
+    with:
+      runner: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5.0.1
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release
-
-      - name: Run tests
-        run: cargo test
-
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
-
-      - name: Check formatting
-        run: cargo fmt --check

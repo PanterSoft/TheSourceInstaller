@@ -16,16 +16,26 @@ struct ConfigFile {
 impl Config {
     pub fn load(prefix: &Path) -> Self {
         let path = prefix.join("tsi.toml");
-        if path.exists() {
-            if let Ok(toml) = std::fs::read_to_string(&path) {
-                if let Ok(cfg) = toml::from_str::<ConfigFile>(&toml) {
-                    return Self {
-                        strict_isolation: cfg.strict_isolation.unwrap_or(false),
-                        log_level: cfg.log_level.unwrap_or_else(|| "info".to_string()),
-                    };
-                }
-            }
+        if !path.exists() {
+            return Self::default();
         }
-        Self::default()
+        let toml = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                log::warn!("Failed to read config {}: {}", path.display(), e);
+                return Self::default();
+            }
+        };
+        let cfg = match toml::from_str::<ConfigFile>(&toml) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("Failed to parse config {}: {}", path.display(), e);
+                return Self::default();
+            }
+        };
+        Self {
+            strict_isolation: cfg.strict_isolation.unwrap_or(false),
+            log_level: cfg.log_level.unwrap_or_else(|| "info".to_string()),
+        }
     }
 }
