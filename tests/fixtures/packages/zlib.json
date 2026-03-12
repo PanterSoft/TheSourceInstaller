@@ -7,13 +7,8 @@
     "url": "https://zlib.net/fossils/zlib-1.3.tar.gz"
   },
   "dependencies": [],
-  "build_dependencies": ["make", "coreutils", "sed", "grep", "gawk", "bash"],
+  "build_dependencies": [],
   "build_system": "autotools",
-  "configure_args": [
-    "--static"
-  ],
-  "env": {
-    "CFLAGS": "-O2 -g -Wno-error"
-  }
+  "configure_args": ["--static"],
+  "env": {}
 }
-

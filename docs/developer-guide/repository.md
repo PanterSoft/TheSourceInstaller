@@ -20,14 +20,14 @@ Each package is defined as a JSON file. The filename should match the package na
 
 ### Default Update
 
-Update from the official TSI repository:
+Update from the official TSI package repository:
 
 ```bash
 tsi update
 ```
 
 This will:
-1. Clone or update the TSI repository from GitHub
+1. Clone or update the [TSI package repository](https://github.com/PanterSoft/tsi-packages) from GitHub
 2. Copy all `.json` files from the `packages/` directory
 3. Update your local repository at `~/.tsi/packages/`
 
@@ -61,11 +61,11 @@ tsi update --prefix /opt/tsi
 
 ## Repository Sources
 
-### Official Repository
+### Official Package Repository
 
-The default repository is:
-- **URL**: `https://github.com/PanterSoft/tsi.git`
-- **Location**: `packages/` directory
+The default package repository (used by `tsi update`) is separate from the TSI core repository:
+- **URL**: `https://github.com/PanterSoft/tsi-packages.git`
+- **Location**: `packages/` directory at repo root
 - **Packages**: Essential packages (pkg-config, zlib, openssl, cmake, curl, etc.)
 
 ### Custom Repositories
@@ -127,7 +127,7 @@ vim ~/.tsi/packages/package-name.json
 **Solutions**:
 - Check internet connection
 - Ensure `git` is installed
-- Try updating manually: `git clone https://github.com/PanterSoft/tsi.git ~/.tsi/tmp-repo-update`
+- Try updating manually: `git clone https://github.com/PanterSoft/tsi-packages.git ~/.tsi/tmp-repo-update`
 
 ### No Packages Found
 

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use std::path::{Path, PathBuf};
 
-const DEFAULT_REPO: &str = "https://github.com/PanterSoft/tsi.git";
+const DEFAULT_REPO: &str = "https://github.com/PanterSoft/tsi-packages.git";
 
 fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
     for entry in std::fs::read_dir(from_dir).context("Read package source dir")? {
