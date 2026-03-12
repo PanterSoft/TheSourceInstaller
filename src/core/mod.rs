@@ -1,3 +1,5 @@
+//! Core types and logic: packages, registry, resolver, database, config.
+
 pub mod config;
 pub mod database;
 pub mod package;

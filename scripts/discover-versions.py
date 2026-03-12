@@ -26,18 +26,27 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 
-
-def load_json(filepath):
-    """Load and parse a JSON file."""
-    with open(filepath, 'r') as f:
-        return json.load(f)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib_json import load_json, save_json
 
 
-def save_json(filepath, data):
-    """Save data as formatted JSON."""
-    with open(filepath, 'w') as f:
-        json.dump(data, f, indent=2)
-        f.write('\n')
+def get_latest_version_def(pkg: dict) -> Optional[dict]:
+    """Return the latest version definition (first in versions array or single-version pkg)."""
+    if "versions" in pkg and pkg["versions"]:
+        return pkg["versions"][0]
+    if "version" in pkg:
+        return pkg
+    return None
+
+
+def normalize_version_tag(tag: str) -> Optional[str]:
+    """Normalize a tag (e.g. v1.2.3 or pkg-1.2.3) to a version string, or None if not version-like."""
+    version = tag.lstrip("v") if tag.startswith("v") else tag
+    if "-" in version or "_" in version:
+        parts = version.replace("_", "-").split("-")
+        if parts and re.match(r"^\d+\.\d+", parts[-1]):
+            version = parts[-1]
+    return version if (version and re.match(r"^\d+", version)) else None
 
 
 def fetch_url(url: str, headers: Optional[Dict] = None, token: Optional[str] = None) -> Optional[str]:
@@ -104,18 +113,8 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None, toke
                 break
 
             for release in releases:
-                tag = release.get('tag_name', '')
-                # Remove 'v' prefix if present
-                version = tag.lstrip('v') if tag.startswith('v') else tag
-                # Remove package name prefix if present (e.g., "pcre2-10.43" -> "10.43")
-                # Common patterns: package-name-version, package_version
-                if '-' in version or '_' in version:
-                    # Try to extract just the version part (assume version is at the end)
-                    parts = version.replace('_', '-').split('-')
-                    # Check if last part looks like a version (contains digits and dots)
-                    if parts and re.match(r'^\d+\.\d+', parts[-1]):
-                        version = parts[-1]
-                if version and re.match(r'^\d+', version):  # Must start with digit
+                version = normalize_version_tag(release.get("tag_name", ""))
+                if version:
                     versions.append(version)
 
                 # Check if we've reached max_versions limit
@@ -142,26 +141,18 @@ def discover_github_versions(repo: str, max_versions: Optional[int] = None, toke
                     break
 
                 for tag in tags:
-                    name = tag.get('name', '')
-                    version = name.lstrip('v') if name.startswith('v') else name
-                    # Remove package name prefix if present
-                    if '-' in version or '_' in version:
-                        parts = version.replace('_', '-').split('-')
-                        if parts and re.match(r'^\d+\.\d+', parts[-1]):
-                            version = parts[-1]
-                    if version and re.match(r'^\d+', version):  # Must start with digit
-                        # Filter out development versions with very high patch numbers
-                        # (e.g., 9.1.1924 is likely a development version, not a release)
-                        parts = version.split('.')
-                        if len(parts) >= 3:
-                            try:
-                                patch = int(parts[2])
-                                # Skip versions with patch number >= 1000 (likely development versions)
-                                if patch >= 1000:
-                                    continue
-                            except ValueError:
-                                pass
-                        versions.append(version)
+                    version = normalize_version_tag(tag.get("name", ""))
+                    if not version:
+                        continue
+                    # Filter out development versions with very high patch numbers
+                    parts = version.split(".")
+                    if len(parts) >= 3:
+                        try:
+                            if int(parts[2]) >= 1000:
+                                continue
+                        except ValueError:
+                            pass
+                    versions.append(version)
 
                     # Check if we've reached max_versions limit
                     if max_versions and len(versions) >= max_versions:
@@ -318,16 +309,11 @@ def discover_package_versions(package_file: Path, max_versions: Optional[int] = 
         return []
 
     pkg = load_json(package_file)
-
-    # Get the latest version as template
-    if 'versions' in pkg and pkg['versions']:
-        latest = pkg['versions'][0]
-    elif 'version' in pkg:
-        latest = pkg
-    else:
+    latest = get_latest_version_def(pkg)
+    if not latest:
         return []
 
-    source = latest.get('source', {})
+    source = latest.get("source", {})
     source_type = source.get('type', 'tarball')
     source_url = source.get('url', '')
 
@@ -443,18 +429,12 @@ def check_and_add_version(package_file: Path, target_version: str, token: Option
     if not package_file.exists():
         return False
 
-    # Load package to get source info
     pkg = load_json(package_file)
-
-    # Get the latest version as template
-    if 'versions' in pkg and pkg['versions']:
-        latest = pkg['versions'][0]
-    elif 'version' in pkg:
-        latest = pkg
-    else:
+    latest = get_latest_version_def(pkg)
+    if not latest:
         return False
 
-    source = latest.get('source', {})
+    source = latest.get("source", {})
     source_url = source.get('url', '')
 
     # Check if target version matches filtering rules (same as discover_github_versions)

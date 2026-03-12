@@ -16,18 +16,8 @@ import sys
 import os
 from pathlib import Path
 
-
-def load_json(filepath):
-    """Load and parse a JSON file."""
-    with open(filepath, 'r') as f:
-        return json.load(f)
-
-
-def save_json(filepath, data):
-    """Save data as formatted JSON."""
-    with open(filepath, 'w') as f:
-        json.dump(data, f, indent=2)
-        f.write('\n')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib_json import load_json, save_json
 
 
 def merge_package_version(external_pkg, packages_dir, package_name=None):
@@ -124,7 +114,11 @@ def main():
 
     try:
         # Load external package
-        external_pkg = load_json(external_file)
+        try:
+            external_pkg = load_json(external_file)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in {external_file}: {e}", file=sys.stderr)
+            sys.exit(1)
 
         # Merge into packages repository
         package_file, was_created, was_updated = merge_package_version(

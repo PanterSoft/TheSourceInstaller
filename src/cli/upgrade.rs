@@ -2,7 +2,6 @@ use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::core::resolver;
 use crate::ops::install as ops_install;
-use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
@@ -14,14 +13,8 @@ pub struct UpgradeArgs {
 }
 
 pub fn run(args: UpgradeArgs) -> Result<()> {
-    let prefix = platform::resolve_prefix(args.prefix.as_deref());
-    let packages_dir = prefix.join("packages");
+    let (prefix, packages_dir) = crate::cli::resolve_packages_dir(args.prefix.as_deref())?;
     let db_dir = prefix.join("db");
-
-    if !packages_dir.exists() {
-        ui::output::error("No package definitions found. Run 'tsi update' first.");
-        return Err(anyhow::anyhow!("Package directory not found"));
-    }
 
     let registry = Registry::load_from_dir(&packages_dir)?;
     let db = Database::new(&db_dir)?;

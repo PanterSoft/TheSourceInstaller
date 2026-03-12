@@ -1,10 +1,22 @@
 use crate::platform;
 use crate::ui;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const DEFAULT_REPO: &str = "https://github.com/PanterSoft/tsi.git";
+
+fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(from_dir).context("Read package source dir")? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "json") {
+            let dest = packages_dir.join(entry.file_name());
+            std::fs::copy(&path, &dest).context("Copy package file")?;
+        }
+    }
+    Ok(())
+}
 
 #[derive(Args)]
 pub struct UpdateArgs {
@@ -27,14 +39,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
         if !src.is_dir() {
             return Err(anyhow::anyhow!("Local path is not a directory: {}", local));
         }
-        for entry in std::fs::read_dir(&src)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "json") {
-                let dest = packages_dir.join(entry.file_name());
-                std::fs::copy(&path, &dest)?;
-            }
-        }
+        copy_package_jsons(&src, &packages_dir)?;
         ui::output::detail("Package definitions updated");
         return Ok(());
     }
@@ -53,7 +58,8 @@ pub fn run(args: UpdateArgs) -> Result<()> {
     }
     if !tmp.exists() {
         let status = std::process::Command::new("git")
-            .args(["clone", "--depth", "1", repo, tmp.to_str().unwrap()])
+            .args(["clone", "--depth", "1", repo])
+            .arg(&tmp)
             .status()?;
         if !status.success() {
             return Err(anyhow::anyhow!("git clone failed"));
@@ -62,14 +68,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
 
     let src_packages = tmp.join("packages");
     if src_packages.exists() {
-        for entry in std::fs::read_dir(&src_packages)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "json") {
-                let dest = packages_dir.join(entry.file_name());
-                std::fs::copy(&path, &dest)?;
-            }
-        }
+        copy_package_jsons(&src_packages, &packages_dir)?;
     }
     ui::output::detail("Package definitions updated");
     Ok(())

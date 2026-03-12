@@ -5,7 +5,7 @@ pub fn create_download_progress(total: u64) -> ProgressBar {
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-            .unwrap()
+            .expect("valid progress template")
             .progress_chars("##-"),
     );
     pb
@@ -17,7 +17,7 @@ pub fn create_spinner(message: &str) -> ProgressBar {
     pb.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner:.green} {msg}")
-            .unwrap(),
+            .expect("valid progress template"),
     );
     pb
 }
@@ -27,7 +27,7 @@ pub fn create_simple_progress_bar(total: u64) -> ProgressBar {
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{bar:60.cyan/blue}] {pos}/{len} ({per_sec})")
-            .unwrap()
+            .expect("valid progress template")
             .progress_chars("##-"),
     );
     pb
