@@ -1,10 +1,10 @@
-name: Validate Packages
+name: Package Validation
 
 on:
   push:
     paths:
       - 'packages/**/*.json'
-      - '.github/workflows/validate-packages.yml'
+      - '.github/workflows/package-validation.yml'
   pull_request:
     paths:
       - 'packages/**/*.json'
@@ -301,4 +301,3 @@ sys.exit(0 if ok else 1)
 
           echo "Testing dependency resolution for zlib..."
           tsi install zlib --force 2>&1 | head -30 || echo "Install test completed (may have build errors, but resolution worked)"
-
