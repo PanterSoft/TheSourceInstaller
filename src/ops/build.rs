@@ -96,7 +96,7 @@ fn run_cmd(cmd: &mut Command, env: &[(String, String)]) -> Result<()> {
 fn build_autotools(
     pkg: &Package,
     source_dir: &Path,
-    build_dir: &Path,
+    _build_dir: &Path,
     install_dir: &Path,
     env: &[(String, String)],
 ) -> Result<()> {
@@ -108,7 +108,7 @@ fn build_autotools(
         Command::new("./configure")
             .args(&configure_args)
             .current_dir(source_dir)
-            .env("TSI_INSTALL_DIR", &prefix),
+            .env("TSI_INSTALL_DIR", prefix.as_ref()),
         env,
     )?;
 
@@ -152,7 +152,7 @@ fn build_cmake(
 }
 
 fn build_meson(
-    pkg: &Package,
+    _pkg: &Package,
     source_dir: &Path,
     build_dir: &Path,
     install_dir: &Path,

@@ -1,5 +1,4 @@
 use indicatif::{ProgressBar, ProgressStyle};
-use std::io::{self, Write};
 
 pub fn create_download_progress(total: u64) -> ProgressBar {
     let pb = ProgressBar::new(total);

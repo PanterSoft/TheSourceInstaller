@@ -1,14 +1,18 @@
 # Top-level Makefile for TSI (Rust)
 
 PREFIX ?= $(HOME)/.tsi
+export PATH := $(HOME)/.cargo/bin:$(PATH)
 
-.PHONY: help test build clean install lint fmt
+.PHONY: help test build clean install lint fmt deps dev run
 
 help:
 	@echo "TSI Makefile"
 	@echo ""
 	@echo "Targets:"
+	@echo "  deps          - Install/verify dependencies (Rust toolchain, crates)"
+	@echo "  dev           - Development build (fast, debug)"
 	@echo "  build         - Build TSI (release)"
+	@echo "  run           - Run TSI (development)"
 	@echo "  test          - Run tests"
 	@echo "  lint          - Run clippy"
 	@echo "  fmt           - Check code formatting"
@@ -16,10 +20,28 @@ help:
 	@echo "  install       - Install TSI to PREFIX (default: ~/.tsi)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make build"
+	@echo "  make deps     # First-time: install Rust, fetch crates"
+	@echo "  make dev      # Development build"
 	@echo "  make install PREFIX=/opt/tsi"
 
-build:
+deps:
+	@if command -v cargo >/dev/null 2>&1; then \
+		echo "Fetching crate dependencies..."; \
+		cargo fetch; \
+	else \
+		echo "Installing Rust toolchain..."; \
+		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y -q; \
+		. "$$HOME/.cargo/env" && echo "Fetching crate dependencies..." && cargo fetch; \
+	fi
+
+dev: deps
+	@echo "Building TSI (development)..."
+	cargo build
+
+run: dev
+	cargo run -- $(ARGS)
+
+build: deps
 	@echo "Building TSI..."
 	cargo build --release
 

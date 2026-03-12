@@ -221,7 +221,14 @@ main() {
 
     if [ -z "$TSI_BINARY" ]; then
         log_error "Could not obtain TSI binary."
-        log_error "Install Rust (https://rustup.rs/) to build from source."
+        if [ -n "$PLATFORM" ] && [ "$PLATFORM" != "-" ]; then
+            log_error "No pre-built binary available for $PLATFORM."
+        fi
+        log_error ""
+        log_error "Install Rust to build from source:"
+        log_error "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        log_error ""
+        log_error "Then run this installer again."
         exit 1
     fi
 

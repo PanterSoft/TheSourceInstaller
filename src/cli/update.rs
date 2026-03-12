@@ -17,7 +17,7 @@ pub struct UpdateArgs {
 }
 
 pub fn run(args: UpdateArgs) -> Result<()> {
-    let prefix = PathBuf::from(platform::resolve_prefix(args.prefix.as_deref()));
+    let prefix = platform::resolve_prefix(args.prefix.as_deref());
     let packages_dir = prefix.join("packages");
     std::fs::create_dir_all(&packages_dir)?;
 
@@ -30,7 +30,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
         for entry in std::fs::read_dir(&src)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "json") {
+            if path.extension().is_some_and(|e| e == "json") {
                 let dest = packages_dir.join(entry.file_name());
                 std::fs::copy(&path, &dest)?;
             }
@@ -65,7 +65,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
         for entry in std::fs::read_dir(&src_packages)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "json") {
+            if path.extension().is_some_and(|e| e == "json") {
                 let dest = packages_dir.join(entry.file_name());
                 std::fs::copy(&path, &dest)?;
             }

@@ -1,4 +1,4 @@
-use console::{style, Style};
+use console::style;
 use std::io::{self, Write};
 
 const ARROW: &str = "==>";
