@@ -53,6 +53,7 @@ jobs:
           name: tsi-${{ matrix.platform }}
           path: tsi-${{ matrix.platform }}
 
+  # Only runs on tag push (e.g. v1.0.0). Manual "Run workflow" builds artifacts only; no release.
   release:
     name: Create Release
     runs-on: ubuntu-latest
@@ -69,6 +70,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: tsi-*
           generate_release_notes: true
         env:
