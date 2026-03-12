@@ -39,7 +39,7 @@ fi
 # expected_result: "pass" or "fail" (fail means expected to fail gracefully)
 declare -a SCENARIOS=(
     "alpine-minimal:Alpine Linux - Absolutely minimal (no tools):fail"
-    "alpine-c-only:Alpine Linux - C compiler only:pass"
+    "alpine-c-only:Alpine Linux - Rust + C compiler:pass"
     "ubuntu-minimal:Ubuntu - Minimal system (no tools):fail"
 )
 
@@ -68,8 +68,7 @@ run_test() {
         return 1
     fi
 
-    # Use C version test script
-    TEST_SCRIPT="test-install-c.sh"
+    TEST_SCRIPT="test-install.sh"
 
     # Run test script in a fresh container (--rm removes container after run)
     echo "Running installation test..."

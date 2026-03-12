@@ -184,45 +184,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build TSI
-        run: |
-          cd src
-          make clean || true
-          make
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
 
       - name: Test package parsing
-        run: |
-          echo "Testing if TSI can parse all package files..."
-
-          # Set up TSI repository directory
-          mkdir -p ~/.tsi/repos
-          cp packages/*.json ~/.tsi/repos/
-
-          FAILED=0
-
-          for pkg in packages/*.json; do
-            if [ -f "$pkg" ]; then
-              PKG_NAME=$(basename "$pkg" .json)
-              # Extract package name from JSON (in case filename differs)
-              ACTUAL_NAME=$(python3 -c "import json; data = json.load(open('$pkg')); print(data.get('name', '$PKG_NAME'))" 2>/dev/null || echo "$PKG_NAME")
-              echo "Testing: $pkg (package name: $ACTUAL_NAME)"
-
-              # Use TSI info command to test parsing
-              if ./src/bin/tsi info "$ACTUAL_NAME" > /dev/null 2>&1; then
-                echo "✓ TSI can parse: $pkg"
-              else
-                echo "❌ TSI cannot parse: $pkg"
-                ./src/bin/tsi info "$ACTUAL_NAME" 2>&1 || true
-                FAILED=1
-              fi
-            fi
-          done
-
-          if [ $FAILED -eq 1 ]; then
-            echo "::error::TSI cannot parse some package files"
-            exit 1
-          fi
-          echo "✓ TSI can parse all package files"
+        run: cargo test test_parse_all_packages
 
   validate-dependencies:
     name: Validate Package Dependencies
@@ -293,81 +259,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
 
-      - name: Build TSI in Docker
+      - name: Build TSI
+        run: cargo build --release
+
+      - name: Test TSI commands
         run: |
-          cd docker
-          docker compose down -v || true
-          docker compose rm -f -v || true
-          docker compose build alpine-c-only || docker-compose build alpine-c-only
+          mkdir -p ~/.tsi/packages
+          cp packages/*.json ~/.tsi/packages/
+          export PATH="$PWD/target/release:$PATH"
 
-      - name: Test installing packages
-        run: |
-          cd docker
+          echo "Testing tsi info zlib..."
+          tsi info zlib || exit 1
 
-          # Determine docker compose command
-          DOCKER_COMPOSE_CMD="docker compose"
-          if ! docker compose version >/dev/null 2>&1; then
-            DOCKER_COMPOSE_CMD="docker-compose"
-          fi
+          echo "Testing tsi list..."
+          tsi list || exit 1
 
-          # Test installing a simple package (zlib - has no dependencies)
-          echo "Testing installation of zlib (no dependencies)..."
-          $DOCKER_COMPOSE_CMD run --rm --no-deps alpine-c-only sh -c "
-            # Clean up any previous TSI installations
-            rm -rf /root/.tsi /root/.tsi-test /tmp/tsi-build
+          echo "Testing tsi search zlib..."
+          tsi search zlib || exit 1
 
-            # Build TSI
-            BUILD_DIR=/tmp/tsi-build
-            mkdir -p \$BUILD_DIR
-            cp -r /root/tsi-source/src/* \$BUILD_DIR/
-            cd \$BUILD_DIR
-            make clean || true
-            make
+          echo "Testing tsi doctor..."
+          tsi doctor || exit 1
 
-            # Install TSI
-            mkdir -p /root/.tsi/bin /root/.tsi/repos
-            cp bin/tsi /root/.tsi/bin/
-            cp -r /root/tsi-source/packages/*.json /root/.tsi/repos/
-            export PATH=\"/root/.tsi/bin:\$PATH\"
-
-            # Test info command
-            echo 'Testing tsi info zlib...'
-            tsi info zlib || exit 1
-
-            # Test installation (this will actually build, so we'll just test the resolve step)
-            echo 'Testing dependency resolution for zlib...'
-            tsi install zlib --force 2>&1 | head -20 || echo 'Install test completed (may have build errors, but resolution worked)'
-          "
-
-          # Test installing a package with dependencies (curl depends on openssl and zlib)
-          echo "Testing installation of curl (has dependencies)..."
-          $DOCKER_COMPOSE_CMD run --rm --no-deps alpine-c-only sh -c "
-            # Clean up any previous TSI installations
-            rm -rf /root/.tsi /root/.tsi-test /tmp/tsi-build
-
-            # Build TSI
-            BUILD_DIR=/tmp/tsi-build
-            mkdir -p \$BUILD_DIR
-            cp -r /root/tsi-source/src/* \$BUILD_DIR/
-            cd \$BUILD_DIR
-            make clean || true
-            make
-
-            # Install TSI
-            mkdir -p /root/.tsi/bin /root/.tsi/repos
-            cp bin/tsi /root/.tsi/bin/
-            cp -r /root/tsi-source/packages/*.json /root/.tsi/repos/
-            export PATH=\"/root/.tsi/bin:\$PATH\"
-
-            # Test info command
-            echo 'Testing tsi info curl...'
-            tsi info curl || exit 1
-
-            # Test dependency resolution (this should resolve openssl and zlib)
-            echo 'Testing dependency resolution for curl...'
-            tsi install curl --force 2>&1 | head -30 || echo 'Dependency resolution test completed'
-          "
+          echo "Testing dependency resolution for zlib..."
+          tsi install zlib --force 2>&1 | head -30 || echo "Install test completed (may have build errors, but resolution worked)"
 

@@ -1,55 +1,45 @@
-# TSI C Implementation
+# TSI Rust Implementation
 
-Complete C implementation of TSI - no Python required!
+Rust implementation of TSI - single static binary, zero runtime dependencies.
 
 ## Building
 
 ### Requirements
-- C compiler (gcc, clang, or cc)
-- make
-- Standard C library
+
+- Rust toolchain (1.70+)
+- For building packages: C compiler (gcc/clang) and make
 
 ### Build
 
 ```bash
-cd src
-make
+cargo build --release
 ```
 
-This creates a static binary at `bin/tsi` that can be copied to any system with the same architecture.
+This creates a binary at `target/release/tsi` (or `tsi.exe` on Windows).
 
-### Static Build
-
-The Makefile creates a static binary by default:
-- No external dependencies
-- Works on any Linux system with the same architecture
-- Larger binary size (~2-5MB vs ~100KB dynamic)
-
-### Cross-compilation
-
-To cross-compile for a different architecture:
+### From Repository Root
 
 ```bash
-# For ARM64
-CC=aarch64-linux-gnu-gcc make
-
-# For ARMv7
-CC=arm-linux-gnueabihf-gcc make
+make build
+# or
+cargo build --release
 ```
 
 ## Features
 
 ### Implemented
-- ✅ Package manifest parsing (JSON)
-- ✅ Dependency resolution with topological sort
-- ✅ Database management (installed packages)
-- ✅ Repository management
-- ✅ Source code fetching (git, tarball, local)
-- ✅ Build system integration (autotools, CMake, Meson, Make)
-- ✅ Installation execution
-- ✅ Full CLI (install, remove, list, info)
+
+- Package manifest parsing (JSON)
+- Dependency resolution with topological sort
+- Database management (installed packages)
+- Registry and repository management
+- Source code fetching (git, HTTP, archive extraction - built-in)
+- Build system integration (autotools, CMake, Meson, Make)
+- Installation and uninstallation
+- Full CLI: install, uninstall, upgrade, list, search, info, update, doctor
 
 ### Build Systems Supported
+
 - **autotools**: `./configure && make && make install`
 - **cmake**: CMake-based builds
 - **meson**: Meson build system
@@ -60,72 +50,50 @@ CC=arm-linux-gnueabihf-gcc make
 After building:
 
 ```bash
-./bin/tsi --help
-./bin/tsi list
-./bin/tsi info <package>
-./bin/tsi install <package>
-./bin/tsi remove <package>
+./target/release/tsi --help
+./target/release/tsi list
+./target/release/tsi info <package>
+./target/release/tsi install <package>
+./target/release/tsi uninstall <package>
 ```
 
-## Architecture
+## Module Layout
 
 ```
 src/
-├── package.h/c      - Package manifest handling
-├── database.h/c     - Installed packages database
-├── resolver.h/c     - Dependency resolution
-├── fetcher.h/c      - Source code fetching
-├── builder.h/c      - Build system integration
-├── main.c           - CLI interface
-└── Makefile         - Build system
+├── main.rs           # Entry point
+├── lib.rs            # Library root
+├── cli/              # Command-line interface (clap)
+├── core/             # Package, registry, resolver, database, config
+├── ops/              # Fetch, build, install, uninstall, link
+├── ui/               # Output, progress, table
+└── platform/         # OS detection, prefix resolution (unix, windows)
 ```
-
-## Advantages
-
-- ✅ Works on systems with only C compiler
-- ✅ Single static binary, no dependencies
-- ✅ Faster execution
-- ✅ Smaller footprint
-- ✅ Easier to bootstrap
-- ✅ Perfect for minimal systems (Xilinx, embedded)
 
 ## Installation
 
 ```bash
-# Build
-make
+# From repository root
+make install
 
-# Install system-wide
-sudo make install
-
-# Or install to custom location
-make install DESTDIR=/opt/tsi
+# Or with custom prefix
+make install PREFIX=/opt/tsi
 ```
 
 ## Development
 
-For rapid development and testing, use the local install script:
+For rapid development and testing:
 
 ```bash
-# From the repository root
-./local-install.sh
-```
+# Build and run
+cargo run -- install <package>
 
-This script will:
-- Build TSI from source
-- Install it to `~/.tsi/bin/tsi` (or `$TSI_PREFIX/bin/tsi`)
-- Update completion scripts
-- Allow you to test changes immediately without pushing to git
+# Run tests
+cargo test
 
-**Custom installation prefix:**
-```bash
-TSI_PREFIX=/opt/tsi ./dev-install.sh
-```
-
-After running `./dev-install.sh`, you can immediately test your changes:
-```bash
-tsi --version
-tsi install <package>
+# Lint
+cargo clippy
+cargo fmt --check
 ```
 
 ## Directory Structure
@@ -133,46 +101,18 @@ tsi install <package>
 After installation, TSI creates:
 
 ```
-~/.tsi/
-├── build/          # Build directories
-├── install/        # Installed packages
+~/.tsi/                    # or %USERPROFILE%\.tsi on Windows
+├── build/                 # Build directories
+├── install/               # Installed packages
 │   ├── bin/
 │   ├── lib/
 │   └── include/
-├── sources/        # Downloaded source code
-├── db/             # Package database
-└── packages/       # Package repository
+├── sources/               # Downloaded source code
+├── db/                    # Package database
+└── packages/              # Package repository
 ```
-
-## Package Format
-
-Packages are defined using JSON manifests (same format as Python version):
-
-```json
-{
-  "name": "example-package",
-  "version": "1.0.0",
-  "description": "An example package",
-  "source": {
-    "type": "git",
-    "url": "https://github.com/user/repo.git",
-    "branch": "main"
-  },
-  "dependencies": ["libfoo"],
-  "build_system": "autotools",
-  "configure_args": ["--enable-shared"]
-}
-```
-
-## Future Work
-
-1. **Better JSON parser**: Currently uses simple string matching (works but limited)
-2. **More build systems**: Cargo, Python packages
-3. **Better error handling**: More detailed error messages
-4. **Testing**: Unit tests for core components
-5. **Performance**: Optimize dependency resolution
 
 ## See Also
 
 - [../README.md](../README.md) - Main documentation
-- [../INSTALL.md](../INSTALL.md) - Installation guide
+- [../docs/](../docs/) - Full documentation

@@ -38,6 +38,7 @@ Thumbs.db
 # Build artifacts
 src/build/
 src/bin/
+target/
 
 # Image files (SD card images, etc.)
 *.img

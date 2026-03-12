@@ -19,7 +19,7 @@ services:
       - ../:/root/tsi-source:ro
     command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
 
-  # Alpine with C compiler only (for C version testing)
+  # Alpine with Rust and C compiler (for Rust TSI testing)
   alpine-c-only:
     build:
       context: ..

@@ -35,7 +35,7 @@ PREFIX=/opt/tsi ./tsi-bootstrap.sh --repair
    - If source is a git repository: Fetches and checks for remote changes
    - If source has changed: Updates using `git pull` or re-downloads
    - If source is up to date: Uses existing source
-3. **Rebuilds TSI**: Builds TSI from the updated source
+3. **Rebuilds TSI**: Downloads pre-built binary from GitHub releases, or builds from source with `cargo build --release`
 4. **Reinstalls**: Copies new binary and completion scripts to installation directory
 
 ### Repair Process
@@ -53,38 +53,26 @@ The repair mode will:
 
 ## Uninstalling TSI
 
-TSI provides an `uninstall` command to completely remove TSI from your system.
+TSI does not provide a self-uninstall command. To remove TSI, manually delete the installation directory.
 
-### Basic Uninstall
+### Basic Uninstall (Preserve Data)
 
-Removes TSI binary and completion scripts, but preserves data:
+Remove TSI binary and completion scripts, but preserve data:
 
 ```bash
-tsi uninstall
+rm -f ~/.tsi/bin/tsi ~/.tsi/bin/tsi.exe
+rm -rf ~/.tsi/share/completions/
 ```
 
-This will:
-- Remove `~/.tsi/bin/tsi`
-- Remove `~/.tsi/share/completions/`
-- **Preserve** all TSI data (packages, database, repository, sources)
+This preserves: `~/.tsi/db/`, `~/.tsi/install/`, `~/.tsi/packages/`, `~/.tsi/sources/`, `~/.tsi/build/`
 
 ### Complete Uninstall
 
 Remove everything including all TSI data:
 
 ```bash
-tsi uninstall --all
+rm -rf ~/.tsi
 ```
-
-This will:
-- Remove TSI binary and completion scripts
-- Remove all TSI data:
-  - `~/.tsi/db/` (package database)
-  - `~/.tsi/install/` (installed packages)
-  - `~/.tsi/packages/` (package repository)
-  - `~/.tsi/sources/` (downloaded sources)
-  - `~/.tsi/build/` (build directories)
-  - `~/.tsi/` (entire directory)
 
 **Warning**: This will remove all packages installed via TSI!
 
@@ -93,8 +81,7 @@ This will:
 Uninstall from a custom installation location:
 
 ```bash
-tsi uninstall --prefix /opt/tsi
-tsi uninstall --all --prefix /opt/tsi
+rm -rf /opt/tsi
 ```
 
 ### After Uninstalling
@@ -139,19 +126,17 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.s
 **Problem**: Repair mode fails to build
 
 **Solutions**:
-- Check C compiler is available: `gcc --version`
-- Check make is available: `make --version`
-- Check internet connection (for downloading source)
-- Try manual build: `cd src && make clean && make`
+- Check internet connection (for downloading pre-built binary)
+- If building from source: ensure Rust toolchain is installed (`rustc --version`)
+- Try manual build: `cargo build --release`
 
 ### Uninstall Fails
 
-**Problem**: `tsi uninstall` fails with permission errors
+**Problem**: Permission errors when removing files
 
 **Solutions**:
 - Check file permissions: `ls -la ~/.tsi/bin/tsi`
-- Use `sudo` if installed system-wide: `sudo tsi uninstall`
-- Manually remove: `rm -rf ~/.tsi`
+- Use `sudo` if installed system-wide: `sudo rm -rf /opt/tsi`
 
 ### Binary Still in PATH
 

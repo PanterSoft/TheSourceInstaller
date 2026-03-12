@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.s
 **What it does:**
 - Detects existing installation
 - Checks for source updates (if source is a git repository, fetches updates)
-- Rebuilds TSI from updated source
+- Downloads pre-built binary from GitHub releases, or builds from source with `cargo build --release`
 - Reinstalls TSI binary and completion scripts
 - **Preserves all data**: packages, database, repository, sources
 
@@ -35,7 +35,6 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.s
 - TSI binary is corrupted or missing
 - TSI is outdated and you want to update
 - TSI stopped working after system updates
-- You want to rebuild TSI with a different compiler
 
 ### `--prefix PATH`
 
@@ -152,14 +151,14 @@ echo "export PATH=\"$PREFIX/bin:\$PATH\"" >> ~/.bashrc
 
 ### Installation Fails
 
-- Check that you have a C compiler: `gcc --version` or `clang --version`
-- Check that you have `make`: `make --version`
-- Verify internet connection for downloading source
+- Verify internet connection for downloading pre-built binary
+- If building from source: ensure Rust toolchain is installed (`rustc --version`)
+- Check file permissions on installation directory
 
 ### Repair Fails
 
 - Check file permissions on installation directory
-- Verify C compiler is available
+- Verify internet connection (for pre-built binary) or Rust toolchain (for source build)
 - Check that source repository is accessible
 
 ### Custom Prefix Issues

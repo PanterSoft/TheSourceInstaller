@@ -6,6 +6,21 @@ if [ -z "$BASH_VERSION" ]; then
     return 0
 fi
 
+_tsi_versions() {
+    local repo_dir="$1" pkg_name="$2"
+    [ -z "$repo_dir" ] || [ -z "$pkg_name" ] && return
+    local versions=""
+    for f in "$repo_dir"/*.json 2>/dev/null; do
+        [ -f "$f" ] || continue
+        if grep -q "\"name\"[[:space:]]*:[[:space:]]*\"${pkg_name}\"" "$f" 2>/dev/null; then
+            local v
+            v=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+            [ -n "$v" ] && versions="${versions} ${v}"
+        fi
+    done
+    echo "$versions" | tr ' ' '\n' | sort -u 2>/dev/null | tr '\n' ' '
+}
+
 _tsi() {
     local cur prev words cword
     COMPREPLY=()
@@ -15,7 +30,7 @@ _tsi() {
     cword=$COMP_CWORD
 
     # All TSI commands
-    local commands="install remove list info update uninstall --help --version -h -v"
+    local commands="install uninstall upgrade list search info update doctor --help --version -h -v"
 
     # Handle command-specific completions
     case ${prev} in
@@ -58,25 +73,9 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 local version_part="${cur#*@}"
                 local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
-                    local versions=$(python3 -c "
-import json, os, sys
-repo_dir = os.path.expanduser('$repo_dir')
-pkg_name = '$pkg_name'
-versions = []
-for f in os.listdir(repo_dir):
-    if f.endswith('.json'):
-        try:
-            with open(os.path.join(repo_dir, f), 'r') as file:
-                data = json.load(file)
-                if data.get('name') == pkg_name:
-                    versions.append(data.get('version', 'latest'))
-        except:
-            pass
-print(' '.join(sorted(set(versions), reverse=True)))
-" 2>/dev/null)
+                    local versions=$(_tsi_versions "$repo_dir" "$pkg_name")
                     if [ -n "$versions" ]; then
                         COMPREPLY=($(compgen -W "${versions}" -- "${version_part}"))
-                        # Prefix with package name and @
                         for i in "${!COMPREPLY[@]}"; do
                             COMPREPLY[$i]="${pkg_name}@${COMPREPLY[$i]}"
                         done
@@ -95,37 +94,24 @@ print(' '.join(sorted(set(versions), reverse=True)))
             return 0
             ;;
 
-        remove)
-            # List installed packages
-            local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
-            if [ -n "$installed" ]; then
-                COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
+        uninstall)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+            else
+                local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
+                if [ -n "$installed" ]; then
+                    COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
+                fi
             fi
             return 0
             ;;
 
         info)
             if [[ ${cur} == *@ ]]; then
-                # User typed package@, show versions
                 local pkg_name="${cur%@}"
                 local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
-                    local versions=$(python3 -c "
-import json, os, sys
-repo_dir = os.path.expanduser('$repo_dir')
-pkg_name = '$pkg_name'
-versions = []
-for f in os.listdir(repo_dir):
-    if f.endswith('.json'):
-        try:
-            with open(os.path.join(repo_dir, f), 'r') as file:
-                data = json.load(file)
-                if data.get('name') == pkg_name:
-                    versions.append(data.get('version', 'latest'))
-        except:
-            pass
-print(' '.join(sorted(set(versions), reverse=True)))
-" 2>/dev/null)
+                    local versions=$(_tsi_versions "$repo_dir" "$pkg_name")
                     if [ -n "$versions" ]; then
                         COMPREPLY=($(compgen -W "${versions}" -- ""))
                         for i in "${!COMPREPLY[@]}"; do
@@ -139,22 +125,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 local version_part="${cur#*@}"
                 local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ] && [ -n "$pkg_name" ]; then
-                    local versions=$(python3 -c "
-import json, os, sys
-repo_dir = os.path.expanduser('$repo_dir')
-pkg_name = '$pkg_name'
-versions = []
-for f in os.listdir(repo_dir):
-    if f.endswith('.json'):
-        try:
-            with open(os.path.join(repo_dir, f), 'r') as file:
-                data = json.load(file)
-                if data.get('name') == pkg_name:
-                    versions.append(data.get('version', 'latest'))
-        except:
-            pass
-print(' '.join(sorted(set(versions), reverse=True)))
-" 2>/dev/null)
+                    local versions=$(_tsi_versions "$repo_dir" "$pkg_name")
                     if [ -n "$versions" ]; then
                         COMPREPLY=($(compgen -W "${versions}" -- "${version_part}"))
                         for i in "${!COMPREPLY[@]}"; do
@@ -163,7 +134,6 @@ print(' '.join(sorted(set(versions), reverse=True)))
                     fi
                 fi
             else
-                # List packages from repository
                 local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
@@ -182,7 +152,17 @@ print(' '.join(sorted(set(versions), reverse=True)))
             return 0
             ;;
 
-        uninstall)
+        upgrade)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+            else
+                local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
+                [ -n "$installed" ] && COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
+            fi
+            return 0
+            ;;
+
+        search|doctor|list)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
             fi
@@ -253,12 +233,42 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 return 0
             fi
         elif [[ "${COMP_WORDS[i]}" == "uninstall" ]]; then
-            # We're in uninstall command
             if [[ ${prev} == "--prefix" ]]; then
                 COMPREPLY=($(compgen -d -- ${cur}))
                 return 0
             elif [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                return 0
+            else
+                local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
+                [ -n "$installed" ] && COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
+                return 0
+            fi
+        elif [[ "${COMP_WORDS[i]}" == "upgrade" ]]; then
+            if [[ ${prev} == "--prefix" ]]; then
+                COMPREPLY=($(compgen -d -- ${cur}))
+                return 0
+            elif [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                return 0
+            else
+                local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
+                [ -n "$installed" ] && COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
+                return 0
+            fi
+        elif [[ "${COMP_WORDS[i]}" == "info" ]]; then
+            if [[ ${prev} == "--prefix" ]]; then
+                COMPREPLY=($(compgen -d -- ${cur}))
+                return 0
+            elif [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                return 0
+            else
+                local repo_dir="${HOME}/.tsi/packages"
+                if [ -d "$repo_dir" ]; then
+                    local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
+                    [ -n "$packages" ] && COMPREPLY=($(compgen -W "${packages}" -- ${cur}))
+                fi
                 return 0
             fi
         fi

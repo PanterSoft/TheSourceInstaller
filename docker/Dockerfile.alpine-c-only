@@ -1,13 +1,18 @@
-# Alpine with only C compiler - for testing C version
+# Alpine with C compiler and Rust - for testing Rust TSI and building packages
 FROM alpine:latest
 
-# Install build tools (C compiler and make)
+# Install build tools (C compiler, make) and Rust
 RUN apk add --no-cache \
     gcc \
     make \
-    musl-dev
+    musl-dev \
+    curl
 
-# Remove package manager to simulate minimal system
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Remove package manager to simulate minimal system (after installing deps)
 RUN rm -rf /sbin/apk /sbin/apk.static /usr/bin/apk /usr/bin/apk.static /etc/apk
 RUN rm -rf /var/cache/apk
 
@@ -19,4 +24,3 @@ COPY . /root/tsi-source/
 WORKDIR /root/tsi-source
 
 CMD ["/bin/sh"]
-

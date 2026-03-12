@@ -1,57 +1,24 @@
 stages:
   - test
-  - build
   - lint
 
 variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
+  CARGO_HOME: ${CI_PROJECT_DIR}/.cargo
 
-# C version tests
-test:c:build:
+test:rust:
   stage: test
-  image: docker:latest
-  services:
-    - docker:dind
+  image: rust:latest
   script:
-    - cd docker
-    - docker-compose down -v || true
-    - docker-compose rm -f -v || true
-    - docker-compose build alpine-c-only
-    - docker-compose run --rm --no-deps alpine-c-only /bin/sh /root/tsi-source/docker/test-install-c.sh
-    - docker-compose down -v || true
+    - cargo build --release
+    - cargo test
   tags:
     - docker
 
-# Build C version
-build:c:static:
-  stage: build
-  image: docker:latest
-  services:
-    - docker:dind
-  script:
-    - cd docker
-    - docker-compose down -v || true
-    - docker-compose rm -f -v || true
-    - docker-compose build alpine-c-only
-    - docker-compose run --rm --no-deps alpine-c-only sh -c "cd /root/tsi-source/src && make clean && make"
-    - docker cp $(docker create alpine-c-only):/root/tsi-source/src/bin/tsi ./tsi-static
-    - docker-compose down -v || true
-  artifacts:
-    paths:
-      - tsi-static
-    expire_in: 1 week
-  tags:
-    - docker
-
-# Lint
-lint:c:
+lint:rust:
   stage: lint
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache clang
+  image: rust:latest
   script:
-    - find src -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror || true
+    - cargo clippy -- -D warnings
+    - cargo fmt --check
   tags:
     - docker
-
