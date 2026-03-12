@@ -44,14 +44,14 @@ This document explains when each workflow runs and what triggers them.
 
 ## Package Validation Workflow
 
-**File:** `.github/workflows/package-validation.yml`
+**File:** `.github/workflows/Package Validation.yml`
 
 **Purpose:** Validates package JSON files and ensures TSI can parse them
 
 **Triggers:**
 - ✅ **Only runs when package files change:**
   - `packages/**/*.json` - Package definition files
-  - `.github/workflows/package-validation.yml` - The workflow file itself
+  - `.github/workflows/Package Validation.yml` - The workflow file itself
 
 - ❌ **Does NOT run when:**
   - TSI source code changes
