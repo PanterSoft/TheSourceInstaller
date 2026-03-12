@@ -103,7 +103,7 @@ src/
 
 8. **CLI** (`cli/`)
    - Command-line interface (clap)
-   - Subcommands: install, uninstall, upgrade, list, search, info, update, doctor
+   - Subcommands: install, uninstall, upgrade, list, search, info, update, doctor, remove
    - Argument parsing and dispatch
 
 9. **Platform** (`platform/`)

@@ -79,6 +79,7 @@ The bootstrap installer supports several command-line options and environment va
 **Command-line options:**
 - `--prefix PATH` - Installation prefix (default: `~/.tsi` on Unix, `%USERPROFILE%\.tsi` on Windows)
 - `--repair` - Repair/update existing TSI installation
+- `--uninstall` - Remove TSI completely from the system
 - `--help, -h` - Show help message
 
 **Environment variables (recommended - cleaner syntax, no '--' needed):**
@@ -96,6 +97,9 @@ PREFIX=~/.tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/t
 
 # Repair existing installation - using environment variable (recommended, no '--' needed)
 REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+
+# Uninstall TSI completely
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
 
 # Or use command-line arguments
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/.tsi

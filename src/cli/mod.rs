@@ -2,6 +2,7 @@ mod doctor;
 mod info;
 mod install;
 mod list;
+mod remove;
 mod search;
 mod uninstall;
 mod update;
@@ -55,6 +56,8 @@ pub enum Commands {
     Update(update::UpdateArgs),
     /// Check your system for potential problems
     Doctor(doctor::DoctorArgs),
+    /// Uninstall TSI from the system
+    Remove(remove::RemoveArgs),
 }
 
 pub fn run() -> Result<()> {
@@ -68,5 +71,6 @@ pub fn run() -> Result<()> {
         Commands::Info(args) => info::run(args),
         Commands::Update(args) => update::run(args),
         Commands::Doctor(args) => doctor::run(args),
+        Commands::Remove(args) => remove::run(args),
     }
 }
