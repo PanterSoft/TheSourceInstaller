@@ -54,12 +54,7 @@ fn build_env_base(prefix: &Path) -> Vec<(String, String)> {
 
     let path = std::env::var("PATH").unwrap_or_default();
     let path_sep = if cfg!(windows) { ";" } else { ":" };
-    let new_path = format!(
-        "{}{}{}",
-        bin.display(),
-        path_sep,
-        path
-    );
+    let new_path = format!("{}{}{}", bin.display(), path_sep, path);
 
     vec![
         ("PATH".to_string(), new_path),
@@ -71,14 +66,8 @@ fn build_env_base(prefix: &Path) -> Vec<(String, String)> {
             "LD_LIBRARY_PATH".to_string(),
             lib.to_string_lossy().to_string(),
         ),
-        (
-            "CPPFLAGS".to_string(),
-            format!("-I{}", include.display()),
-        ),
-        (
-            "LDFLAGS".to_string(),
-            format!("-L{}", lib.display()),
-        ),
+        ("CPPFLAGS".to_string(), format!("-I{}", include.display())),
+        ("LDFLAGS".to_string(), format!("-L{}", lib.display())),
     ]
 }
 
@@ -114,7 +103,9 @@ fn build_autotools(
 
     run_cmd(Command::new("make").current_dir(source_dir), env)?;
     run_cmd(
-        Command::new("make").args(["install"]).current_dir(source_dir),
+        Command::new("make")
+            .args(["install"])
+            .current_dir(source_dir),
         env,
     )?;
     Ok(())
@@ -139,13 +130,11 @@ fn build_cmake(
 
     run_cmd(Command::new("cmake").args(&cmake_args), env)?;
     run_cmd(
-        Command::new("cmake")
-            .args(["--build", build_dir.to_string_lossy().as_ref()]),
+        Command::new("cmake").args(["--build", build_dir.to_string_lossy().as_ref()]),
         env,
     )?;
     run_cmd(
-        Command::new("cmake")
-            .args(["--install", build_dir.to_string_lossy().as_ref()]),
+        Command::new("cmake").args(["--install", build_dir.to_string_lossy().as_ref()]),
         env,
     )?;
     Ok(())
@@ -160,24 +149,21 @@ fn build_meson(
 ) -> Result<()> {
     let prefix = install_dir.to_string_lossy();
     run_cmd(
-        Command::new("meson")
-            .args([
-                "setup",
-                build_dir.to_string_lossy().as_ref(),
-                source_dir.to_string_lossy().as_ref(),
-                "--prefix",
-                &prefix,
-            ]),
+        Command::new("meson").args([
+            "setup",
+            build_dir.to_string_lossy().as_ref(),
+            source_dir.to_string_lossy().as_ref(),
+            "--prefix",
+            &prefix,
+        ]),
         env,
     )?;
     run_cmd(
-        Command::new("meson")
-            .args(["compile", "-C", build_dir.to_string_lossy().as_ref()]),
+        Command::new("meson").args(["compile", "-C", build_dir.to_string_lossy().as_ref()]),
         env,
     )?;
     run_cmd(
-        Command::new("meson")
-            .args(["install", "-C", build_dir.to_string_lossy().as_ref()]),
+        Command::new("meson").args(["install", "-C", build_dir.to_string_lossy().as_ref()]),
         env,
     )?;
     Ok(())
@@ -194,7 +180,9 @@ fn build_make(
     let mut make_args = pkg.make_args.clone();
     make_args.push(format!("PREFIX={}", prefix));
     run_cmd(
-        Command::new("make").args(&make_args).current_dir(source_dir),
+        Command::new("make")
+            .args(&make_args)
+            .current_dir(source_dir),
         env,
     )?;
     run_cmd(

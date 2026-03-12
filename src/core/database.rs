@@ -32,8 +32,7 @@ impl Database {
         std::fs::create_dir_all(db_dir).context("Failed to create database directory")?;
         let path = db_dir.join("installed.json");
         let packages = if path.exists() {
-            let json = std::fs::read_to_string(&path)
-                .context("Failed to read database")?;
+            let json = std::fs::read_to_string(&path).context("Failed to read database")?;
             let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
                 schema_version: SCHEMA_VERSION,
                 installed: vec![],
@@ -71,7 +70,13 @@ impl Database {
         self.packages.iter().any(|p| p.name == name)
     }
 
-    pub fn add(&mut self, name: &str, version: &str, install_path: &Path, deps: &[String]) -> Result<()> {
+    pub fn add(
+        &mut self,
+        name: &str,
+        version: &str,
+        install_path: &Path,
+        deps: &[String],
+    ) -> Result<()> {
         if self.is_installed(name) {
             return Ok(());
         }

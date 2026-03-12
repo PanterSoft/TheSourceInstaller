@@ -13,7 +13,9 @@ pub struct UninstallArgs {
 pub fn run(args: UninstallArgs) -> Result<()> {
     if args.packages.is_empty() {
         ui::output::error("No packages specified");
-        return Err(anyhow::anyhow!("Usage: tsi uninstall <package> [package...]"));
+        return Err(anyhow::anyhow!(
+            "Usage: tsi uninstall <package> [package...]"
+        ));
     }
 
     let prefix = platform::resolve_prefix(args.prefix.as_deref());

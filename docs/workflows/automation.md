@@ -229,6 +229,10 @@ The workflows integrate with your CI/CD pipeline:
 - Package tests run on new versions
 - Automated checks ensure quality
 
+### GitLab CI
+
+**Primary CI is GitHub Actions.** A [`.gitlab-ci.yml`](../../.gitlab-ci.yml) file is provided for GitLab-based mirrors and forks. It mirrors the Rust build, test, clippy, and fmt steps from [`.github/workflows/rust-ci.yml`](../../.github/workflows/rust-ci.yml). When updating Rust CI behavior, keep both in sync so GitLab users get the same checks.
+
 ## See Also
 
 - [Version Discovery](version-discovery.md) - Detailed version discovery documentation

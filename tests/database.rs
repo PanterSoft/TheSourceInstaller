@@ -1,4 +1,3 @@
-use std::path::Path;
 use tsi::core::database::Database;
 
 #[test]
@@ -9,7 +8,8 @@ fn test_database_create_and_add() {
     let mut db = Database::new(db_dir).unwrap();
     assert!(!db.is_installed("foo"));
 
-    db.add("foo", "1.0.0", &db_dir.join("install/foo"), &[]).unwrap();
+    db.add("foo", "1.0.0", &db_dir.join("install/foo"), &[])
+        .unwrap();
     assert!(db.is_installed("foo"));
 
     let pkg = db.get("foo").unwrap();
@@ -23,7 +23,13 @@ fn test_database_remove() {
     let db_dir = temp.path();
 
     let mut db = Database::new(db_dir).unwrap();
-    db.add("bar", "2.0.0", &db_dir.join("install/bar"), &["dep1".into()]).unwrap();
+    db.add(
+        "bar",
+        "2.0.0",
+        &db_dir.join("install/bar"),
+        &["dep1".into()],
+    )
+    .unwrap();
     assert!(db.is_installed("bar"));
 
     let removed = db.remove("bar").unwrap();
@@ -41,7 +47,8 @@ fn test_database_persistence() {
 
     {
         let mut db = Database::new(db_dir).unwrap();
-        db.add("baz", "3.0.0", &db_dir.join("install/baz"), &[]).unwrap();
+        db.add("baz", "3.0.0", &db_dir.join("install/baz"), &[])
+            .unwrap();
     }
 
     let db = Database::new(db_dir).unwrap();

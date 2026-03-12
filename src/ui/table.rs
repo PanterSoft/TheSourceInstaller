@@ -9,10 +9,7 @@ pub fn pad_right(s: &str, width: usize) -> String {
     }
 }
 
-pub fn format_list_table<T: Display, U: Display>(
-    rows: &[(T, U)],
-    name_width: usize,
-) -> String {
+pub fn format_list_table<T: Display, U: Display>(rows: &[(T, U)], name_width: usize) -> String {
     let mut out = String::new();
     for (name, version) in rows {
         out.push_str(&pad_right(&name.to_string(), name_width));

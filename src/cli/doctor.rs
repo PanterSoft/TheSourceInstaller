@@ -18,14 +18,22 @@ pub fn run(args: DoctorArgs) -> Result<()> {
     let mut warnings = 0;
 
     let cc = if cfg!(windows) { "cl" } else { "cc" };
-    if std::process::Command::new(cc).arg("--version").output().is_ok() {
+    if std::process::Command::new(cc)
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
         ui::output::success("C compiler found");
     } else {
         ui::output::warning("C compiler not found -- required for building");
         warnings += 1;
     }
 
-    if std::process::Command::new("make").arg("--version").output().is_ok() {
+    if std::process::Command::new("make")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
         ui::output::success("make found");
     } else {
         ui::output::warning("make not found -- required for most packages");
@@ -34,7 +42,10 @@ pub fn run(args: DoctorArgs) -> Result<()> {
 
     if packages_dir.exists() {
         let registry = Registry::load_from_dir(&packages_dir).unwrap_or_else(|_| Registry::new());
-        ui::output::success(format!("Package definitions: {} packages available", registry.count()));
+        ui::output::success(format!(
+            "Package definitions: {} packages available",
+            registry.count()
+        ));
     } else {
         ui::output::warning("No package definitions -- run 'tsi update'");
         warnings += 1;
@@ -55,7 +66,11 @@ pub fn run(args: DoctorArgs) -> Result<()> {
         }
     }
 
-    if std::process::Command::new("git").arg("--version").output().is_ok() {
+    if std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
         ui::output::success("git found");
     } else {
         ui::output::warning("git not found -- some packages require git sources");

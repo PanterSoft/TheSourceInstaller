@@ -20,9 +20,27 @@ This document explains when each workflow runs and what triggers them.
   - Only other workflow files change
 
 **Jobs:**
-- `test`: Tests Rust build and functionality (matrix: ubuntu-latest, macos-latest, windows-latest); runs `cargo build --release`, `cargo test`, `cargo clippy`, `cargo fmt --check`
+- `test`: Calls the reusable [Rust CI](.github/workflows/rust-ci.yml) workflow (matrix: ubuntu-latest, macos-latest, windows-latest); runs build, test, clippy, fmt with Cargo caching.
 
 **Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
+
+## Documentation Workflow
+
+**File:** `.github/workflows/docs.yml`
+
+**Purpose:** Builds MkDocs documentation so doc issues are caught on PRs before release.
+
+**Triggers:**
+- ✅ **Runs when:**
+  - `docs/**` - Documentation source
+  - `mkdocs.yml` - MkDocs config
+  - `requirements-docs.txt` - Doc dependencies
+  - `.github/workflows/docs.yml` - The workflow file itself
+
+**Jobs:**
+- `build`: Sets up Python, installs doc dependencies, runs `mkdocs build --strict`.
+
+**Manual Trigger:** Yes, via `workflow_dispatch`
 
 ## Validate Packages Workflow
 
@@ -89,13 +107,14 @@ This document explains when each workflow runs and what triggers them.
 
 ## Summary
 
-| Workflow | Triggers on Source Code | Triggers on Packages | Triggers on Tag | Scheduled |
-|----------|-------------------------|---------------------|-----------------|-----------|
-| TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
-| Validate Packages | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| Release (binaries + docs) | ❌ No | ❌ No | ✅ Yes | ❌ No |
-| Discover Versions | ❌ No | ❌ No | ❌ No | ✅ Weekly |
-| Sync External | ❌ No | ❌ No | ❌ No | ❌ No |
+| Workflow | Triggers on Source Code | Triggers on Packages | Triggers on Docs | Triggers on Tag | Scheduled |
+|----------|-------------------------|---------------------|------------------|-----------------|-----------|
+| TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| Documentation | ❌ No | ❌ No | ✅ Yes | ❌ No | ❌ No |
+| Validate Packages | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| Release (binaries + docs) | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| Discover Versions | ❌ No | ❌ No | ❌ No | ❌ No | ✅ Weekly |
+| Sync External | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
 
 ## Benefits
 

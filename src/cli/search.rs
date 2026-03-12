@@ -28,7 +28,12 @@ pub fn run(args: SearchArgs) -> Result<()> {
         return Ok(());
     }
 
-    let max_name = results.iter().map(|p| p.name.len()).max().unwrap_or(0).max(20);
+    let max_name = results
+        .iter()
+        .map(|p| p.name.len())
+        .max()
+        .unwrap_or(0)
+        .max(20);
     for pkg in results {
         ui::output::detail(format!(
             "{} {}  {}",

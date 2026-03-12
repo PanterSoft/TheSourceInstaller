@@ -14,7 +14,10 @@ pub fn fetch(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
         "tarball" | "zip" => fetch_archive(pkg, dest_dir, force),
         "git" => fetch_git(pkg, dest_dir, force),
         "local" => fetch_local(pkg, dest_dir),
-        _ => Err(anyhow::anyhow!("Unknown source type: {}", pkg.source.source_type)),
+        _ => Err(anyhow::anyhow!(
+            "Unknown source type: {}",
+            pkg.source.source_type
+        )),
     }
 }
 
@@ -63,7 +66,8 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
                 let dest = target_dir.join(e.file_name());
                 std::fs::rename(&p, &dest).context("Move extracted dir")?;
             } else {
-                std::fs::rename(&p, target_dir.join(e.file_name())).context("Move extracted file")?;
+                std::fs::rename(&p, target_dir.join(e.file_name()))
+                    .context("Move extracted file")?;
             }
         }
     }
@@ -103,10 +107,7 @@ pub fn download_file(url: &str, dest: &Path) -> Result<()> {
 }
 
 fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
-    let ext = archive
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = archive.extension().and_then(|e| e.to_str()).unwrap_or("");
     let path_str = archive.to_string_lossy();
 
     if path_str.ends_with(".zip") {

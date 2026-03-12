@@ -75,8 +75,7 @@ impl Registry {
             .values()
             .filter_map(|versions| versions.first())
             .filter(|p| {
-                p.name.to_lowercase().contains(&q)
-                    || p.description.to_lowercase().contains(&q)
+                p.name.to_lowercase().contains(&q) || p.description.to_lowercase().contains(&q)
             })
             .collect();
         results.sort_by(|a, b| a.name.cmp(&b.name));
