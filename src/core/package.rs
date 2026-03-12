@@ -53,7 +53,7 @@ pub struct PackageVersion {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum PackageFile {
-    SingleVersion(PackageVersionFile),
+    SingleVersion(Box<PackageVersionFile>),
     MultiVersion(MultiVersionPackageFile),
 }
 
@@ -139,7 +139,7 @@ fn merge_configure_args_for_os(v: &PackageVersion) -> Vec<String> {
         _ => None,
     };
     override_args
-        .map(|a| a.clone())
+        .cloned()
         .unwrap_or_else(|| v.configure_args.clone())
 }
 

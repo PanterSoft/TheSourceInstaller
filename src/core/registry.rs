@@ -22,7 +22,7 @@ impl Registry {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "json") {
+            if path.extension().is_some_and(|e| e == "json") {
                 let json = std::fs::read_to_string(path)
                     .with_context(|| format!("Failed to read {}", path.display()))?;
                 match parse_package_file(&json) {

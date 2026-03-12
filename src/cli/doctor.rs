@@ -3,8 +3,6 @@ use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
-
 #[derive(Args)]
 pub struct DoctorArgs {
     #[arg(long)]
@@ -12,7 +10,7 @@ pub struct DoctorArgs {
 }
 
 pub fn run(args: DoctorArgs) -> Result<()> {
-    let prefix = PathBuf::from(platform::resolve_prefix(args.prefix.as_deref()));
+    let prefix = platform::resolve_prefix(args.prefix.as_deref());
     let packages_dir = prefix.join("packages");
 
     ui::output::section("Checking system...");

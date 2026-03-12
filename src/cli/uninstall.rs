@@ -3,8 +3,6 @@ use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
-
 #[derive(Args)]
 pub struct UninstallArgs {
     pub packages: Vec<String>,
@@ -18,7 +16,7 @@ pub fn run(args: UninstallArgs) -> Result<()> {
         return Err(anyhow::anyhow!("Usage: tsi uninstall <package> [package...]"));
     }
 
-    let prefix = PathBuf::from(platform::resolve_prefix(args.prefix.as_deref()));
+    let prefix = platform::resolve_prefix(args.prefix.as_deref());
     let db_dir = prefix.join("db");
     let mut db = Database::new(&db_dir)?;
 

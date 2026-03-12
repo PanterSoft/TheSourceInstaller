@@ -6,8 +6,6 @@ use crate::platform;
 use crate::ui;
 use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
-
 #[derive(Args)]
 pub struct InstallArgs {
     pub package: String,
@@ -18,7 +16,7 @@ pub struct InstallArgs {
 }
 
 pub fn run(args: InstallArgs) -> Result<()> {
-    let prefix = PathBuf::from(platform::resolve_prefix(args.prefix.as_deref()));
+    let prefix = platform::resolve_prefix(args.prefix.as_deref());
     let packages_dir = prefix.join("packages");
     let db_dir = prefix.join("db");
 
@@ -39,7 +37,6 @@ pub fn run(args: InstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    let names: Vec<String> = order.iter().map(|p| p.spec()).collect();
     ui::output::section(format!("Resolving dependencies for {}...", args.package));
     ui::output::section(format!(
         "Installing {} packages: {}",
@@ -47,7 +44,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         order.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")
     ));
 
-    for (i, pkg) in order.iter().enumerate() {
+    for pkg in order.iter() {
         ui::output::section(format!("Fetching {}-{}", pkg.name, pkg.version));
         let url = pkg.source.url.as_deref().unwrap_or("(git)");
         ui::output::detail(url);

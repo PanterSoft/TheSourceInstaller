@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::symlink;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -10,7 +11,7 @@ pub fn create_symlink(src: &Path, dst: &Path) -> Result<()> {
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent).context("Failed to create parent directory")?;
     }
-    fs::symlink(src, dst).context("Failed to create symlink")?;
+    symlink(src, dst).context("Failed to create symlink")?;
     Ok(())
 }
 
@@ -21,6 +22,6 @@ pub fn create_dir_symlink(src: &Path, dst: &Path) -> Result<()> {
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent).context("Failed to create parent directory")?;
     }
-    fs::symlink(src, dst).context("Failed to create symlink")?;
+    symlink(src, dst).context("Failed to create symlink")?;
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::core::package::{Package, PackageSource};
+use crate::core::package::Package;
 use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
@@ -46,7 +46,7 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
         .filter(|e| {
             e.file_name()
                 .to_str()
-                .map_or(false, |n| !n.starts_with('.') && n != filename)
+                .is_some_and(|n| !n.starts_with('.') && n != filename)
         })
         .collect();
 
