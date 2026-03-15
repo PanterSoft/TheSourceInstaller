@@ -10,10 +10,14 @@ pub struct UpgradeArgs {
     pub packages: Vec<String>,
     #[arg(long)]
     pub prefix: Option<String>,
+    /// Show full build output (default: compact, one line per step)
+    #[arg(long)]
+    pub verbose: bool,
 }
 
 pub fn run(args: UpgradeArgs) -> Result<()> {
     let (prefix, packages_dir) = crate::cli::resolve_packages_dir(args.prefix.as_deref())?;
+    let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
 
     let registry = Registry::load_from_dir(&packages_dir)?;
@@ -48,7 +52,7 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                     )?;
                     let order = resolver::get_build_order(&packages);
                     for pkg in &order {
-                        ops_install::install_package(pkg, &prefix, &mut db_mut, true)?;
+                        ops_install::install_package(pkg, &prefix, &mut db_mut, true, args.verbose)?;
                     }
                 } else {
                     ui::output::detail(format!(

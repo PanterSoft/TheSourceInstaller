@@ -58,3 +58,12 @@ pub fn step(msg: impl std::fmt::Display) {
         let _ = writeln!(io::stderr(), "-> {}", msg);
     }
 }
+
+/// Homebrew-style build step line (e.g. "==> make").
+pub fn build_step(msg: impl std::fmt::Display) {
+    if is_tty() {
+        let _ = writeln!(io::stderr(), "{} {}", style(ARROW).bold().blue(), msg);
+    } else {
+        let _ = writeln!(io::stderr(), "{} {}", ARROW, msg);
+    }
+}

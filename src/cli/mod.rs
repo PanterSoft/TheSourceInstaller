@@ -62,6 +62,10 @@ pub enum Commands {
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
+    run_with(cli)
+}
+
+pub fn run_with(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::Install(args) => install::run(args),
         Commands::Uninstall(args) => uninstall::run(args),

@@ -12,10 +12,14 @@ pub struct InstallArgs {
     pub force: bool,
     #[arg(long)]
     pub prefix: Option<String>,
+    /// Show full build output (default: compact, one line per step)
+    #[arg(long)]
+    pub verbose: bool,
 }
 
 pub fn run(args: InstallArgs) -> Result<()> {
     let (prefix, packages_dir) = crate::cli::resolve_packages_dir(args.prefix.as_deref())?;
+    let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
 
     let registry = Registry::load_from_dir(&packages_dir)?;
@@ -47,7 +51,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         ui::output::detail(url);
 
         ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
-        ops_install::install_package(pkg, &prefix, &mut db, args.force)?;
+        ops_install::install_package(pkg, &prefix, &mut db, args.force, args.verbose)?;
         ui::output::section(format!(
             "Linking {} {} into {}",
             pkg.name,

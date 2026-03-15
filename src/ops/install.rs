@@ -7,7 +7,13 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 /// Fetches, builds, links, and records a package under prefix.
-pub fn install_package(pkg: &Package, prefix: &Path, db: &mut Database, force: bool) -> Result<()> {
+pub fn install_package(
+    pkg: &Package,
+    prefix: &Path,
+    db: &mut Database,
+    force: bool,
+    verbose: bool,
+) -> Result<()> {
     let sources_dir = prefix.join("sources");
     let build_dir = prefix
         .join("build")
@@ -21,7 +27,7 @@ pub fn install_package(pkg: &Package, prefix: &Path, db: &mut Database, force: b
 
     let source_dir = fetch::fetch(pkg, &sources_dir, force)?;
 
-    build::build(pkg, &source_dir, &build_dir, &install_dir, &main_install)?;
+    build::build(pkg, &source_dir, &build_dir, &install_dir, &main_install, verbose)?;
 
     link::create_symlinks(&install_dir, &main_install)?;
 
