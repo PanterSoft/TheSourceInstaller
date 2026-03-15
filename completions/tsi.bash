@@ -36,7 +36,7 @@ _tsi() {
     case ${prev} in
         install)
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--force --prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--force --prefix --verbose" -- ${cur}))
             elif [[ ${cur} == *@ ]]; then
                 # User typed package@, show versions
                 local pkg_name="${cur%@}"
@@ -161,7 +161,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
 
         upgrade)
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--prefix --verbose" -- ${cur}))
             else
                 local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
                 [ -n "$installed" ] && COMPREPLY=($(compgen -W "${installed}" -- ${cur}))
@@ -205,8 +205,8 @@ print(' '.join(sorted(set(versions), reverse=True)))
     for ((i=1; i < ${#COMP_WORDS[@]}; i++)); do
         if [[ "${COMP_WORDS[i]}" == "install" ]]; then
             # We're in install command
-            if [[ ${prev} == "--force" ]] || [[ ${prev} == "--prefix" ]]; then
-                # After --force or --prefix, complete packages
+            if [[ ${prev} == "--force" ]] || [[ ${prev} == "--prefix" ]] || [[ ${prev} == "--verbose" ]]; then
+                # After --force, --prefix, or --verbose, complete packages
                 local repo_dir="${HOME}/.tsi/packages"
                 if [ -d "$repo_dir" ]; then
                     local packages=$(ls -1 "$repo_dir"/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' 2>/dev/null)
@@ -217,7 +217,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 return 0
             elif [[ ${cur} == -* ]]; then
                 # Complete install options
-                COMPREPLY=($(compgen -W "--force --prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--force --prefix --verbose" -- ${cur}))
                 return 0
             else
                 # Complete packages
@@ -256,7 +256,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 COMPREPLY=($(compgen -d -- ${cur}))
                 return 0
             elif [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--prefix --verbose" -- ${cur}))
                 return 0
             else
                 local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)

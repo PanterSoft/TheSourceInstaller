@@ -46,6 +46,7 @@ _tsi() {
                     _arguments \
                         "--force[Force reinstall]" \
                         "--prefix[Installation prefix]:directory:_files -/" \
+                        "--verbose[Show full build output]" \
                         "*:package:->packages"
                     ;;
                 uninstall)
@@ -56,6 +57,7 @@ _tsi() {
                 upgrade)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/" \
+                        "--verbose[Show full build output]" \
                         "*:package:->installed_packages"
                     ;;
                 search)
