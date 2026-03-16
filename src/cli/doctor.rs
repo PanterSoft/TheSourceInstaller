@@ -1,3 +1,6 @@
+use crate::core::bootstrap;
+use crate::core::config::Config;
+use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::platform;
 use crate::ui;
@@ -17,27 +20,59 @@ pub fn run(args: DoctorArgs) -> Result<()> {
 
     let mut warnings = 0;
 
-    let cc = if cfg!(windows) { "cl" } else { "cc" };
-    if std::process::Command::new(cc)
-        .arg("--version")
-        .output()
-        .is_ok()
-    {
-        ui::output::success("C compiler found");
-    } else {
-        ui::output::warning("C compiler not found -- required for building");
-        warnings += 1;
-    }
+    let config = Config::load(&prefix);
+    let db_dir = prefix.join("db");
+    let db = Database::new(&db_dir).unwrap_or_else(|_| Database::new(&db_dir).expect("create db"));
+    let bootstrap_complete = bootstrap::is_bootstrap_complete(&db);
 
-    if std::process::Command::new("make")
-        .arg("--version")
-        .output()
-        .is_ok()
-    {
-        ui::output::success("make found");
+    if config.strict_isolation && bootstrap_complete {
+        ui::output::detail("Strict isolation enabled; checking TSI toolchain...");
+
+        let tsi_bin = prefix.join("bin");
+        for tool in ["gcc", "make", "tar", "patch"] {
+            let path = tsi_bin.join(tool);
+            if path.is_file() {
+                ui::output::success(format!("TSI {} found at {}", tool, path.display()));
+            } else {
+                ui::output::warning(format!(
+                    "TSI {} not found at {} (run 'tsi bootstrap' or install {})",
+                    tool,
+                    path.display(),
+                    tool
+                ));
+                warnings += 1;
+            }
+        }
     } else {
-        ui::output::warning("make not found -- required for most packages");
-        warnings += 1;
+        let cc = if cfg!(windows) { "cl" } else { "cc" };
+        if std::process::Command::new(cc)
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            ui::output::success("C compiler found");
+        } else {
+            ui::output::warning("C compiler not found -- required for building");
+            warnings += 1;
+        }
+
+        if std::process::Command::new("make")
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            ui::output::success("make found");
+        } else {
+            ui::output::warning("make not found -- required for most packages");
+            warnings += 1;
+        }
+
+        if config.strict_isolation && !bootstrap_complete {
+            ui::output::warning(
+                "Strict isolation enabled but bootstrap toolchain is incomplete. Run 'tsi bootstrap'.",
+            );
+            warnings += 1;
+        }
     }
 
     if packages_dir.exists() {

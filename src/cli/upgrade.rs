@@ -1,3 +1,5 @@
+use crate::core::bootstrap;
+use crate::core::config::Config;
 use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::core::resolver;
@@ -20,6 +22,7 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
     let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
 
+    let config = Config::load(&prefix);
     let registry = Registry::load_from_dir(&packages_dir)?;
     let db = Database::new(&db_dir)?;
 
@@ -52,7 +55,19 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                     )?;
                     let order = resolver::get_build_order(&packages);
                     for pkg in &order {
-                        ops_install::install_package(pkg, &prefix, &mut db_mut, true, args.verbose)?;
+                        let is_bootstrap_pkg = bootstrap::is_bootstrap_package(&pkg.name);
+                        let bootstrap_complete = bootstrap::is_bootstrap_complete(&db_mut);
+                        let isolated =
+                            config.strict_isolation && bootstrap_complete && !is_bootstrap_pkg;
+
+                        ops_install::install_package(
+                            pkg,
+                            &prefix,
+                            &mut db_mut,
+                            true,
+                            isolated,
+                            args.verbose,
+                        )?;
                     }
                 } else {
                     ui::output::detail(format!(
