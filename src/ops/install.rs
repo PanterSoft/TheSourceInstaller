@@ -12,6 +12,7 @@ pub fn install_package(
     prefix: &Path,
     db: &mut Database,
     force: bool,
+    isolated: bool,
     verbose: bool,
 ) -> Result<()> {
     let sources_dir = prefix.join("sources");
@@ -27,7 +28,15 @@ pub fn install_package(
 
     let source_dir = fetch::fetch(pkg, &sources_dir, force)?;
 
-    build::build(pkg, &source_dir, &build_dir, &install_dir, &main_install, verbose)?;
+    build::build(
+        pkg,
+        &source_dir,
+        &build_dir,
+        &install_dir,
+        &main_install,
+        isolated,
+        verbose,
+    )?;
 
     link::create_symlinks(&install_dir, &main_install)?;
 

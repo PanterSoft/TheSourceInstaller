@@ -15,12 +15,13 @@ pub fn build(
     build_dir: &Path,
     install_dir: &Path,
     prefix_install: &Path,
+    isolated: bool,
     verbose: bool,
 ) -> Result<()> {
     std::fs::create_dir_all(build_dir).context("Create build dir")?;
     std::fs::create_dir_all(install_dir).context("Create install dir")?;
 
-    let env = build_env_with_package(prefix_install, pkg);
+    let env = build_env_with_package(prefix_install, pkg, isolated);
     let env_ref: &[(String, String)] = &env;
 
     for patch in &pkg.patches {
@@ -43,23 +44,37 @@ pub fn build(
     Ok(())
 }
 
-fn build_env_with_package(prefix: &Path, pkg: &Package) -> Vec<(String, String)> {
-    let mut env = build_env_base(prefix);
+fn build_env_with_package(prefix: &Path, pkg: &Package, isolated: bool) -> Vec<(String, String)> {
+    let mut env = build_env_base(prefix, isolated);
     for (k, v) in &pkg.env {
         env.push((k.clone(), v.clone()));
     }
     env
 }
 
-fn build_env_base(prefix: &Path) -> Vec<(String, String)> {
+fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
     let bin = prefix.join("bin");
     let lib = prefix.join("lib");
     let include = prefix.join("include");
     let pkgconfig = lib.join("pkgconfig");
 
-    let path = std::env::var("PATH").unwrap_or_default();
     let path_sep = if cfg!(windows) { ";" } else { ":" };
-    let new_path = format!("{}{}{}", bin.display(), path_sep, path);
+
+    let base_path = if isolated {
+        if cfg!(windows) {
+            String::new()
+        } else {
+            "/bin".to_string()
+        }
+    } else {
+        std::env::var("PATH").unwrap_or_default()
+    };
+
+    let new_path = if base_path.is_empty() {
+        bin.to_string_lossy().to_string()
+    } else {
+        format!("{}{}{}", bin.display(), path_sep, base_path)
+    };
 
     vec![
         ("PATH".to_string(), new_path),

@@ -1,3 +1,4 @@
+mod bootstrap;
 mod doctor;
 mod info;
 mod install;
@@ -56,6 +57,8 @@ pub enum Commands {
     Update(update::UpdateArgs),
     /// Check your system for potential problems
     Doctor(doctor::DoctorArgs),
+    /// Install or repair the TSI bootstrap toolchain
+    Bootstrap(bootstrap::BootstrapArgs),
     /// Uninstall TSI from the system
     Remove(remove::RemoveArgs),
 }
@@ -75,6 +78,7 @@ pub fn run_with(cli: Cli) -> Result<()> {
         Commands::Info(args) => info::run(args),
         Commands::Update(args) => update::run(args),
         Commands::Doctor(args) => doctor::run(args),
+        Commands::Bootstrap(args) => bootstrap::run(args),
         Commands::Remove(args) => remove::run(args),
     }
 }

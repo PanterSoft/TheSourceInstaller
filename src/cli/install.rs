@@ -1,3 +1,5 @@
+use crate::core::bootstrap;
+use crate::core::config::Config;
 use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::core::resolver;
@@ -22,6 +24,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
     let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
 
+    let config = Config::load(&prefix);
     let registry = Registry::load_from_dir(&packages_dir)?;
     let mut db = Database::new(&db_dir)?;
     let installed = db.installed_set();
@@ -46,12 +49,16 @@ pub fn run(args: InstallArgs) -> Result<()> {
     ));
 
     for pkg in order.iter() {
+        let is_bootstrap_pkg = bootstrap::is_bootstrap_package(&pkg.name);
+        let bootstrap_complete = bootstrap::is_bootstrap_complete(&db);
+        let isolated = config.strict_isolation && bootstrap_complete && !is_bootstrap_pkg;
+
         ui::output::section(format!("Fetching {}-{}", pkg.name, pkg.version));
         let url = pkg.source.url.as_deref().unwrap_or("(git)");
         ui::output::detail(url);
 
         ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
-        ops_install::install_package(pkg, &prefix, &mut db, args.force, args.verbose)?;
+        ops_install::install_package(pkg, &prefix, &mut db, args.force, isolated, args.verbose)?;
         ui::output::section(format!(
             "Linking {} {} into {}",
             pkg.name,

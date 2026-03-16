@@ -34,7 +34,7 @@ impl Config {
             }
         };
         Self {
-            strict_isolation: cfg.strict_isolation.unwrap_or(false),
+            strict_isolation: cfg.strict_isolation.unwrap_or(true),
             log_level: cfg.log_level.unwrap_or_else(|| "info".to_string()),
         }
     }
