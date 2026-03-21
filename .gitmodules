@@ -1,0 +1,3 @@
+[submodule "tsi-packages"]
+	path = tsi-packages
+	url = https://github.com/PanterSoft/tsi-packages.git
