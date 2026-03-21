@@ -3,7 +3,7 @@
 PREFIX ?= $(HOME)/.tsi
 export PATH := $(HOME)/.cargo/bin:$(PATH)
 
-.PHONY: help test build clean install uninstall lint fmt deps dev run
+.PHONY: help test build clean install uninstall lint fmt deps dev run dev-packages
 
 help:
 	@echo "TSI Makefile"
@@ -11,6 +11,7 @@ help:
 	@echo "Targets:"
 	@echo "  deps          - Install/verify dependencies (Rust toolchain, crates)"
 	@echo "  dev           - Development build (fast, debug)"
+	@echo "  dev-packages  - Sync package definitions from in-repo tsi-packages to PREFIX (requires submodule init)"
 	@echo "  build         - Build TSI (release)"
 	@echo "  run           - Run TSI (development)"
 	@echo "  test          - Run tests"
@@ -23,6 +24,7 @@ help:
 	@echo "Usage:"
 	@echo "  make deps     # First-time: install Rust, fetch crates"
 	@echo "  make dev      # Development build"
+	@echo "  make dev-packages   # After git submodule update --init tsi-packages"
 	@echo "  make install PREFIX=/opt/tsi"
 	@echo "  make uninstall PREFIX=/opt/tsi"
 
@@ -42,6 +44,11 @@ dev: deps
 
 run: dev
 	cargo run -- $(ARGS)
+
+# Sync package definitions from in-repo tsi-packages (requires submodule init)
+dev-packages:
+	@test -d tsi-packages/packages || (echo "Run: git submodule update --init tsi-packages"; exit 1)
+	cargo run -- update --local tsi-packages/packages --prefix $(PREFIX)
 
 build: deps
 	@echo "Building TSI..."

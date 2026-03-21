@@ -35,7 +35,23 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
     let archive_path = dest_dir.join(&filename);
 
     if !archive_path.exists() || force {
-        download_file(url, &archive_path)?;
+        download_file_with_retry(url, &archive_path)?;
+        // Verify SHA-256 checksum if the package definition supplies one.
+        if let Some(expected) = &pkg.source.sha256 {
+            let actual = crate::util::sha256::sha256_file(&archive_path)
+                .context("Computing SHA-256 of downloaded archive")?;
+            if actual != expected.to_lowercase() {
+                // Remove the bad file so the next run re-downloads rather than skipping.
+                let _ = std::fs::remove_file(&archive_path);
+                anyhow::bail!(
+                    "SHA-256 mismatch for {}: expected {}, got {}",
+                    archive_path.display(),
+                    expected,
+                    actual
+                );
+            }
+            log::debug!("SHA-256 verified for {}", archive_path.display());
+        }
     }
 
     let target_dir = dest_dir.join(format!("{}-{}", pkg.name, pkg.version));
@@ -43,23 +59,33 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
         std::fs::remove_dir_all(&target_dir).context("Failed to remove existing source dir")?;
     }
 
-    extract_archive(&archive_path, dest_dir)?;
+    // Unpack into a dedicated scratch dir. Extracting into `dest_dir` would list *all* sibling
+    // source trees when counting entries, and the multi-entry branch would incorrectly move
+    // unrelated packages into this package's target directory.
+    let scratch = dest_dir.join(format!(".unpack-{}-{}", pkg.name, pkg.version));
+    if scratch.exists() {
+        std::fs::remove_dir_all(&scratch).context("Remove stale unpack scratch dir")?;
+    }
+    std::fs::create_dir_all(&scratch).context("Create unpack scratch dir")?;
+    extract_archive(&archive_path, &scratch)?;
 
-    let entries: Vec<_> = std::fs::read_dir(dest_dir)?
+    let entries: Vec<_> = std::fs::read_dir(&scratch)?
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_name()
-                .to_str()
-                .is_some_and(|n| !n.starts_with('.') && n != filename)
-        })
+        .filter(|e| e.file_name().to_str().is_some_and(|n| !n.starts_with('.')))
         .collect();
 
     if entries.len() == 1 {
         let single = entries[0].path();
-        if single.is_dir() && single != target_dir {
+        if single.is_dir() {
             std::fs::rename(&single, &target_dir).context("Rename extracted dir")?;
+        } else {
+            std::fs::create_dir_all(&target_dir)?;
+            std::fs::rename(&single, target_dir.join(entries[0].file_name()))
+                .context("Move extracted file into source dir")?;
         }
-    } else if !target_dir.exists() {
+    } else if entries.is_empty() {
+        anyhow::bail!("Archive contained no files after extract: {}", archive_path.display());
+    } else {
         std::fs::create_dir_all(&target_dir)?;
         for e in entries {
             let p = e.path();
@@ -72,6 +98,8 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
             }
         }
     }
+
+    let _ = std::fs::remove_dir_all(&scratch);
 
     Ok(target_dir)
 }
@@ -107,6 +135,47 @@ pub fn download_file(url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Download `url` to `dest`, retrying up to 3 times on transient failures.
+/// Uses exponential backoff: 1 s after attempt 1, 2 s after attempt 2.
+fn download_file_with_retry(url: &str, dest: &Path) -> Result<()> {
+    const MAX_ATTEMPTS: u32 = 3;
+    for attempt in 0..MAX_ATTEMPTS {
+        match download_file(url, dest) {
+            Ok(()) => return Ok(()),
+            Err(e) if attempt + 1 < MAX_ATTEMPTS => {
+                log::warn!(
+                    "Download attempt {} of {} failed: {}. Retrying…",
+                    attempt + 1,
+                    MAX_ATTEMPTS,
+                    e
+                );
+                std::thread::sleep(std::time::Duration::from_secs(2u64.pow(attempt)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    unreachable!()
+}
+
+fn detect_archive_format_from_magic(archive: &Path) -> Option<&'static str> {
+    let mut f = File::open(archive).ok()?;
+    let mut buf = [0u8; 6];
+    let n = std::io::Read::read(&mut f, &mut buf).ok()?;
+    if n >= 2 && buf[0] == 0x1f && buf[1] == 0x8b {
+        return Some("gz");
+    }
+    if n >= 5 && buf[0] == 0xfd && buf[1] == 0x37 && buf[2] == 0x7a && buf[3] == 0x5a && buf[4] == 0x00 {
+        return Some("xz");
+    }
+    if n >= 3 && buf[0] == 0x42 && buf[1] == 0x5a && buf[2] == 0x68 {
+        return Some("bz2");
+    }
+    if n >= 4 && buf[0] == 0x50 && buf[1] == 0x4b && (buf[2] == 0x03 || buf[2] == 0x05) {
+        return Some("zip");
+    }
+    None
+}
+
 fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     let ext = archive.extension().and_then(|e| e.to_str()).unwrap_or("");
     let path_str = archive.to_string_lossy();
@@ -122,7 +191,15 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     } else if path_str.ends_with(".tar") {
         extract_tar(archive, dest)?;
     } else {
-        return Err(anyhow::anyhow!("Unsupported archive format: {}", path_str));
+        let detected = detect_archive_format_from_magic(archive);
+        match detected {
+            Some("gz") => extract_tar_gz(archive, dest)?,
+            Some("xz") => extract_tar_xz(archive, dest)?,
+            Some("bz2") => extract_tar_bz2(archive, dest)?,
+            Some("zip") => extract_zip(archive, dest)?,
+            Some(_) => return Err(anyhow::anyhow!("Unsupported archive format: {}", path_str)),
+            None => return Err(anyhow::anyhow!("Unsupported archive format: {}", path_str)),
+        }
     }
     Ok(())
 }
@@ -197,6 +274,11 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
 
     let mut cmd = std::process::Command::new("git");
     cmd.arg("clone");
+    // Use a shallow clone when no specific commit is pinned — safe for branch/tag fetches
+    // and significantly faster for large repositories.
+    if pkg.source.commit.is_none() {
+        cmd.args(["--depth", "1"]);
+    }
     if let Some(ref branch) = pkg.source.branch {
         cmd.args(["--branch", branch]);
     } else if let Some(ref tag) = pkg.source.tag {

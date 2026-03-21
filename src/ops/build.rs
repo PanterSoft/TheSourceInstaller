@@ -34,8 +34,24 @@ pub fn build(
     let install_path = install_dir.to_string_lossy();
 
     match pkg.build_system.as_str() {
-        "autotools" => build_autotools(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
-        "cmake" => build_cmake(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
+        "autotools" => build_autotools(
+            pkg,
+            source_dir,
+            build_dir,
+            install_dir,
+            prefix_install,
+            &env,
+            verbose,
+        )?,
+        "cmake" => build_cmake(
+            pkg,
+            source_dir,
+            build_dir,
+            install_dir,
+            prefix_install,
+            &env,
+            verbose,
+        )?,
         "meson" => build_meson(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
         "make" => build_make(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
         "custom" => build_custom(pkg, source_dir, &install_path, &env, verbose)?,
@@ -44,10 +60,15 @@ pub fn build(
     Ok(())
 }
 
+fn expand_tsi_install_dir(value: &str, install_prefix: &str) -> String {
+    value.replace("$TSI_INSTALL_DIR", install_prefix)
+}
+
 fn build_env_with_package(prefix: &Path, pkg: &Package, isolated: bool) -> Vec<(String, String)> {
+    let install_prefix = prefix.to_string_lossy().to_string();
     let mut env = build_env_base(prefix, isolated);
     for (k, v) in &pkg.env {
-        env.push((k.clone(), v.clone()));
+        env.push((k.clone(), expand_tsi_install_dir(v, &install_prefix)));
     }
     env
 }
@@ -76,19 +97,101 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
         format!("{}{}{}", bin.display(), path_sep, base_path)
     };
 
-    vec![
+    let mut env = vec![
         ("PATH".to_string(), new_path),
         (
             "PKG_CONFIG_PATH".to_string(),
             pkgconfig.to_string_lossy().to_string(),
         ),
-        (
-            "LD_LIBRARY_PATH".to_string(),
-            lib.to_string_lossy().to_string(),
-        ),
         ("CPPFLAGS".to_string(), format!("-I{}", include.display())),
         ("LDFLAGS".to_string(), format!("-L{}", lib.display())),
-    ]
+    ];
+
+    // macOS uses DYLD_LIBRARY_PATH; LD_LIBRARY_PATH is ignored by the Darwin dynamic linker.
+    #[cfg(target_os = "macos")]
+    env.push(("DYLD_LIBRARY_PATH".to_string(), lib.to_string_lossy().to_string()));
+    #[cfg(not(target_os = "macos"))]
+    env.push(("LD_LIBRARY_PATH".to_string(), lib.to_string_lossy().to_string()));
+
+    // Some Python-based build tools (e.g. meson installed via `setup.py install`)
+    // end up as a single `.egg` without standalone `dist-info`/`egg-info` directories.
+    // The generated wrapper uses `importlib.metadata`, which requires that the *egg file*
+    // itself is present on `sys.path` (via PYTHONPATH), not just the containing directory.
+    let mut py_paths: Vec<String> = Vec::new();
+    if let Ok(prefix_entries) = std::fs::read_dir(prefix) {
+        for entry in prefix_entries.flatten() {
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+            if !file_name.starts_with("meson-") {
+                continue;
+            }
+            let meson_dir = entry.path();
+            let lib_dir = meson_dir.join("lib");
+            if !lib_dir.is_dir() {
+                continue;
+            }
+            if let Ok(py_entries) = std::fs::read_dir(&lib_dir) {
+                for py_entry in py_entries.flatten() {
+                    let py_name = py_entry.file_name().to_string_lossy().to_string();
+                    if !py_name.starts_with("python") {
+                        continue;
+                    }
+                    let site_packages_dir = py_entry.path().join("site-packages");
+                    if !site_packages_dir.is_dir() {
+                        continue;
+                    }
+                    if let Ok(site_entries) = std::fs::read_dir(&site_packages_dir) {
+                        for site_entry in site_entries.flatten() {
+                            let p = site_entry.path();
+                            if p.extension().and_then(|e| e.to_str()) == Some("egg") {
+                                py_paths.push(p.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !py_paths.is_empty() {
+        let existing = std::env::var("PYTHONPATH").unwrap_or_default();
+        let new_py_path = if existing.is_empty() {
+            py_paths.join(path_sep)
+        } else {
+            format!("{}{}{}", py_paths.join(path_sep), path_sep, existing)
+        };
+        env.push(("PYTHONPATH".to_string(), new_py_path));
+    }
+
+    // Isolated builds prepend GNU coreutils (including `ar`/`ranlib`) before `/usr/bin`.
+    // On Darwin, GNU ar archives often break Apple `ld` (e.g. "archive member '/' not a mach-o file").
+    // Use `xcrun --find` to locate the Xcode-blessed Apple ar/ranlib regardless of Xcode install path.
+    if crate::platform::os_name() == "darwin" {
+        env.push(("AR".to_string(), xcrun_find("ar")));
+        env.push(("RANLIB".to_string(), xcrun_find("ranlib")));
+    }
+    env
+}
+
+/// Locate an Apple toolchain tool via `xcrun --find`, falling back to `/usr/bin/<tool>`.
+/// Only compiled on macOS.
+#[cfg(target_os = "macos")]
+fn xcrun_find(tool: &str) -> String {
+    std::process::Command::new("xcrun")
+        .args(["--find", tool])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| format!("/usr/bin/{}", tool))
+}
+
+/// On non-macOS platforms this path is never reached (the darwin guard above prevents it),
+/// but we need a stub so the call site compiles on all targets.
+#[cfg(not(target_os = "macos"))]
+fn xcrun_find(tool: &str) -> String {
+    format!("/usr/bin/{}", tool)
 }
 
 fn run_cmd(
@@ -190,12 +293,18 @@ fn build_autotools(
     source_dir: &Path,
     _build_dir: &Path,
     install_dir: &Path,
+    deps_prefix: &Path,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
     let prefix = install_dir.to_string_lossy();
+    let deps_prefix_str = deps_prefix.to_string_lossy();
     let mut configure_args = vec!["--prefix".to_string(), prefix.to_string()];
-    configure_args.extend(pkg.configure_args.clone());
+    configure_args.extend(
+        pkg.configure_args
+            .iter()
+            .map(|a| expand_tsi_install_dir(a, deps_prefix_str.as_ref())),
+    );
 
     run_cmd(
         Command::new("./configure")
@@ -229,10 +338,12 @@ fn build_cmake(
     source_dir: &Path,
     build_dir: &Path,
     install_dir: &Path,
+    deps_prefix: &Path,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
     let prefix = install_dir.to_string_lossy();
+    let deps_prefix_str = deps_prefix.to_string_lossy();
     let mut cmake_args = vec![
         "-DCMAKE_INSTALL_PREFIX=".to_string() + &prefix,
         "-S".to_string(),
@@ -240,7 +351,11 @@ fn build_cmake(
         "-B".to_string(),
         build_dir.to_string_lossy().to_string(),
     ];
-    cmake_args.extend(pkg.cmake_args.clone());
+    cmake_args.extend(
+        pkg.cmake_args
+            .iter()
+            .map(|a| expand_tsi_install_dir(a, deps_prefix_str.as_ref())),
+    );
 
     run_cmd(
         Command::new("cmake").args(&cmake_args),
@@ -310,6 +425,18 @@ fn build_make(
     let prefix = install_dir.to_string_lossy();
     let mut make_args = pkg.make_args.clone();
     make_args.push(format!("PREFIX={}", prefix));
+
+    // Promote AR and RANLIB from the build environment into make command-line arguments.
+    // Make's file-level variable assignments (e.g. `AR=ar` in bzip2's Makefile) take
+    // precedence over environment variables, but command-line arguments always win.
+    for var in ["AR", "RANLIB", "CC", "CXX"] {
+        if let Some((_, val)) = env.iter().find(|(k, _)| k == var) {
+            if !make_args.iter().any(|a| a.starts_with(&format!("{}=", var))) {
+                make_args.push(format!("{}={}", var, val));
+            }
+        }
+    }
+
     run_cmd(
         Command::new("make")
             .args(&make_args)

@@ -26,7 +26,19 @@ pub fn install_package(
 
     std::fs::create_dir_all(&sources_dir).context("Create sources dir")?;
 
-    let source_dir = fetch::fetch(pkg, &sources_dir, force)?;
+    let fetched_dir = fetch::fetch(pkg, &sources_dir, force)?;
+    let source_dir = pkg
+        .source_dir
+        .as_deref()
+        .map(|sub| fetched_dir.join(sub))
+        .unwrap_or(fetched_dir);
+
+    if !source_dir.is_dir() {
+        anyhow::bail!(
+            "source_dir {:?} does not exist or is not a directory (check package source_dir)",
+            source_dir
+        );
+    }
 
     build::build(
         pkg,

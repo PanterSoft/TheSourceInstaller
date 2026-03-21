@@ -36,6 +36,6 @@ pub fn is_bootstrap_complete(db: &Database) -> bool {
 
 /// Returns true if the given package is part of the bootstrap toolchain.
 pub fn is_bootstrap_package(name: &str) -> bool {
-    BOOTSTRAP_PACKAGES.iter().any(|p| *p == name)
+    BOOTSTRAP_PACKAGES.contains(&name)
 }
 

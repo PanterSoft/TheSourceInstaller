@@ -2,6 +2,50 @@
 
 TSI uses a local package repository to store package definitions. The repository is located at `~/.tsi/packages/` by default.
 
+## Development: In-tree package repository
+
+The official package repository ([PanterSoft/tsi-packages](https://github.com/PanterSoft/tsi-packages)) is included as a Git submodule at `tsi-packages/`. This lets you develop TSI and try package definitions without cloning the package repo separately.
+
+### Clone with submodules
+
+First time clone (recommended):
+
+```bash
+git clone --recurse-submodules https://github.com/PanterSoft/tsi.git
+```
+
+If you already cloned without submodules:
+
+```bash
+git submodule update --init tsi-packages
+```
+
+### Use in-tree packages for development
+
+After building TSI (e.g. `make dev` or `cargo build`), sync your install prefix from the in-repo packages:
+
+```bash
+tsi update --local ./tsi-packages/packages
+```
+
+With the default prefix this updates `~/.tsi/packages/` from `tsi-packages/packages/`. You can also use a dev-only prefix:
+
+```bash
+tsi update --local ./tsi-packages/packages --prefix ./.tsi-dev
+```
+
+Alternatively, run `make dev-packages` to sync the default prefix (see Makefile).
+
+### Update the in-tree package repo
+
+To point the submodule at the latest commit of tsi-packages:
+
+```bash
+git submodule update --remote tsi-packages
+```
+
+Commit the new submodule reference in the TSI repo if you want to pin that version.
+
 ## Repository Structure
 
 ```
