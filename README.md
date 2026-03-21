@@ -115,10 +115,12 @@ TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=develop \
 Requires [Rust](https://rustup.rs/) toolchain:
 
 ```bash
-git clone https://github.com/PanterSoft/tsi.git
+git clone --recurse-submodules https://github.com/PanterSoft/tsi.git
 cd tsi
 cargo build --release
 ```
+
+To use the in-tree package repository for development, run `make dev-packages` or `tsi update --local ./tsi-packages/packages`. See [Package repository (development)](docs/developer-guide/repository.md#development-in-tree-package-repository) in the docs.
 
 The binary will be at `target/release/tsi`. To install:
 

@@ -63,6 +63,23 @@ pub enum Commands {
     Remove(remove::RemoveArgs),
 }
 
+/// Extract the `--prefix` argument from any subcommand before full dispatch.
+/// This allows `main` to load config early (for log level etc.) without duplicating prefix logic.
+pub fn prefix_from_cli(cli: &Cli) -> Option<&str> {
+    match &cli.command {
+        Commands::Install(a) => a.prefix.as_deref(),
+        Commands::Uninstall(a) => a.prefix.as_deref(),
+        Commands::Upgrade(a) => a.prefix.as_deref(),
+        Commands::List(a) => a.prefix.as_deref(),
+        Commands::Search(a) => a.prefix.as_deref(),
+        Commands::Info(a) => a.prefix.as_deref(),
+        Commands::Update(a) => a.prefix.as_deref(),
+        Commands::Doctor(a) => a.prefix.as_deref(),
+        Commands::Bootstrap(a) => a.prefix.as_deref(),
+        Commands::Remove(a) => a.prefix.as_deref(),
+    }
+}
+
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
     run_with(cli)

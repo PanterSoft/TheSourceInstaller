@@ -12,6 +12,28 @@ pub use unix::*;
 #[cfg(windows)]
 pub use windows::*;
 
+pub fn arch_name() -> &'static str {
+    #[cfg(target_arch = "x86_64")]
+    return "x86_64";
+
+    #[cfg(target_arch = "aarch64")]
+    return "aarch64";
+
+    #[cfg(target_arch = "x86")]
+    return "x86";
+
+    #[cfg(target_arch = "arm")]
+    return "arm";
+
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "x86",
+        target_arch = "arm"
+    )))]
+    return "unknown";
+}
+
 pub fn os_name() -> &'static str {
     #[cfg(target_os = "macos")]
     return "darwin";
