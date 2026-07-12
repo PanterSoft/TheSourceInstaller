@@ -3,7 +3,7 @@ use crate::ui;
 use anyhow::{Context, Result};
 use console;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -25,9 +25,19 @@ pub fn build(
     let env_ref: &[(String, String)] = &env;
 
     for patch in &pkg.patches {
-        let step_name = format!("patch -p1 -i {}", patch);
+        let patch_path = resolve_patch_path(patch, prefix_install);
+        if !patch_path.exists() {
+            anyhow::bail!(
+                "Patch file not found: {} (resolved to {}). \
+                 Place it under <prefix>/patches/ or use an absolute path.",
+                patch,
+                patch_path.display()
+            );
+        }
+        let patch_str = patch_path.to_string_lossy().to_string();
+        let step_name = format!("patch -p1 -i {}", patch_str);
         let mut cmd = Command::new("patch");
-        cmd.args(["-p1", "-i", patch]).current_dir(source_dir);
+        cmd.args(["-p1", "-i", &patch_str]).current_dir(source_dir);
         run_cmd(&mut cmd, env_ref, &step_name, verbose)?;
     }
 
@@ -52,7 +62,15 @@ pub fn build(
             &env,
             verbose,
         )?,
-        "meson" => build_meson(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
+        "meson" => build_meson(
+            pkg,
+            source_dir,
+            build_dir,
+            install_dir,
+            prefix_install,
+            &env,
+            verbose,
+        )?,
         "make" => build_make(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
         "custom" => build_custom(pkg, source_dir, &install_path, &env, verbose)?,
         _ => anyhow::bail!("Unknown build system: {}", pkg.build_system),
@@ -60,15 +78,91 @@ pub fn build(
     Ok(())
 }
 
-fn expand_tsi_install_dir(value: &str, install_prefix: &str) -> String {
-    value.replace("$TSI_INSTALL_DIR", install_prefix)
+fn expand_build_vars(value: &str, install_prefix: &str) -> String {
+    let mut s = value.replace("$TSI_INSTALL_DIR", install_prefix);
+    #[cfg(target_os = "macos")]
+    {
+        if s.contains("$MACOSX_SDK") {
+            if let Some(sdk) = macosx_sdk_path() {
+                s = s.replace("$MACOSX_SDK", &sdk);
+            }
+            if s.contains("$MACOSX_SDK") {
+                if let Some(sdk) = macosx_sdk_path_fallback() {
+                    s = s.replace("$MACOSX_SDK", &sdk);
+                }
+            }
+        }
+    }
+    s
+}
+
+/// Path from `xcrun --sdk macosx --show-sdk-path` (Apple headers, e.g. uuid/uuid.h with uuid_string_t).
+#[cfg(target_os = "macos")]
+fn macosx_sdk_path() -> Option<String> {
+    for bin in ["/usr/bin/xcrun", "xcrun"] {
+        let Ok(out) = std::process::Command::new(bin)
+            .args(["--sdk", "macosx", "--show-sdk-path"])
+            .output()
+        else {
+            continue;
+        };
+        if !out.status.success() {
+            continue;
+        }
+        let Ok(path) = String::from_utf8(out.stdout) else {
+            continue;
+        };
+        let path = path.trim().to_string();
+        if !path.is_empty() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn macosx_sdk_path_fallback() -> Option<String> {
+    if let Ok(root) = std::env::var("SDKROOT") {
+        let p = Path::new(&root);
+        if p.join("usr/include/uuid/uuid.h").is_file() {
+            return Some(root);
+        }
+    }
+    let candidates = [
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+    ];
+    for c in candidates {
+        let p = Path::new(c);
+        if p.join("usr/include/uuid/uuid.h").is_file() {
+            return Some(c.to_string());
+        }
+    }
+    None
+}
+
+fn resolve_patch_path(patch: &str, prefix_install: &Path) -> PathBuf {
+    let p = Path::new(patch);
+    if p.is_absolute() {
+        return p.to_path_buf();
+    }
+    if p.exists() {
+        return p.to_path_buf();
+    }
+    if let Some(prefix_root) = prefix_install.parent() {
+        let under_prefix = prefix_root.join("patches").join(p);
+        if under_prefix.exists() {
+            return under_prefix;
+        }
+    }
+    p.to_path_buf()
 }
 
 fn build_env_with_package(prefix: &Path, pkg: &Package, isolated: bool) -> Vec<(String, String)> {
     let install_prefix = prefix.to_string_lossy().to_string();
     let mut env = build_env_base(prefix, isolated);
     for (k, v) in &pkg.env {
-        env.push((k.clone(), expand_tsi_install_dir(v, &install_prefix)));
+        env.push((k.clone(), expand_build_vars(v, &install_prefix)));
     }
     env
 }
@@ -103,15 +197,25 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
             "PKG_CONFIG_PATH".to_string(),
             pkgconfig.to_string_lossy().to_string(),
         ),
+        (
+            "CMAKE_PREFIX_PATH".to_string(),
+            prefix.to_string_lossy().to_string(),
+        ),
         ("CPPFLAGS".to_string(), format!("-I{}", include.display())),
         ("LDFLAGS".to_string(), format!("-L{}", lib.display())),
     ];
 
     // macOS uses DYLD_LIBRARY_PATH; LD_LIBRARY_PATH is ignored by the Darwin dynamic linker.
     #[cfg(target_os = "macos")]
-    env.push(("DYLD_LIBRARY_PATH".to_string(), lib.to_string_lossy().to_string()));
+    env.push((
+        "DYLD_LIBRARY_PATH".to_string(),
+        lib.to_string_lossy().to_string(),
+    ));
     #[cfg(not(target_os = "macos"))]
-    env.push(("LD_LIBRARY_PATH".to_string(), lib.to_string_lossy().to_string()));
+    env.push((
+        "LD_LIBRARY_PATH".to_string(),
+        lib.to_string_lossy().to_string(),
+    ));
 
     // Some Python-based build tools (e.g. meson installed via `setup.py install`)
     // end up as a single `.egg` without standalone `dist-info`/`egg-info` directories.
@@ -280,10 +384,7 @@ fn run_cmd(
             let _ = writeln!(h, "{}", line);
         }
         let _ = h.flush();
-        anyhow::bail!(
-            "Command failed with exit code: {:?}",
-            status.code()
-        );
+        anyhow::bail!("Command failed with exit code: {:?}", status.code());
     }
     Ok(())
 }
@@ -297,13 +398,16 @@ fn build_autotools(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
+    let env = augment_env_for_autotools(env, source_dir, deps_prefix)?;
+    let env_ref: &[(String, String)] = &env;
+
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
     let mut configure_args = vec!["--prefix".to_string(), prefix.to_string()];
     configure_args.extend(
         pkg.configure_args
             .iter()
-            .map(|a| expand_tsi_install_dir(a, deps_prefix_str.as_ref())),
+            .map(|a| expand_build_vars(a, deps_prefix_str.as_ref())),
     );
 
     run_cmd(
@@ -311,14 +415,14 @@ fn build_autotools(
             .args(&configure_args)
             .current_dir(source_dir)
             .env("TSI_INSTALL_DIR", prefix.as_ref()),
-        env,
+        env_ref,
         "./configure",
         verbose,
     )?;
 
     run_cmd(
         Command::new("make").current_dir(source_dir),
-        env,
+        env_ref,
         "make",
         verbose,
     )?;
@@ -326,11 +430,78 @@ fn build_autotools(
         Command::new("make")
             .args(["install"])
             .current_dir(source_dir),
-        env,
+        env_ref,
         "make install",
         verbose,
     )?;
     Ok(())
+}
+
+/// TSI's default `CPPFLAGS=-I$prefix/include` must not win over system/SDK headers (e.g. git's
+/// `archive.h`, prefix `uuid/uuid.h` vs Apple `uuid_string_t` for Cocoa). On macOS, use `-isystem`
+/// for the SDK and `-idirafter` for the prefix. Meson/CMake/compiler checks use the same `CPPFLAGS`.
+fn augment_env_cppflags(
+    env: &[(String, String)],
+    source_dir: &Path,
+    deps_prefix: &Path,
+) -> Result<Vec<(String, String)>> {
+    let mut out = Vec::with_capacity(env.len());
+    for (k, v) in env {
+        if k == "CPPFLAGS" {
+            out.push((
+                k.clone(),
+                augment_cppflags_for_tsi_prefix(v, source_dir, deps_prefix)?,
+            ));
+        } else {
+            out.push((k.clone(), v.clone()));
+        }
+    }
+    Ok(out)
+}
+
+fn augment_env_for_autotools(
+    env: &[(String, String)],
+    source_dir: &Path,
+    deps_prefix: &Path,
+) -> Result<Vec<(String, String)>> {
+    augment_env_cppflags(env, source_dir, deps_prefix)
+}
+
+fn augment_cppflags_for_tsi_prefix(
+    cppflags: &str,
+    source_dir: &Path,
+    deps_prefix: &Path,
+) -> Result<String> {
+    let inc = deps_prefix.join("include");
+    let inc_flag = format!("-I{}", inc.display());
+    let src = format!("-I{}", source_dir.display());
+    let mut rest = cppflags.trim().to_string();
+    if rest.contains(&inc_flag) {
+        rest = rest.replace(&inc_flag, "");
+        rest = rest.split_whitespace().collect::<Vec<_>>().join(" ");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let sdk = macosx_sdk_path()
+            .or_else(macosx_sdk_path_fallback)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "macOS SDK not found (xcrun --sdk macosx --show-sdk-path). Install Xcode or Command Line Tools."
+                )
+            })?;
+        let sys = format!("-isystem {}/usr/include", sdk);
+        let idir = format!("-idirafter {}", inc.display());
+        let joined = format!("{} {} {} {}", src, sys, rest, idir);
+        Ok(joined.split_whitespace().collect::<Vec<_>>().join(" "))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if rest.is_empty() {
+            Ok(src)
+        } else {
+            Ok(format!("{} {}", src, rest))
+        }
+    }
 }
 
 fn build_cmake(
@@ -342,10 +513,14 @@ fn build_cmake(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
+    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let env_ref: &[(String, String)] = &env;
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
     let mut cmake_args = vec![
         "-DCMAKE_INSTALL_PREFIX=".to_string() + &prefix,
+        // CMake 4.x rejects projects that only declare an ancient minimum; allow configuring.
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5".to_string(),
         "-S".to_string(),
         source_dir.to_string_lossy().to_string(),
         "-B".to_string(),
@@ -354,24 +529,24 @@ fn build_cmake(
     cmake_args.extend(
         pkg.cmake_args
             .iter()
-            .map(|a| expand_tsi_install_dir(a, deps_prefix_str.as_ref())),
+            .map(|a| expand_build_vars(a, deps_prefix_str.as_ref())),
     );
 
     run_cmd(
         Command::new("cmake").args(&cmake_args),
-        env,
+        env_ref,
         "cmake",
         verbose,
     )?;
     run_cmd(
         Command::new("cmake").args(["--build", build_dir.to_string_lossy().as_ref()]),
-        env,
+        env_ref,
         "cmake --build",
         verbose,
     )?;
     run_cmd(
         Command::new("cmake").args(["--install", build_dir.to_string_lossy().as_ref()]),
-        env,
+        env_ref,
         "cmake --install",
         verbose,
     )?;
@@ -379,35 +554,45 @@ fn build_cmake(
 }
 
 fn build_meson(
-    _pkg: &Package,
+    pkg: &Package,
     source_dir: &Path,
     build_dir: &Path,
     install_dir: &Path,
+    deps_prefix: &Path,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
+    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let env_ref: &[(String, String)] = &env;
     let prefix = install_dir.to_string_lossy();
+    let deps_prefix_str = deps_prefix.to_string_lossy();
+    let mut setup_args = vec![
+        "setup".to_string(),
+        build_dir.to_string_lossy().into_owned(),
+        source_dir.to_string_lossy().into_owned(),
+        "--prefix".to_string(),
+        prefix.into_owned(),
+    ];
+    setup_args.extend(
+        pkg.configure_args
+            .iter()
+            .map(|a| expand_build_vars(a, deps_prefix_str.as_ref())),
+    );
     run_cmd(
-        Command::new("meson").args([
-            "setup",
-            build_dir.to_string_lossy().as_ref(),
-            source_dir.to_string_lossy().as_ref(),
-            "--prefix",
-            &prefix,
-        ]),
-        env,
+        Command::new("meson").args(&setup_args),
+        env_ref,
         "meson setup",
         verbose,
     )?;
     run_cmd(
         Command::new("meson").args(["compile", "-C", build_dir.to_string_lossy().as_ref()]),
-        env,
+        env_ref,
         "meson compile",
         verbose,
     )?;
     run_cmd(
         Command::new("meson").args(["install", "-C", build_dir.to_string_lossy().as_ref()]),
-        env,
+        env_ref,
         "meson install",
         verbose,
     )?;
@@ -431,7 +616,10 @@ fn build_make(
     // precedence over environment variables, but command-line arguments always win.
     for var in ["AR", "RANLIB", "CC", "CXX"] {
         if let Some((_, val)) = env.iter().find(|(k, _)| k == var) {
-            if !make_args.iter().any(|a| a.starts_with(&format!("{}=", var))) {
+            if !make_args
+                .iter()
+                .any(|a| a.starts_with(&format!("{}=", var)))
+            {
                 make_args.push(format!("{}={}", var, val));
             }
         }
@@ -467,7 +655,7 @@ fn build_custom(
     let shell = if cfg!(windows) { "cmd" } else { "sh" };
     let flag = if cfg!(windows) { "/C" } else { "-c" };
     for cmd_str in &pkg.build_commands {
-        let expanded = cmd_str.replace("$TSI_INSTALL_DIR", install_path);
+        let expanded = expand_build_vars(cmd_str, install_path);
         let step_name = if expanded.len() <= 60 {
             expanded.clone()
         } else {

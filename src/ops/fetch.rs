@@ -302,6 +302,16 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
         }
     }
 
+    // GitHub (and similar) archive tarballs omit submodules; clone-based packages often need them.
+    let sub_status = std::process::Command::new("git")
+        .args(["submodule", "update", "--init", "--recursive"])
+        .current_dir(&clone_dir)
+        .status()
+        .context("git submodule update")?;
+    if !sub_status.success() {
+        return Err(anyhow::anyhow!("git submodule update failed"));
+    }
+
     Ok(clone_dir)
 }
 
