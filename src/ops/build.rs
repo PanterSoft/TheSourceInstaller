@@ -273,6 +273,15 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
         env.push(("AR".to_string(), xcrun_find("ar")));
         env.push(("RANLIB".to_string(), xcrun_find("ranlib")));
     }
+
+    // Pin the SDK explicitly so header/lib lookup is deterministic across shells; clang's
+    // default search then orders libc++ headers before SDK C headers (see augment_cppflags).
+    #[cfg(target_os = "macos")]
+    if std::env::var_os("SDKROOT").is_none() {
+        if let Some(sdk) = macosx_sdk_path().or_else(macosx_sdk_path_fallback) {
+            env.push(("SDKROOT".to_string(), sdk));
+        }
+    }
     env
 }
 
@@ -438,8 +447,10 @@ fn build_autotools(
 }
 
 /// TSI's default `CPPFLAGS=-I$prefix/include` must not win over system/SDK headers (e.g. git's
-/// `archive.h`, prefix `uuid/uuid.h` vs Apple `uuid_string_t` for Cocoa). On macOS, use `-isystem`
-/// for the SDK and `-idirafter` for the prefix. Meson/CMake/compiler checks use the same `CPPFLAGS`.
+/// `archive.h`, prefix `uuid/uuid.h` vs Apple `uuid_string_t` for Cocoa). On macOS, demote the
+/// prefix to `-idirafter` and rely on SDKROOT for SDK headers; injecting `-isystem $SDK/usr/include`
+/// breaks C++ builds because it places C headers ahead of libc++'s wrapper headers
+/// ("<cstdlib> tried including <stdlib.h> but didn't find libc++'s <stdlib.h>").
 fn augment_env_cppflags(
     env: &[(String, String)],
     source_dir: &Path,
@@ -482,16 +493,8 @@ fn augment_cppflags_for_tsi_prefix(
     }
     #[cfg(target_os = "macos")]
     {
-        let sdk = macosx_sdk_path()
-            .or_else(macosx_sdk_path_fallback)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "macOS SDK not found (xcrun --sdk macosx --show-sdk-path). Install Xcode or Command Line Tools."
-                )
-            })?;
-        let sys = format!("-isystem {}/usr/include", sdk);
         let idir = format!("-idirafter {}", inc.display());
-        let joined = format!("{} {} {} {}", src, sys, rest, idir);
+        let joined = format!("{} {} {}", src, rest, idir);
         Ok(joined.split_whitespace().collect::<Vec<_>>().join(" "))
     }
     #[cfg(not(target_os = "macos"))]
