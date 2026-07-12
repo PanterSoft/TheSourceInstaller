@@ -53,6 +53,12 @@ pub struct PackageVersion {
     #[serde(default)]
     pub configure_args_windows: Option<Vec<String>>,
     #[serde(default)]
+    pub cmake_args_darwin: Option<Vec<String>>,
+    #[serde(default)]
+    pub cmake_args_linux: Option<Vec<String>>,
+    #[serde(default)]
+    pub cmake_args_windows: Option<Vec<String>>,
+    #[serde(default)]
     pub env_x86_64: Option<HashMap<String, String>>,
     #[serde(default)]
     pub env_aarch64: Option<HashMap<String, String>>,
@@ -110,6 +116,7 @@ impl Package {
     pub fn from_version(name: &str, v: &PackageVersion) -> Self {
         let env = merge_env_for_os(v);
         let configure_args = merge_configure_args_for_os(v);
+        let cmake_args = merge_cmake_args_for_os(v);
 
         Self {
             name: name.to_string(),
@@ -120,7 +127,7 @@ impl Package {
             build_dependencies: v.build_dependencies.clone(),
             build_system: v.build_system.clone(),
             configure_args,
-            cmake_args: v.cmake_args.clone(),
+            cmake_args,
             make_args: v.make_args.clone(),
             build_commands: v.build_commands.clone(),
             env,
@@ -183,6 +190,19 @@ fn merge_configure_args_for_os(v: &PackageVersion) -> Vec<String> {
         args.extend_from_slice(extra);
     }
     args
+}
+
+fn merge_cmake_args_for_os(v: &PackageVersion) -> Vec<String> {
+    // Same semantics as configure_args: OS-specific list replaces base when present.
+    let os_override = match crate::platform::os_name() {
+        "darwin" => v.cmake_args_darwin.as_ref(),
+        "linux" => v.cmake_args_linux.as_ref(),
+        "windows" => v.cmake_args_windows.as_ref(),
+        _ => None,
+    };
+    os_override
+        .cloned()
+        .unwrap_or_else(|| v.cmake_args.clone())
 }
 
 pub fn parse_package_file(json: &str) -> Result<Vec<Package>, anyhow::Error> {

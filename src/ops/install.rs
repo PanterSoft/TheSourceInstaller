@@ -40,6 +40,10 @@ pub fn install_package(
         );
     }
 
+    if force && build_dir.exists() {
+        std::fs::remove_dir_all(&build_dir).context("Remove build dir for --force")?;
+    }
+
     build::build(
         pkg,
         &source_dir,
