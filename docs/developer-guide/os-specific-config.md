@@ -14,7 +14,7 @@ These keys are **implemented** for the three primary families:
 - **`linux`** — Linux distributions
 - **`windows`** — Microsoft Windows
 
-[`src/platform/mod.rs`](../../src/platform/mod.rs) can also report `freebsd`, `openbsd`, `netbsd`, or `unknown` at runtime, but **there are no** `env_freebsd` / `configure_args_freebsd`-style fields yet. On those hosts, only base `env`, `configure_args`, and `cmake_args` apply.
+[`src/platform/mod.rs`](https://github.com/PanterSoft/TheSourceInstaller/blob/main/src/platform/mod.rs) can also report `freebsd`, `openbsd`, `netbsd`, or `unknown` at runtime, but **there are no** `env_freebsd` / `configure_args_freebsd`-style fields yet. On those hosts, only base `env`, `configure_args`, and `cmake_args` apply.
 
 ## Supported OS-specific fields
 

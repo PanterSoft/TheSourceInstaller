@@ -20,7 +20,7 @@ This document explains when each workflow runs and what triggers them.
   - Only other workflow files change
 
 **Jobs:**
-- `test`: Calls the reusable [Rust CI](.github/workflows/rust-ci.yml) workflow (matrix: ubuntu-latest, macos-latest, windows-latest); runs build, test, clippy, fmt with Cargo caching.
+- `test`: Calls the reusable [Rust CI](https://github.com/PanterSoft/TheSourceInstaller/blob/main/.github/workflows/rust-ci.yml) workflow (matrix: ubuntu-latest, macos-latest, windows-latest); runs build, test, clippy, fmt with Cargo caching.
 
 **Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
 
