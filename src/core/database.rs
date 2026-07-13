@@ -32,10 +32,8 @@ fn read_db_file(path: &Path) -> Result<Vec<InstalledPackage>> {
         return Ok(vec![]);
     }
     let json = std::fs::read_to_string(path).context("Failed to read database")?;
-    let db: DatabaseFile = serde_json::from_str(&json).unwrap_or(DatabaseFile {
-        schema_version: SCHEMA_VERSION,
-        installed: vec![],
-    });
+    let db: DatabaseFile = serde_json::from_str(&json)
+        .context("Failed to parse database (it may be corrupted)")?;
     Ok(db.installed)
 }
 
@@ -73,22 +71,26 @@ impl Database {
         install_path: &Path,
         deps: &[String],
     ) -> Result<()> {
-        if self.is_installed(name) {
-            return Ok(());
-        }
         let installed_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .ok()
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
 
-        self.packages.push(InstalledPackage {
-            name: name.to_string(),
-            version: version.to_string(),
-            install_path: install_path.to_string_lossy().to_string(),
-            installed_at,
-            dependencies: deps.to_vec(),
-        });
+        if let Some(existing) = self.packages.iter_mut().find(|p| p.name == name) {
+            existing.version = version.to_string();
+            existing.install_path = install_path.to_string_lossy().to_string();
+            existing.installed_at = installed_at;
+            existing.dependencies = deps.to_vec();
+        } else {
+            self.packages.push(InstalledPackage {
+                name: name.to_string(),
+                version: version.to_string(),
+                install_path: install_path.to_string_lossy().to_string(),
+                installed_at,
+                dependencies: deps.to_vec(),
+            });
+        }
         self.save()
     }
 

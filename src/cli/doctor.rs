@@ -22,8 +22,15 @@ pub fn run(args: DoctorArgs) -> Result<()> {
 
     let config = Config::load(&prefix);
     let db_dir = prefix.join("db");
-    let db = Database::new(&db_dir).unwrap_or_else(|_| Database::new(&db_dir).expect("create db"));
-    let bootstrap_complete = bootstrap::is_bootstrap_complete(&db);
+    let db_result = Database::new(&db_dir);
+    let bootstrap_complete = match &db_result {
+        Ok(db) => bootstrap::is_bootstrap_complete(db),
+        Err(e) => {
+            ui::output::warning(format!("Cannot open database at {}: {}", db_dir.display(), e));
+            warnings += 1;
+            false
+        }
+    };
 
     if config.strict_isolation && bootstrap_complete {
         ui::output::detail("Strict isolation enabled; checking TSI toolchain...");

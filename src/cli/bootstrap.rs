@@ -1,5 +1,4 @@
 use crate::core::bootstrap;
-use crate::core::config::Config;
 use crate::core::database::Database;
 use crate::core::registry::Registry;
 use crate::core::resolver;
@@ -22,7 +21,6 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
 
-    let config = Config::load(&prefix);
     let registry = Registry::load_from_dir(&packages_dir)?;
     let mut db = Database::new(&db_dir)?;
 
@@ -65,7 +63,7 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
                 &mut db,
                 false,
                 use_isolation,
-                args.verbose || !config.strict_isolation,
+                args.verbose,
             )?;
         }
     }

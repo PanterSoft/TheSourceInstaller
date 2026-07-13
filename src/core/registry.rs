@@ -92,14 +92,40 @@ fn semver_compare(a: &str, b: &str) -> std::cmp::Ordering {
     let a_parts: Vec<&str> = a.split(&['.', '-', '_'][..]).collect();
     let b_parts: Vec<&str> = b.split(&['.', '-', '_'][..]).collect();
     for i in 0..a_parts.len().max(b_parts.len()) {
-        let a_val = a_parts.get(i).unwrap_or(&"0");
-        let b_val = b_parts.get(i).unwrap_or(&"0");
-        let a_num: u64 = a_val.parse().unwrap_or(0);
-        let b_num: u64 = b_val.parse().unwrap_or(0);
+        let a_val = a_parts.get(i);
+        let b_val = b_parts.get(i);
+        // A segment that's present but fails to parse (e.g. "rc1") is a
+        // pre-release identifier and must sort lower than a numeric/absent
+        // segment (which represents a genuine release), not be treated as
+        // an equal "0".
+        let a_nonnumeric = a_val.is_some_and(|s| s.parse::<u64>().is_err());
+        let b_nonnumeric = b_val.is_some_and(|s| s.parse::<u64>().is_err());
+        if a_nonnumeric != b_nonnumeric {
+            return if a_nonnumeric {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            };
+        }
+        let a_num: u64 = a_val.and_then(|s| s.parse().ok()).unwrap_or(0);
+        let b_num: u64 = b_val.and_then(|s| s.parse().ok()).unwrap_or(0);
         match a_num.cmp(&b_num) {
             std::cmp::Ordering::Equal => continue,
             o => return o,
         }
     }
     std::cmp::Ordering::Equal
+}
+
+#[cfg(test)]
+mod semver_compare_tests {
+    use super::semver_compare;
+
+    #[test]
+    fn release_sorts_above_its_own_prerelease() {
+        assert_eq!(
+            semver_compare("3.0.0", "3.0.0-rc1"),
+            std::cmp::Ordering::Greater
+        );
+    }
 }

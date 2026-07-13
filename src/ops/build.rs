@@ -25,7 +25,7 @@ pub fn build(
     let env_ref: &[(String, String)] = &env;
 
     for patch in &pkg.patches {
-        let patch_path = resolve_patch_path(patch, prefix_install);
+        let patch_path = resolve_patch_path(patch, source_dir, prefix_install);
         if !patch_path.exists() {
             anyhow::bail!(
                 "Patch file not found: {} (resolved to {}). \
@@ -71,8 +71,16 @@ pub fn build(
             &env,
             verbose,
         )?,
-        "make" => build_make(pkg, source_dir, build_dir, install_dir, &env, verbose)?,
-        "custom" => build_custom(pkg, source_dir, &install_path, &env, verbose)?,
+        "make" => build_make(
+            pkg,
+            source_dir,
+            build_dir,
+            install_dir,
+            prefix_install,
+            &env,
+            verbose,
+        )?,
+        "custom" => build_custom(pkg, source_dir, prefix_install, &install_path, &env, verbose)?,
         _ => anyhow::bail!("Unknown build system: {}", pkg.build_system),
     }
     Ok(())
@@ -83,13 +91,8 @@ fn expand_build_vars(value: &str, install_prefix: &str) -> String {
     #[cfg(target_os = "macos")]
     {
         if s.contains("$MACOSX_SDK") {
-            if let Some(sdk) = macosx_sdk_path() {
+            if let Some(sdk) = cached_macosx_sdk_path() {
                 s = s.replace("$MACOSX_SDK", &sdk);
-            }
-            if s.contains("$MACOSX_SDK") {
-                if let Some(sdk) = macosx_sdk_path_fallback() {
-                    s = s.replace("$MACOSX_SDK", &sdk);
-                }
             }
         }
     }
@@ -141,13 +144,27 @@ fn macosx_sdk_path_fallback() -> Option<String> {
     None
 }
 
-fn resolve_patch_path(patch: &str, prefix_install: &Path) -> PathBuf {
+/// `macosx_sdk_path()`/`macosx_sdk_path_fallback()` shell out / probe the filesystem; memoize
+/// the result so repeated lookups (once per `$MACOSX_SDK` expansion, plus the SDKROOT pin) only
+/// pay that cost once per process.
+#[cfg(target_os = "macos")]
+static MACOSX_SDK_PATH: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn cached_macosx_sdk_path() -> Option<String> {
+    MACOSX_SDK_PATH
+        .get_or_init(|| macosx_sdk_path().or_else(macosx_sdk_path_fallback))
+        .clone()
+}
+
+fn resolve_patch_path(patch: &str, source_dir: &Path, prefix_install: &Path) -> PathBuf {
     let p = Path::new(patch);
     if p.is_absolute() {
         return p.to_path_buf();
     }
-    if p.exists() {
-        return p.to_path_buf();
+    let under_source = source_dir.join(p);
+    if under_source.exists() {
+        return under_source;
     }
     if let Some(prefix_root) = prefix_install.parent() {
         let under_prefix = prefix_root.join("patches").join(p);
@@ -278,7 +295,7 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
     // default search then orders libc++ headers before SDK C headers (see augment_cppflags).
     #[cfg(target_os = "macos")]
     if std::env::var_os("SDKROOT").is_none() {
-        if let Some(sdk) = macosx_sdk_path().or_else(macosx_sdk_path_fallback) {
+        if let Some(sdk) = cached_macosx_sdk_path() {
             env.push(("SDKROOT".to_string(), sdk));
         }
     }
@@ -486,11 +503,11 @@ fn augment_cppflags_for_tsi_prefix(
     let inc = deps_prefix.join("include");
     let inc_flag = format!("-I{}", inc.display());
     let src = format!("-I{}", source_dir.display());
-    let mut rest = cppflags.trim().to_string();
-    if rest.contains(&inc_flag) {
-        rest = rest.replace(&inc_flag, "");
-        rest = rest.split_whitespace().collect::<Vec<_>>().join(" ");
-    }
+    let rest = cppflags
+        .split_whitespace()
+        .filter(|tok| *tok != inc_flag)
+        .collect::<Vec<_>>()
+        .join(" ");
     #[cfg(target_os = "macos")]
     {
         let idir = format!("-idirafter {}", inc.display());
@@ -607,9 +624,13 @@ fn build_make(
     source_dir: &Path,
     _build_dir: &Path,
     install_dir: &Path,
+    deps_prefix: &Path,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
+    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let env_ref: &[(String, String)] = &env;
+
     let prefix = install_dir.to_string_lossy();
     let mut make_args = pkg.make_args.clone();
     make_args.push(format!("PREFIX={}", prefix));
@@ -618,7 +639,7 @@ fn build_make(
     // Make's file-level variable assignments (e.g. `AR=ar` in bzip2's Makefile) take
     // precedence over environment variables, but command-line arguments always win.
     for var in ["AR", "RANLIB", "CC", "CXX"] {
-        if let Some((_, val)) = env.iter().find(|(k, _)| k == var) {
+        if let Some((_, val)) = env_ref.iter().find(|(k, _)| k == var) {
             if !make_args
                 .iter()
                 .any(|a| a.starts_with(&format!("{}=", var)))
@@ -632,7 +653,7 @@ fn build_make(
         Command::new("make")
             .args(&make_args)
             .current_dir(source_dir),
-        env,
+        env_ref,
         "make",
         verbose,
     )?;
@@ -641,7 +662,7 @@ fn build_make(
             .args(["install"])
             .args(&make_args)
             .current_dir(source_dir),
-        env,
+        env_ref,
         "make install",
         verbose,
     )?;
@@ -651,10 +672,14 @@ fn build_make(
 fn build_custom(
     pkg: &Package,
     source_dir: &Path,
+    deps_prefix: &Path,
     install_path: &str,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
+    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let env_ref: &[(String, String)] = &env;
+
     let shell = if cfg!(windows) { "cmd" } else { "sh" };
     let flag = if cfg!(windows) { "/C" } else { "-c" };
     for cmd_str in &pkg.build_commands {
@@ -669,7 +694,7 @@ fn build_custom(
             .arg(&expanded)
             .current_dir(source_dir)
             .env("TSI_INSTALL_DIR", install_path);
-        run_cmd(&mut cmd, env, &step_name, verbose)?;
+        run_cmd(&mut cmd, env_ref, &step_name, verbose)?;
     }
     Ok(())
 }

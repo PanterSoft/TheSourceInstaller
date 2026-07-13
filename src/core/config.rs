@@ -17,7 +17,10 @@ impl Config {
     pub fn load(prefix: &Path) -> Self {
         let path = prefix.join("tsi.toml");
         if !path.exists() {
-            return Self::default();
+            return Self {
+                strict_isolation: true,
+                log_level: "info".to_string(),
+            };
         }
         let toml = match std::fs::read_to_string(&path) {
             Ok(t) => t,

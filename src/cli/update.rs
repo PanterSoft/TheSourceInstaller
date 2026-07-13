@@ -48,6 +48,17 @@ pub fn run(args: UpdateArgs) -> Result<()> {
     ui::output::section("Syncing repository...");
     let tmp = prefix.join("tmp-repo-update");
     if tmp.exists() {
+        let remote_matches = std::process::Command::new("git")
+            .args(["-C"])
+            .arg(&tmp)
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .is_ok_and(|out| out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == repo);
+        if !remote_matches {
+            std::fs::remove_dir_all(&tmp)?;
+        }
+    }
+    if tmp.exists() {
         let status = std::process::Command::new("git")
             .args(["pull"])
             .current_dir(&tmp)
