@@ -36,12 +36,21 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
 
     if !archive_path.exists() || force {
         download_file_with_retry(url, &archive_path)?;
-        // Verify SHA-256 checksum if the package definition supplies one.
-        if let Some(expected) = &pkg.source.sha256 {
+    }
+
+    // Verify SHA-256 checksum if the package definition supplies one, whether the archive
+    // was just downloaded or reused from a previous run. This catches a truncated/corrupt
+    // file left behind by a failed prior run that would otherwise be handed to extraction.
+    if let Some(expected) = &pkg.source.sha256 {
+        let actual = crate::util::sha256::sha256_file(&archive_path)
+            .context("Computing SHA-256 of archive")?;
+        if actual != expected.to_lowercase() {
+            // Remove the bad file and re-download once before giving up.
+            let _ = std::fs::remove_file(&archive_path);
+            download_file_with_retry(url, &archive_path)?;
             let actual = crate::util::sha256::sha256_file(&archive_path)
-                .context("Computing SHA-256 of downloaded archive")?;
+                .context("Computing SHA-256 of re-downloaded archive")?;
             if actual != expected.to_lowercase() {
-                // Remove the bad file so the next run re-downloads rather than skipping.
                 let _ = std::fs::remove_file(&archive_path);
                 anyhow::bail!(
                     "SHA-256 mismatch for {}: expected {}, got {}",
@@ -50,8 +59,8 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
                     actual
                 );
             }
-            log::debug!("SHA-256 verified for {}", archive_path.display());
         }
+        log::debug!("SHA-256 verified for {}", archive_path.display());
     }
 
     let target_dir = dest_dir.join(format!("{}-{}", pkg.name, pkg.version));
@@ -243,6 +252,9 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<()> {
             continue;
         }
         let out_path = dest.join(name);
+        if !out_path.starts_with(dest) {
+            continue;
+        }
         if name.ends_with('/') {
             std::fs::create_dir_all(&out_path).context("Create dir")?;
         } else {
@@ -268,6 +280,13 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
         if force {
             std::fs::remove_dir_all(&clone_dir).context("Remove existing")?;
         } else {
+            // Cache hit: still make sure submodules are synced, since packages fetched by an
+            // older tsi version (or cloned before this check existed) may not have them.
+            // This is a no-op if submodules are already initialized.
+            let _ = std::process::Command::new("git")
+                .args(["submodule", "update", "--init", "--recursive"])
+                .current_dir(&clone_dir)
+                .status();
             return Ok(clone_dir);
         }
     }
@@ -341,7 +360,10 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
         let entry = entry?;
         let ty = entry.file_type()?;
         let dst_path = dst.join(entry.file_name());
-        if ty.is_dir() {
+        // `file_type()` doesn't follow symlinks; a symlink-to-directory needs `metadata()`
+        // (which does follow them) to be recognized and recursed into instead of being
+        // passed to `fs::copy`, which only supports regular files.
+        if ty.is_dir() || (ty.is_symlink() && entry.path().is_dir()) {
             copy_dir_all(&entry.path(), &dst_path)?;
         } else {
             std::fs::copy(entry.path(), dst_path)?;

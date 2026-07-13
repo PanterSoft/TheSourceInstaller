@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 pub fn create_symlink(src: &Path, dst: &Path) -> Result<()> {
-    if dst.exists() {
+    if dst.exists() || fs::symlink_metadata(dst).is_ok() {
         fs::remove_file(dst).context("Failed to remove existing symlink target")?;
     }
     if let Some(parent) = dst.parent() {

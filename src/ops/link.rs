@@ -48,9 +48,6 @@ fn link_dir_contents(src_dir: &Path, dst_dir: &Path, check_executable: bool) -> 
             }
         }
 
-        if dst_path.exists() {
-            fs::remove_file(&dst_path).context("Remove existing link")?;
-        }
         platform::create_symlink(&src_path, &dst_path)?;
     }
     Ok(())

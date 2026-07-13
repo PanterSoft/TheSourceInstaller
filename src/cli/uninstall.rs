@@ -19,6 +19,7 @@ pub fn run(args: UninstallArgs) -> Result<()> {
     }
 
     let prefix = platform::resolve_prefix(args.prefix.as_deref());
+    let _guard = crate::ops::install_lock::acquire_install_lock(&prefix)?;
     let db_dir = prefix.join("db");
     let mut db = Database::new(&db_dir)?;
 

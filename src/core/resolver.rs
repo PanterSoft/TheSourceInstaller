@@ -69,7 +69,7 @@ pub fn get_build_order(packages: &[Package]) -> Vec<Package> {
         name_to_pkg.keys().map(|n| (n.clone(), 0)).collect();
 
     for pkg in packages {
-        for dep in &pkg.build_dependencies {
+        for dep in pkg.dependencies.iter().chain(pkg.build_dependencies.iter()) {
             if name_to_pkg.contains_key(dep) {
                 *in_degree.get_mut(&pkg.name).unwrap() += 1;
             }
@@ -88,7 +88,7 @@ pub fn get_build_order(packages: &[Package]) -> Vec<Package> {
             order.push(pkg.clone());
         }
         for pkg in packages {
-            if pkg.build_dependencies.contains(&name) {
+            if pkg.dependencies.contains(&name) || pkg.build_dependencies.contains(&name) {
                 if let Some(d) = in_degree.get_mut(&pkg.name) {
                     *d = d.saturating_sub(1);
                     if *d == 0 {
