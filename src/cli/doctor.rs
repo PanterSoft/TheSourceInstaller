@@ -26,7 +26,11 @@ pub fn run(args: DoctorArgs) -> Result<()> {
     let bootstrap_complete = match &db_result {
         Ok(db) => bootstrap::is_bootstrap_complete(db),
         Err(e) => {
-            ui::output::warning(format!("Cannot open database at {}: {}", db_dir.display(), e));
+            ui::output::warning(format!(
+                "Cannot open database at {}: {}",
+                db_dir.display(),
+                e
+            ));
             warnings += 1;
             false
         }

@@ -36,10 +36,7 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
     }
 
     ui::output::section("Bootstrapping core toolchain packages");
-    ui::output::detail(format!(
-        "Packages: {}",
-        remaining.join(", ")
-    ));
+    ui::output::detail(format!("Packages: {}", remaining.join(", ")));
 
     let total = remaining.len();
     for (idx, name) in remaining.drain(..).enumerate() {
@@ -72,4 +69,3 @@ pub fn run(args: BootstrapArgs) -> Result<()> {
 
     Ok(())
 }
-
