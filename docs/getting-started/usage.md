@@ -93,6 +93,15 @@ tsi doctor
 tsi doctor --prefix /opt/tsi
 ```
 
+### Interactive UI
+
+```bash
+# Browse, filter, install, and uninstall packages interactively
+tsi ui
+```
+
+Inside the UI, press `?` for the full keybinding list. Use `Tab` to switch between All / Installed / Available views, `/` to filter, and `i`/`u` to install or uninstall the selected package. See the [CLI Reference](../reference/cli-reference.md#ui) for all keybindings.
+
 ## Package Versioning
 
 TSI supports multiple versions of packages:
