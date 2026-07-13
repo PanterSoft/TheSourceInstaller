@@ -79,6 +79,7 @@ The bootstrap installer supports several command-line options and environment va
 **Command-line options:**
 - `--prefix PATH` - Installation prefix (default: `~/.tsi` on Unix, `%USERPROFILE%\.tsi` on Windows)
 - `--repair` - Repair/update existing TSI installation
+- `--uninstall` - Remove TSI completely from the system
 - `--help, -h` - Show help message
 
 **Environment variables (recommended - cleaner syntax, no '--' needed):**
@@ -97,6 +98,9 @@ PREFIX=~/.tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/t
 # Repair existing installation - using environment variable (recommended, no '--' needed)
 REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 
+# Uninstall TSI completely
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
+
 # Or use command-line arguments
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix ~/.tsi
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
@@ -111,10 +115,12 @@ TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=develop \
 Requires [Rust](https://rustup.rs/) toolchain:
 
 ```bash
-git clone https://github.com/PanterSoft/tsi.git
+git clone --recurse-submodules https://github.com/PanterSoft/tsi.git
 cd tsi
 cargo build --release
 ```
+
+To use the in-tree package repository for development, run `make dev-packages` or `tsi update --local ./tsi-packages/packages`. See [Package repository (development)](docs/developer-guide/repository.md#development-in-tree-package-repository) in the docs.
 
 The binary will be at `target/release/tsi`. To install:
 

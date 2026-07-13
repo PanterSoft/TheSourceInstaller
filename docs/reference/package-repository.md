@@ -1,6 +1,6 @@
 # TSI Package Repository
 
-This directory contains package definitions for TSI. Each package is defined as a JSON file.
+The official package definitions are maintained in the [tsi-packages](https://github.com/PanterSoft/tsi-packages) repository. When you run `tsi update`, TSI copies those definitions to `~/.tsi/packages/`. Each package is defined as a JSON file.
 
 **Total Packages: 100**
 

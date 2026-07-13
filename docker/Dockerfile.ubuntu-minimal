@@ -1,5 +1,6 @@
 # Minimal Ubuntu - simulates minimal Debian/Ubuntu system
-FROM ubuntu:20.04
+# Kept in sync with the ubuntu:24.04 image used by .github/workflows/docker-tests.yml
+FROM ubuntu:24.04
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive

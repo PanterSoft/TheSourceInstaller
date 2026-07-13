@@ -11,6 +11,10 @@ pub struct PackageSource {
     pub tag: Option<String>,
     pub commit: Option<String>,
     pub path: Option<String>,
+    /// Optional SHA-256 checksum (lowercase hex) for archive downloads.
+    /// When present, the downloaded archive is verified before extraction.
+    #[serde(default)]
+    pub sha256: Option<String>,
 }
 
 /// Single version definition within a package.
@@ -49,7 +53,24 @@ pub struct PackageVersion {
     #[serde(default)]
     pub configure_args_windows: Option<Vec<String>>,
     #[serde(default)]
+    pub cmake_args_darwin: Option<Vec<String>>,
+    #[serde(default)]
+    pub cmake_args_linux: Option<Vec<String>>,
+    #[serde(default)]
+    pub cmake_args_windows: Option<Vec<String>>,
+    #[serde(default)]
+    pub env_x86_64: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub env_aarch64: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub configure_args_x86_64: Option<Vec<String>>,
+    #[serde(default)]
+    pub configure_args_aarch64: Option<Vec<String>>,
+    #[serde(default)]
     pub patches: Vec<String>,
+    /// Subdirectory within the fetched source tree where the build root lives (e.g. "avro-c-1.11.3" when the tarball extracts with that top-level dir and we store as {name}-{version}).
+    #[serde(default)]
+    pub source_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -88,12 +109,14 @@ pub struct Package {
     pub build_commands: Vec<String>,
     pub env: HashMap<String, String>,
     pub patches: Vec<String>,
+    pub source_dir: Option<String>,
 }
 
 impl Package {
     pub fn from_version(name: &str, v: &PackageVersion) -> Self {
         let env = merge_env_for_os(v);
         let configure_args = merge_configure_args_for_os(v);
+        let cmake_args = merge_cmake_args_for_os(v);
 
         Self {
             name: name.to_string(),
@@ -104,11 +127,12 @@ impl Package {
             build_dependencies: v.build_dependencies.clone(),
             build_system: v.build_system.clone(),
             configure_args,
-            cmake_args: v.cmake_args.clone(),
+            cmake_args,
             make_args: v.make_args.clone(),
             build_commands: v.build_commands.clone(),
             env,
             patches: v.patches.clone(),
+            source_dir: v.source_dir.clone(),
         }
     }
 
@@ -119,14 +143,25 @@ impl Package {
 
 fn merge_env_for_os(v: &PackageVersion) -> HashMap<String, String> {
     let mut env = v.env.clone();
-    let os = crate::platform::os_name();
-    let override_env = match os {
+    // Apply OS-specific overrides first.
+    let os_env = match crate::platform::os_name() {
         "darwin" => v.env_darwin.as_ref(),
         "linux" => v.env_linux.as_ref(),
         "windows" => v.env_windows.as_ref(),
         _ => None,
     };
-    if let Some(ov) = override_env {
+    if let Some(ov) = os_env {
+        for (k, val) in ov {
+            env.insert(k.clone(), val.clone());
+        }
+    }
+    // Apply arch-specific overrides on top (arch wins over OS).
+    let arch_env = match crate::platform::arch_name() {
+        "x86_64" => v.env_x86_64.as_ref(),
+        "aarch64" => v.env_aarch64.as_ref(),
+        _ => None,
+    };
+    if let Some(ov) = arch_env {
         for (k, val) in ov {
             env.insert(k.clone(), val.clone());
         }
@@ -135,15 +170,37 @@ fn merge_env_for_os(v: &PackageVersion) -> HashMap<String, String> {
 }
 
 fn merge_configure_args_for_os(v: &PackageVersion) -> Vec<String> {
-    let override_args = match crate::platform::os_name() {
+    // OS-specific args replace the base args (existing behaviour).
+    let os_override = match crate::platform::os_name() {
         "darwin" => v.configure_args_darwin.as_ref(),
         "linux" => v.configure_args_linux.as_ref(),
         "windows" => v.configure_args_windows.as_ref(),
         _ => None,
     };
-    override_args
+    let mut args = os_override
         .cloned()
-        .unwrap_or_else(|| v.configure_args.clone())
+        .unwrap_or_else(|| v.configure_args.clone());
+    // Arch-specific args are appended on top (additive).
+    let arch_extra = match crate::platform::arch_name() {
+        "x86_64" => v.configure_args_x86_64.as_deref(),
+        "aarch64" => v.configure_args_aarch64.as_deref(),
+        _ => None,
+    };
+    if let Some(extra) = arch_extra {
+        args.extend_from_slice(extra);
+    }
+    args
+}
+
+fn merge_cmake_args_for_os(v: &PackageVersion) -> Vec<String> {
+    // Same semantics as configure_args: OS-specific list replaces base when present.
+    let os_override = match crate::platform::os_name() {
+        "darwin" => v.cmake_args_darwin.as_ref(),
+        "linux" => v.cmake_args_linux.as_ref(),
+        "windows" => v.cmake_args_windows.as_ref(),
+        _ => None,
+    };
+    os_override.cloned().unwrap_or_else(|| v.cmake_args.clone())
 }
 
 pub fn parse_package_file(json: &str) -> Result<Vec<Package>, anyhow::Error> {

@@ -29,16 +29,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux legs build fully static musl binaries so they run unmodified
+          # on Alpine/musl and on older-glibc distros (no glibc version skew).
           - runner: ubuntu-latest
             platform: linux-x86_64
+            target: x86_64-unknown-linux-musl
+            cross: false
           - runner: ubuntu-24.04-arm
             platform: linux-aarch64
+            target: aarch64-unknown-linux-musl
+            cross: false
+          # No native armv7 runner, so this leg is cross-compiled via
+          # houseabsolute/actions-rust-cross (cross-rs backend). Build only:
+          # the resulting binary can't be executed on the x86_64/aarch64 host.
+          - runner: ubuntu-latest
+            platform: linux-armv7
+            target: armv7-unknown-linux-musleabihf
+            cross: true
           - runner: macos-latest
             platform: darwin-aarch64
+            target: ""
+            cross: false
           - runner: windows-latest
             platform: windows-x86_64
+            target: ""
+            cross: false
           - runner: windows-11-arm
             platform: windows-aarch64
+            target: ""
+            cross: false
 
     steps:
       - name: Checkout code
@@ -46,25 +65,95 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
+      # The cross leg installs and drives its own Rust toolchain inside the
+      # cross-rs container, so it skips the steps below that assume a host
+      # toolchain building directly on this runner.
       - name: Install Rust
+        if: ${{ !matrix.cross }}
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Add Rust target
+        if: ${{ !matrix.cross && matrix.target != '' }}
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install musl-tools
+        if: ${{ !matrix.cross && contains(matrix.target, 'musl') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
       - name: Cache Cargo
+        if: ${{ !matrix.cross }}
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.platform }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Build
-        run: cargo build --release
+        if: ${{ !matrix.cross }}
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+
+      - name: Run tests
+        if: ${{ !matrix.cross }}
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo test --target ${{ matrix.target }}
+          else
+            cargo test
+          fi
+
+      - name: Build (cross)
+        if: ${{ matrix.cross }}
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          target: ${{ matrix.target }}
+          args: "--release"
+
+      # Regression guard for the "single static binary" promise: fail the
+      # job if a Linux artifact isn't actually statically linked musl.
+      - name: Verify static linking (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/tsi"
+          echo "== file =="
+          file "$BIN"
+
+          # x86_64-musl produces static-PIE, which glibc ldd reports as
+          # "statically linked" rather than "not a dynamic executable".
+          # The property that matters is zero NEEDED entries.
+          echo "== readelf NEEDED =="
+          if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+            echo "ERROR: $BIN has dynamic library dependencies:" >&2
+            readelf -d "$BIN" | grep NEEDED >&2
+            exit 1
+          fi
+          echo "Confirmed: no dynamic dependencies (NEEDED entries: none)"
+
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            echo "Skipping execution check: no native runner for ${{ matrix.target }}"
+          else
+            echo "== --version =="
+            "$BIN" --version
+          fi
 
       - name: Prepare artifact
+        shell: bash
         run: |
           if [[ "${{ matrix.platform }}" == windows* ]]; then
-            cp target/release/tsi.exe tsi-${{ matrix.platform }}
+            SRC="target/release/tsi.exe"
+          elif [ -n "${{ matrix.target }}" ]; then
+            SRC="target/${{ matrix.target }}/release/tsi"
           else
-            cp target/release/tsi tsi-${{ matrix.platform }}
+            SRC="target/release/tsi"
           fi
-        shell: bash
+          cp "$SRC" tsi-${{ matrix.platform }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6.0.0

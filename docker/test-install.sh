@@ -66,17 +66,19 @@ echo "Testing TSI Binary"
 echo "=========================================="
 echo ""
 
+# POSIX sh has no `local` keyword (bashism); run_test uses plain globals
+# instead so this script stays portable across dash/ash/bash-as-sh.
 FAILED=0
 run_test() {
-    local name="$1"
-    local cmd="$2"
-    echo "Testing $name..."
-    if eval "$cmd" >/dev/null 2>&1; then
-        echo "✓ $name works"
+    test_name="$1"
+    test_cmd="$2"
+    echo "Testing $test_name..."
+    if eval "$test_cmd" >/dev/null 2>&1; then
+        echo "✓ $test_name works"
         return 0
     else
-        echo "✗ $name failed"
-        eval "$cmd" 2>&1
+        echo "✗ $test_name failed"
+        eval "$test_cmd" 2>&1
         FAILED=1
         return 1
     fi
@@ -89,13 +91,18 @@ run_test "doctor" "./$TSI_BIN doctor"
 
 echo ""
 echo "Setting up package repository..."
+# Package definitions live in the tsi-packages submodule, not a top-level
+# packages/ dir.
+PACKAGES_DIR="tsi-packages/packages"
 mkdir -p /root/.tsi/packages
-cp packages/*.json /root/.tsi/packages/ 2>/dev/null || true
+cp "$PACKAGES_DIR"/*.json /root/.tsi/packages/ 2>/dev/null || true
 
-if [ -d "packages" ] && [ -n "$(ls packages/*.json 2>/dev/null)" ]; then
+if [ -d "$PACKAGES_DIR" ] && [ -n "$(ls "$PACKAGES_DIR"/*.json 2>/dev/null)" ]; then
     run_test "info" "./$TSI_BIN info zlib"
     run_test "search" "./$TSI_BIN search zlib"
-    run_test "update" "./$TSI_BIN update --local /root/tsi-source/packages"
+    run_test "update" "./$TSI_BIN update --local /root/tsi-source/$PACKAGES_DIR"
+else
+    echo "⚠ tsi-packages/packages not found or empty (submodule not initialized?) -- skipping info/search/update checks"
 fi
 
 if [ "$FAILED" -eq 1 ]; then

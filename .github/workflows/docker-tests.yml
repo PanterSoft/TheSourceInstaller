@@ -1,0 +1,213 @@
+name: Docker E2E Tests
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/**'
+      - 'tsi-bootstrap.sh'
+      - '.github/workflows/docker-tests.yml'
+      - 'tsi-packages'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'docker/**'
+      - 'tsi-bootstrap.sh'
+      - '.github/workflows/docker-tests.yml'
+      - 'tsi-packages'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Builds a static (musl) release binary per architecture. Both the
+  # container-tests and no-tools-test jobs consume these artifacts instead
+  # of rebuilding, so a single build failure doesn't block every downstream
+  # matrix leg from reporting its own pass/fail.
+  build-binary:
+    name: Build static binary (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            arch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.1
+        with:
+          submodules: recursive
+
+      - name: Install Rust (${{ matrix.target }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build static release binary
+        env:
+          LZMA_API_STATIC: "1"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Verify binary is statically linked
+        run: |
+          BIN="target/${{ matrix.target }}/release/tsi"
+          file "$BIN"
+          ldd "$BIN" 2>&1 || true
+          # x86_64-musl produces static-PIE, which glibc ldd calls
+          # "statically linked" instead of "not a dynamic executable".
+          # The property that actually matters is zero NEEDED entries.
+          if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+            echo "ERROR: binary has dynamic library dependencies:" >&2
+            readelf -d "$BIN" | grep NEEDED >&2
+            exit 1
+          fi
+          echo "Confirmed: no dynamic dependencies (NEEDED entries: none)"
+          "$BIN" --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: tsi-static-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/tsi
+          if-no-files-found: error
+
+  # Real end-to-end install: only a C compiler + make are installed inside
+  # each bare distro container, then tsi builds a real package (bzip2) from
+  # source. This is the core reliability gap the old test-install.sh never
+  # covered (it built tsi with cargo but never ran `tsi install`).
+  container-tests:
+    name: E2E install (${{ matrix.distro }}, ${{ matrix.arch }})
+    needs: build-binary
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: alpine
+            image: alpine:latest
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: debian
+            image: debian:stable-slim
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: ubuntu
+            image: ubuntu:24.04
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: fedora
+            image: fedora:latest
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: alpine
+            image: alpine:latest
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: debian
+            image: debian:stable-slim
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: ubuntu
+            image: ubuntu:24.04
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: fedora
+            image: fedora:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.1
+        with:
+          submodules: recursive
+
+      - name: Download static binary
+        uses: actions/download-artifact@v7.0.0
+        with:
+          name: tsi-static-${{ matrix.arch }}
+          path: artifacts
+
+      - name: Make binary executable
+        run: chmod +x artifacts/tsi
+
+      - name: Run e2e install test in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -e TSI_BIN=/work/artifacts/tsi \
+            -v "$PWD":/work:ro \
+            ${{ matrix.image }} \
+            sh /work/docker/e2e-test.sh
+
+  # Proves the static binary itself has zero runtime dependencies: no
+  # package manager step runs at all here. tsi --version/--help/doctor must
+  # work out of the box, and `tsi install <pkg>` must fail gracefully
+  # (non-zero exit, no Rust panic) when there's no toolchain or registry.
+  no-tools-test:
+    name: Zero-dependency test (${{ matrix.distro }}, ${{ matrix.arch }})
+    needs: build-binary
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: alpine
+            image: alpine:latest
+          - runner: ubuntu-latest
+            arch: amd64
+            distro: debian
+            image: debian:stable-slim
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: alpine
+            image: alpine:latest
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: debian
+            image: debian:stable-slim
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.1
+
+      - name: Download static binary
+        uses: actions/download-artifact@v7.0.0
+        with:
+          name: tsi-static-${{ matrix.arch }}
+          path: artifacts
+
+      - name: Make binary executable
+        run: chmod +x artifacts/tsi
+
+      - name: Run zero-dependency test in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$PWD/artifacts":/artifacts:ro \
+            -v "$PWD/docker":/scripts:ro \
+            ${{ matrix.image }} \
+            sh /scripts/no-tools-test.sh /artifacts/tsi

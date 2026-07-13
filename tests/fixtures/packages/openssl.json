@@ -1,0 +1,14 @@
+{
+  "name": "openssl",
+  "version": "3.0.0",
+  "description": "TLS/SSL library",
+  "source": {
+    "type": "tarball",
+    "url": "https://www.openssl.org/source/openssl-3.0.0.tar.gz"
+  },
+  "dependencies": [],
+  "build_dependencies": [],
+  "build_system": "autotools",
+  "configure_args": [],
+  "env": {}
+}

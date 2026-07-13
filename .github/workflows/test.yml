@@ -2,18 +2,18 @@ name: TSI Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'Cargo.toml'
-      - 'packages/**'
+      - 'tests/**'
       - '.github/workflows/test.yml'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'Cargo.toml'
-      - 'packages/**'
+      - 'tests/**'
       - '.github/workflows/test.yml'
   workflow_dispatch:
 
@@ -29,4 +29,4 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]

@@ -32,7 +32,7 @@ tsi upgrade
 tsi doctor
 
 # Update package repository
-tsi update                                    # Update from default TSI repository
+tsi update                                    # Update from default package repository
 tsi update --repo https://github.com/user/repo.git  # Update from custom repository
 tsi update --local /path/to/packages          # Update from local directory
 ```

@@ -1,83 +1,75 @@
 # OS-Specific Package Configuration
 
-TSI supports OS-specific configurations in package definitions to handle differences between operating systems (e.g., macOS vs Linux/BusyBox vs other Unix variants).
+TSI supports OS-specific configurations in package definitions to handle differences between operating systems (e.g. macOS vs Linux vs Windows).
 
 ## Format
 
-Package JSON files can include OS-specific fields using the pattern: `<field>_<os>`
+Package JSON files use the pattern `<field>_<os>` for the supported OS names below.
 
-## Supported OS Names
+## Supported OS names (in JSON)
 
-OS names are detected at compile time (Rust `target_os`):
+These keys are **implemented** for the three primary families:
 
-- **`darwin`** - macOS (Apple's Unix-based operating system)
-- **`linux`** - All Linux distributions (Debian, Ubuntu, RedHat, Alpine, Arch, etc.)
-- **`windows`** - Microsoft Windows
-- **`freebsd`** - FreeBSD
-- **`openbsd`** - OpenBSD
-- **`netbsd`** - NetBSD
-- **Other targets** - Any other target supported by Rust
+- **`darwin`** — macOS
+- **`linux`** — Linux distributions
+- **`windows`** — Microsoft Windows
 
-**Note:** On Windows, use `configure_args_windows`, `env_windows`, etc. for Windows-specific package configuration.
+[`src/platform/mod.rs`](https://github.com/PanterSoft/TheSourceInstaller/blob/main/src/platform/mod.rs) can also report `freebsd`, `openbsd`, `netbsd`, or `unknown` at runtime, but **there are no** `env_freebsd` / `configure_args_freebsd`-style fields yet. On those hosts, only base `env`, `configure_args`, and `cmake_args` apply.
 
-## Supported OS-Specific Fields
+## Supported OS-specific fields
 
-- `env_darwin`, `env_linux`, etc. - OS-specific environment variables
-- `configure_args_darwin`, `configure_args_linux`, etc. - OS-specific configure arguments
-- `cmake_args_darwin`, `cmake_args_linux`, etc. - OS-specific CMake arguments
-- `make_args_darwin`, `make_args_linux`, etc. - OS-specific make arguments
+| Base field | OS-specific keys | Merge behavior |
+|------------|------------------|----------------|
+| `env` | `env_darwin`, `env_linux`, `env_windows` | **Merge keys:** start from base `env`, then apply the current OS map (overwriting duplicate keys), then apply arch maps `env_x86_64` / `env_aarch64` on top. |
+| `configure_args` | `configure_args_darwin`, `configure_args_linux`, `configure_args_windows` | **Replace list:** if the OS-specific list is present, it **replaces** base `configure_args` entirely; otherwise base is used. Arch extras `configure_args_x86_64` / `configure_args_aarch64` are **appended** when set. |
+| `cmake_args` | `cmake_args_darwin`, `cmake_args_linux`, `cmake_args_windows` | **Replace list:** if the OS-specific list is present, it **replaces** base `cmake_args` entirely; otherwise base `cmake_args` is used. No arch-specific cmake keys (yet). |
 
-## How It Works
+Not implemented in JSON today: OS-specific `make_args_*`, `build_system_*`, or OS-specific dependencies.
 
-1. **Base configuration is loaded first** (e.g., `env`, `configure_args`) - this is the **DEFAULT** that is always used
-2. **OS-specific configuration is then merged** based on detected OS
-3. **OS-specific values override base values** for the same keys
-4. **If OS-specific config doesn't exist**, base configuration is used as-is (default fallback)
-5. **If OS-specific config exists but doesn't have a key**, base configuration value is used for that key
+## Examples
 
-### Priority Order (highest to lowest):
-1. OS-specific configuration (e.g., `env_darwin`, `env_linux`)
-2. Base configuration (e.g., `env`) - **always used as default fallback**
-
-## Example
+### Environment (key merge)
 
 ```json
 {
-  "name": "m4",
-  "version": "1.4.19",
-  "build_system": "autotools",
-  "env": {
-    "CFLAGS": "-O2 -g"
-  },
+  "env": { "CFLAGS": "-O2 -g" },
   "env_darwin": {
-    "CFLAGS": "-O2 -g -Wno-error -Wno-error=format-nonliteral -Wno-format-nonliteral"
-  },
-  "configure_args": [],
-  "configure_args_linux": [
-    "--disable-werror"
-  ],
-  "configure_args_freebsd": [
-    "--disable-werror"
-  ]
+    "CFLAGS": "-O2 -g -Wno-error=format-nonliteral"
+  }
 }
 ```
 
-In this example:
-- **On macOS (darwin)**: `CFLAGS` will be `-O2 -g -Wno-error -Wno-error=format-nonliteral -Wno-format-nonliteral`
-- **On Linux**: `CFLAGS` will be `-O2 -g` and `configure_args` will include `--disable-werror`
-- **On FreeBSD**: `CFLAGS` will be `-O2 -g` and `configure_args` will include `--disable-werror`
-- **On other Unix systems**: Uses base configuration (`CFLAGS: -O2 -g`, no extra configure args)
+On macOS, `CFLAGS` ends up as the darwin value; on Linux/Windows, the base value unless `env_linux` / `env_windows` overrides.
 
-## OS Detection Details
+### Autotools / configure (replace list when OS block exists)
 
-- **macOS**: Detected as `darwin`
-- **Linux**: All Linux distributions detected as `linux`
-- **Windows**: Detected as `windows`
-- **Other targets**: FreeBSD, OpenBSD, NetBSD, etc.
+```json
+{
+  "configure_args": ["--disable-nls"],
+  "configure_args_linux": ["--disable-nls", "--disable-werror"]
+}
+```
 
-This design allows you to:
-1. Target specific OS families (e.g., `darwin` for macOS, `linux` for all Linux, `windows` for Windows)
-2. Support specific Unix variants (e.g., `freebsd`, `openbsd`)
-3. Have a base configuration that works for all systems
-4. Override only where necessary for specific OS differences
+On Linux the full configure argument list is exactly `configure_args_linux`. On macOS, if `configure_args_darwin` is omitted, the list is `["--disable-nls"]`.
 
+### CMake (replace list when OS block exists)
+
+```json
+{
+  "cmake_args": ["-DCMAKE_BUILD_TYPE=Release"],
+  "cmake_args_darwin": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
+  ],
+  "cmake_args_windows": ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"]
+}
+```
+
+On each OS, if the corresponding `cmake_args_<os>` is set, that list is used instead of `cmake_args`.
+
+## OS detection
+
+- **macOS** → `darwin`
+- **Linux** → `linux`
+- **Windows** → `windows`
+- **BSD / other** → no `_*` overrides apply unless future fields are added; base fields only.

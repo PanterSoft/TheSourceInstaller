@@ -16,6 +16,23 @@ Or download and run locally:
 
 ## Options
 
+### `--uninstall`
+
+Remove TSI completely from the system. Deletes the entire installation prefix (binary, completions, package database, installed packages, and all data).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
+```
+
+**Custom prefix:**
+```bash
+curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall --prefix /opt/tsi
+```
+
+**Non-interactive:** Set `UNINSTALL=1` and use `--non-interactive` to skip the confirmation prompt.
+
+**Safety:** Uninstall only runs if a TSI binary is found at `PREFIX/bin/tsi` (or `tsi.exe`), so a wrong prefix will not be deleted.
+
 ### `--repair`
 
 Repair or update an existing TSI installation.
@@ -93,6 +110,14 @@ Branch to use from repository (default: `main`).
 TSI_BRANCH=develop curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
+### `UNINSTALL`
+
+Set to `1`, `true`, or `yes` to enable uninstall mode (same as `--uninstall`). Use with `--non-interactive` for scripted uninstall.
+
+```bash
+UNINSTALL=1 curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall --non-interactive
+```
+
 ### `INSTALL_DIR`
 
 Temporary directory for downloading and building source (default: `$HOME/tsi-install`).
@@ -119,6 +144,12 @@ PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+```
+
+### Uninstall TSI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
 ```
 
 ### Install from Fork

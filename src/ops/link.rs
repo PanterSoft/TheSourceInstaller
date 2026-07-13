@@ -14,6 +14,14 @@ pub fn create_symlinks(package_install_dir: &Path, main_install_dir: &Path) -> R
         let check_exec = subdir == "bin";
         link_dir_contents(&src_dir, &dst_dir, check_exec)?;
     }
+    // Autotools often install pkg-config files under lib/pkgconfig/; the top-level lib/ pass only
+    // symlinks immediate files in lib/, so merge .pc files into the shared prefix for PKG_CONFIG_PATH.
+    let pkgconfig_src = package_install_dir.join("lib").join("pkgconfig");
+    if pkgconfig_src.is_dir() {
+        let pkgconfig_dst = main_install_dir.join("lib").join("pkgconfig");
+        fs::create_dir_all(&pkgconfig_dst).context("Create pkgconfig dir")?;
+        link_dir_contents(&pkgconfig_src, &pkgconfig_dst, false)?;
+    }
     Ok(())
 }
 
@@ -25,22 +33,21 @@ fn link_dir_contents(src_dir: &Path, dst_dir: &Path, check_executable: bool) -> 
         let dst_path = dst_dir.join(&name);
 
         if src_path.is_dir() {
+            fs::create_dir_all(&dst_path).context("Create link subdir")?;
+            link_dir_contents(&src_path, &dst_path, check_executable)?;
             continue;
         }
         if check_executable {
-            let meta = fs::metadata(&src_path).context("Stat file")?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
+                let meta = fs::metadata(&src_path).context("Stat file")?;
                 if meta.permissions().mode() & 0o111 == 0 {
                     continue;
                 }
             }
         }
 
-        if dst_path.exists() {
-            fs::remove_file(&dst_path).context("Remove existing link")?;
-        }
         platform::create_symlink(&src_path, &dst_path)?;
     }
     Ok(())

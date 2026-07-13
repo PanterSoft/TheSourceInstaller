@@ -34,6 +34,7 @@ _tsi() {
                 "info:Show package information"
                 "update:Update package repository"
                 "doctor:Check system health"
+                "remove:Uninstall TSI from the system"
                 "--help:Show help"
                 "--version:Show version"
             )
@@ -45,6 +46,7 @@ _tsi() {
                     _arguments \
                         "--force[Force reinstall]" \
                         "--prefix[Installation prefix]:directory:_files -/" \
+                        "--verbose[Show full build output]" \
                         "*:package:->packages"
                     ;;
                 uninstall)
@@ -55,6 +57,7 @@ _tsi() {
                 upgrade)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/" \
+                        "--verbose[Show full build output]" \
                         "*:package:->installed_packages"
                     ;;
                 search)
@@ -76,6 +79,11 @@ _tsi() {
                 doctor|list)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/"
+                    ;;
+                remove)
+                    _arguments \
+                        "--prefix[Installation prefix to remove]:directory:_files -/" \
+                        "--yes[Skip confirmation]"
                     ;;
                 --help|--version|-h|-v)
                     _arguments

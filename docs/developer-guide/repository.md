@@ -2,6 +2,50 @@
 
 TSI uses a local package repository to store package definitions. The repository is located at `~/.tsi/packages/` by default.
 
+## Development: In-tree package repository
+
+The official package repository ([PanterSoft/tsi-packages](https://github.com/PanterSoft/tsi-packages)) is included as a Git submodule at `tsi-packages/`. This lets you develop TSI and try package definitions without cloning the package repo separately.
+
+### Clone with submodules
+
+First time clone (recommended):
+
+```bash
+git clone --recurse-submodules https://github.com/PanterSoft/tsi.git
+```
+
+If you already cloned without submodules:
+
+```bash
+git submodule update --init tsi-packages
+```
+
+### Use in-tree packages for development
+
+After building TSI (e.g. `make dev` or `cargo build`), sync your install prefix from the in-repo packages:
+
+```bash
+tsi update --local ./tsi-packages/packages
+```
+
+With the default prefix this updates `~/.tsi/packages/` from `tsi-packages/packages/`. You can also use a dev-only prefix:
+
+```bash
+tsi update --local ./tsi-packages/packages --prefix ./.tsi-dev
+```
+
+Alternatively, run `make dev-packages` to sync the default prefix (see Makefile).
+
+### Update the in-tree package repo
+
+To point the submodule at the latest commit of tsi-packages:
+
+```bash
+git submodule update --remote tsi-packages
+```
+
+Commit the new submodule reference in the TSI repo if you want to pin that version.
+
 ## Repository Structure
 
 ```
@@ -20,14 +64,14 @@ Each package is defined as a JSON file. The filename should match the package na
 
 ### Default Update
 
-Update from the official TSI repository:
+Update from the official TSI package repository:
 
 ```bash
 tsi update
 ```
 
 This will:
-1. Clone or update the TSI repository from GitHub
+1. Clone or update the [TSI package repository](https://github.com/PanterSoft/tsi-packages) from GitHub
 2. Copy all `.json` files from the `packages/` directory
 3. Update your local repository at `~/.tsi/packages/`
 
@@ -61,11 +105,11 @@ tsi update --prefix /opt/tsi
 
 ## Repository Sources
 
-### Official Repository
+### Official Package Repository
 
-The default repository is:
-- **URL**: `https://github.com/PanterSoft/tsi.git`
-- **Location**: `packages/` directory
+The default package repository (used by `tsi update`) is separate from the TSI core repository:
+- **URL**: `https://github.com/PanterSoft/tsi-packages.git`
+- **Location**: `packages/` directory at repo root
 - **Packages**: Essential packages (pkg-config, zlib, openssl, cmake, curl, etc.)
 
 ### Custom Repositories
@@ -127,7 +171,7 @@ vim ~/.tsi/packages/package-name.json
 **Solutions**:
 - Check internet connection
 - Ensure `git` is installed
-- Try updating manually: `git clone https://github.com/PanterSoft/tsi.git ~/.tsi/tmp-repo-update`
+- Try updating manually: `git clone https://github.com/PanterSoft/tsi-packages.git ~/.tsi/tmp-repo-update`
 
 ### No Packages Found
 

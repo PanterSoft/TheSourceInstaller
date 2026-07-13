@@ -28,6 +28,7 @@ tsi install <package-name>@<version> [options]
 
 - `--force` - Force reinstall even if already installed
 - `--prefix PATH` - Installation prefix
+- `--verbose` - Show full build output (default: compact, one line per step like Homebrew)
 
 **Examples:**
 
@@ -35,6 +36,7 @@ tsi install <package-name>@<version> [options]
 tsi install zlib
 tsi install curl@8.7.1
 tsi install --prefix /opt/tsi cmake
+tsi install --verbose curl   # full configure/make output
 ```
 
 ### Uninstall
@@ -56,6 +58,27 @@ tsi uninstall zlib
 tsi uninstall curl openssl
 ```
 
+### Remove
+
+Uninstall TSI from the system. Removes the installation prefix (binary, completions, package database, and all installed packages). You will be asked to confirm unless `--yes` is used.
+
+```bash
+tsi remove [options]
+```
+
+**Options:**
+
+- `--prefix PATH` - Installation prefix to remove (default: detected from binary location)
+- `--yes` - Skip confirmation prompt
+
+**Examples:**
+
+```bash
+tsi remove                    # Interactive: prompts for confirmation
+tsi remove --prefix /opt/tsi   # Remove custom prefix
+tsi remove --yes              # Non-interactive (e.g. scripts)
+```
+
 ### Upgrade
 
 Upgrade installed packages to latest versions.
@@ -67,12 +90,14 @@ tsi upgrade [package...] [options]
 **Options:**
 
 - `--prefix PATH` - Installation prefix
+- `--verbose` - Show full build output (default: compact)
 
 **Examples:**
 
 ```bash
 tsi upgrade              # Upgrade all
-tsi upgrade curl zlib    # Upgrade specific packages
+tsi upgrade curl zlib     # Upgrade specific packages
+tsi upgrade --verbose     # Full build output when upgrading
 ```
 
 ### List
