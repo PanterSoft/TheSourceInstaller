@@ -2,14 +2,14 @@ name: TSI Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'Cargo.toml'
       - 'tests/**'
       - '.github/workflows/test.yml'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'Cargo.toml'

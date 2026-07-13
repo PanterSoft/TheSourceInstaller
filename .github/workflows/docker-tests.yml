@@ -75,13 +75,17 @@ jobs:
         run: |
           BIN="target/${{ matrix.target }}/release/tsi"
           file "$BIN"
-          if ldd "$BIN" 2>&1 | grep -qi "not a dynamic executable"; then
-            echo "Confirmed: statically linked (no dynamic dependencies)"
-          else
-            echo "ERROR: binary does not appear to be statically linked" >&2
-            ldd "$BIN" 2>&1 || true
+          ldd "$BIN" 2>&1 || true
+          # x86_64-musl produces static-PIE, which glibc ldd calls
+          # "statically linked" instead of "not a dynamic executable".
+          # The property that actually matters is zero NEEDED entries.
+          if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+            echo "ERROR: binary has dynamic library dependencies:" >&2
+            readelf -d "$BIN" | grep NEEDED >&2
             exit 1
           fi
+          echo "Confirmed: no dynamic dependencies (NEEDED entries: none)"
+          "$BIN" --version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6.0.0
