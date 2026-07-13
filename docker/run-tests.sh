@@ -144,6 +144,68 @@ for scenario in "${SCENARIOS[@]}"; do
     set -e  # Re-enable exit on error
 done
 
+# --------------------------------------------------------------------
+# Four-distro end-to-end tests (mirrors .github/workflows/docker-tests.yml
+# container-tests job): bare upstream images, only cc+make installed
+# inside the container, then a real `tsi install bzip2`.
+#
+# This is a convenience wrapper for local iteration only -- CI is the
+# source of truth and does not depend on this script. It reuses a
+# locally built release binary (docker/docker-compose.yml sets
+# TSI_BIN=/work/target/release/tsi for these services) rather than
+# building tsi inside the container, so run `cargo build --release`
+# first, from the repo root.
+# --------------------------------------------------------------------
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+E2E_SERVICES=(
+    "e2e-alpine:E2E install - Alpine (bzip2 from source)"
+    "e2e-debian:E2E install - Debian slim (bzip2 from source)"
+    "e2e-ubuntu:E2E install - Ubuntu 24.04 (bzip2 from source)"
+    "e2e-fedora:E2E install - Fedora (bzip2 from source)"
+)
+
+if [ ! -x "$REPO_ROOT/target/release/tsi" ]; then
+    echo ""
+    echo -e "${YELLOW}⚠ Skipping four-distro e2e tests: $REPO_ROOT/target/release/tsi not found.${NC}"
+    echo "  Run 'cargo build --release' from the repo root first, then re-run this script."
+else
+    for scenario in "${E2E_SERVICES[@]}"; do
+        IFS=':' read -r service description <<< "$scenario"
+
+        echo ""
+        echo "=========================================="
+        echo "Testing: $description"
+        echo "=========================================="
+        echo ""
+
+        docker compose rm -f -v "$service" >/dev/null 2>&1 || docker-compose rm -f -v "$service" >/dev/null 2>&1 || true
+
+        set +e
+        if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+            docker compose run --rm --no-deps "$service" >"/tmp/tsi-test-${service}.log" 2>&1
+        else
+            docker-compose run --rm --no-deps "$service" >"/tmp/tsi-test-${service}.log" 2>&1
+        fi
+        TEST_EXIT_CODE=$?
+        cat "/tmp/tsi-test-${service}.log"
+        set -e
+
+        if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}✓ Test passed: $description${NC}"
+            ((PASSED++)) || true
+        else
+            echo ""
+            echo -e "${RED}✗ Test failed: $description${NC}"
+            echo "Log saved to: /tmp/tsi-test-${service}.log"
+            ((FAILED++)) || true
+        fi
+
+        docker compose down -v >/dev/null 2>&1 || docker-compose down -v >/dev/null 2>&1 || true
+    done
+fi
+
 # Summary
 echo ""
 echo "=========================================="
