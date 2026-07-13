@@ -5,8 +5,14 @@ use std::io::{self, Read};
 use std::path::Path;
 
 const H0: [u32; 8] = [
-    0x6a09_e667, 0xbb67_ae85, 0x3c6e_f372, 0xa54f_f53a,
-    0x510e_527f, 0x9b05_688c, 0x1f83_d9ab, 0x5be0_cd19,
+    0x6a09_e667,
+    0xbb67_ae85,
+    0x3c6e_f372,
+    0xa54f_f53a,
+    0x510e_527f,
+    0x9b05_688c,
+    0x1f83_d9ab,
+    0x5be0_cd19,
 ];
 
 #[rustfmt::skip]
@@ -40,12 +46,8 @@ fn compress(state: &mut [u32; 8], block: &[u8; 64]) {
             | (block[b + 3] as u32);
     }
     for i in 16..64 {
-        let s0 = w[i - 15].rotate_right(7)
-            ^ w[i - 15].rotate_right(18)
-            ^ (w[i - 15] >> 3);
-        let s1 = w[i - 2].rotate_right(17)
-            ^ w[i - 2].rotate_right(19)
-            ^ (w[i - 2] >> 10);
+        let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+        let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
         w[i] = w[i - 16]
             .wrapping_add(s0)
             .wrapping_add(w[i - 7])

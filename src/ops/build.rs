@@ -80,7 +80,14 @@ pub fn build(
             &env,
             verbose,
         )?,
-        "custom" => build_custom(pkg, source_dir, prefix_install, &install_path, &env, verbose)?,
+        "custom" => build_custom(
+            pkg,
+            source_dir,
+            prefix_install,
+            &install_path,
+            &env,
+            verbose,
+        )?,
         _ => anyhow::bail!("Unknown build system: {}", pkg.build_system),
     }
     Ok(())
