@@ -509,28 +509,20 @@ fn augment_cppflags_for_tsi_prefix(
     source_dir: &Path,
     deps_prefix: &Path,
 ) -> Result<String> {
+    // No -I<source_dir>: on case-insensitive filesystems it makes C++'s `#include <version>`
+    // resolve to a package's VERSION file (libtiff). Sources reference their own headers
+    // relatively or via their build system.
     let inc = deps_prefix.join("include");
     let inc_flag = format!("-I{}", inc.display());
-    let src = format!("-I{}", source_dir.display());
+    let _ = source_dir;
     let rest = cppflags
         .split_whitespace()
         .filter(|tok| *tok != inc_flag)
         .collect::<Vec<_>>()
         .join(" ");
-    #[cfg(target_os = "macos")]
-    {
-        let idir = format!("-idirafter {}", inc.display());
-        let joined = format!("{} {} {}", src, rest, idir);
-        Ok(joined.split_whitespace().collect::<Vec<_>>().join(" "))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        if rest.is_empty() {
-            Ok(src)
-        } else {
-            Ok(format!("{} {}", src, rest))
-        }
-    }
+    let idir = format!("-idirafter {}", inc.display());
+    let joined = format!("{} {}", rest, idir);
+    Ok(joined.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 fn build_cmake(
@@ -542,7 +534,23 @@ fn build_cmake(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let mut env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    // CMake ignores CPPFLAGS; mirror it into CFLAGS/CXXFLAGS so prefix headers are found
+    // (leveldb -> snappy.h, grpc -> openssl headers).
+    let cpp = env
+        .iter()
+        .find(|(k, _)| k == "CPPFLAGS")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    if !cpp.is_empty() {
+        for key in ["CFLAGS", "CXXFLAGS"] {
+            if let Some(e) = env.iter_mut().find(|(k, _)| k == key) {
+                e.1 = format!("{} {}", e.1, cpp);
+            } else {
+                env.push((key.to_string(), cpp.clone()));
+            }
+        }
+    }
     let env_ref: &[(String, String)] = &env;
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
