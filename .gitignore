@@ -49,3 +49,4 @@ site/
 *.bak2
 *.bak
 Cargo.lock
+graphify-out/*
