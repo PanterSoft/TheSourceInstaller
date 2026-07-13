@@ -38,12 +38,17 @@ impl View {
     }
 }
 
-/// A package action awaiting inline y/N confirmation.
+/// A package action awaiting inline y/N confirmation. `Batch` carries the
+/// already-resolved (label, args) op list for every marked, eligible package.
 #[derive(Clone)]
 pub enum PendingAction {
     Install(Package),
     Remove(Package),
     Upgrade { pkg: Package, from: String },
+    Batch {
+        verb: &'static str,
+        ops: Vec<(String, Vec<String>)>,
+    },
 }
 
 impl PendingAction {
@@ -54,42 +59,89 @@ impl PendingAction {
             PendingAction::Upgrade { pkg, from } => {
                 format!("Upgrade {} {} → {}? y/N", pkg.name, from, pkg.version)
             }
+            PendingAction::Batch { verb, ops } => {
+                format!("{} {} marked package(s)? y/N", verb, ops.len())
+            }
         }
     }
 
-    /// Op-runner label and `tsi` subprocess arguments for this action.
-    pub fn label_args(&self, prefix: &Path) -> (String, Vec<String>) {
+    /// Op-runner label and `tsi` subprocess arguments for a single action.
+    /// Not defined for [`PendingAction::Batch`], which already holds its ops.
+    fn label_args(&self, prefix: &Path) -> (String, Vec<String>) {
         let prefix = prefix.to_string_lossy().to_string();
         match self {
             PendingAction::Install(pkg) => (
                 format!("install {}", pkg.name),
-                vec![
-                    "install".into(),
-                    pkg.spec(),
-                    "--prefix".into(),
-                    prefix,
-                ],
+                vec!["install".into(), pkg.spec(), "--prefix".into(), prefix],
             ),
             PendingAction::Remove(pkg) => (
                 format!("remove {}", pkg.name),
-                vec![
-                    "uninstall".into(),
-                    pkg.name.clone(),
-                    "--prefix".into(),
-                    prefix,
-                ],
+                vec!["uninstall".into(), pkg.name.clone(), "--prefix".into(), prefix],
             ),
             PendingAction::Upgrade { pkg, .. } => (
                 format!("upgrade {}", pkg.name),
-                vec![
-                    "upgrade".into(),
-                    pkg.name.clone(),
-                    "--prefix".into(),
-                    prefix,
-                ],
+                vec!["upgrade".into(), pkg.name.clone(), "--prefix".into(), prefix],
             ),
+            PendingAction::Batch { .. } => {
+                unreachable!("Batch carries its own ops; label_args is single-action only")
+            }
         }
     }
+}
+
+/// The three batch verbs, and the eligibility + op-args each implies.
+#[derive(Debug, Clone, Copy)]
+enum BatchVerb {
+    Install,
+    Remove,
+    Upgrade,
+}
+
+impl BatchVerb {
+    fn label(self) -> &'static str {
+        match self {
+            BatchVerb::Install => "Install",
+            BatchVerb::Remove => "Remove",
+            BatchVerb::Upgrade => "Upgrade",
+        }
+    }
+}
+
+/// Resolves the (label, args) op for every marked package eligible for `verb`,
+/// skipping any that don't apply (e.g. already-installed for Install). Pure
+/// over the passed slices so it can be unit tested.
+fn batch_ops(
+    verb: BatchVerb,
+    marked: &std::collections::HashSet<String>,
+    packages: &[Package],
+    installed_version: impl Fn(&str) -> Option<String>,
+    prefix: &Path,
+) -> Vec<(String, Vec<String>)> {
+    let mut names: Vec<&String> = marked.iter().collect();
+    names.sort(); // deterministic queue order
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let pkg = packages.iter().find(|p| &p.name == name)?;
+            let installed = installed_version(name);
+            let action = match verb {
+                BatchVerb::Install if installed.is_none() => PendingAction::Install(pkg.clone()),
+                BatchVerb::Remove if installed.is_some() => PendingAction::Remove(pkg.clone()),
+                BatchVerb::Upgrade => {
+                    let from = installed?;
+                    if !can_upgrade(&from, &pkg.version) {
+                        return None;
+                    }
+                    PendingAction::Upgrade {
+                        pkg: pkg.clone(),
+                        from,
+                    }
+                }
+                _ => return None,
+            };
+            Some(action.label_args(prefix))
+        })
+        .collect()
 }
 
 /// A package is upgradable when its installed version differs from the
@@ -193,8 +245,18 @@ impl App {
 pub fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
     if let Some(action) = app.pending_confirm.take() {
         if matches!(code, KeyCode::Char('y') | KeyCode::Char('Y')) {
-            let (label, args) = action.label_args(&app.prefix);
-            app.start_op(label, args)?;
+            match action {
+                PendingAction::Batch { ops, .. } => {
+                    for (label, args) in ops {
+                        app.start_op(label, args)?;
+                    }
+                    app.marked.clear();
+                }
+                single => {
+                    let (label, args) = single.label_args(&app.prefix);
+                    app.start_op(label, args)?;
+                }
+            }
         }
         return Ok(true);
     }
@@ -231,50 +293,69 @@ pub fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
             app.view = app.view.next();
             app.refilter_from_top();
         }
+        KeyCode::Char(' ') => {
+            if let Some(pkg) = app.selected_package() {
+                let name = pkg.name.clone();
+                if !app.marked.remove(&name) {
+                    app.marked.insert(name);
+                }
+            }
+            app.select_next(); // advance so marking a run is one key per row
+        }
         KeyCode::Char('/') => app.filter_mode = true,
         KeyCode::Esc => {
-            if app.filter.is_empty() {
+            if !app.marked.is_empty() {
+                app.marked.clear();
+            } else if !app.filter.is_empty() {
+                app.filter.clear();
+                app.refilter_from_top();
+            } else {
                 return Ok(false);
             }
-            app.filter.clear();
-            app.refilter_from_top();
         }
-        KeyCode::Char('i') => {
-            if app.op_running() {
-                return Ok(true);
-            }
-            if let Some(pkg) = app.selected_package().cloned() {
-                if !app.db.is_installed(&pkg.name) {
-                    app.pending_confirm = Some(PendingAction::Install(pkg));
-                }
-            }
-        }
-        KeyCode::Char('r') => {
-            if app.op_running() {
-                return Ok(true);
-            }
-            if let Some(pkg) = app.selected_package().cloned() {
-                if app.db.is_installed(&pkg.name) {
-                    app.pending_confirm = Some(PendingAction::Remove(pkg));
-                }
-            }
-        }
-        KeyCode::Char('u') => {
-            if app.op_running() {
-                return Ok(true);
-            }
-            if let Some(pkg) = app.selected_package().cloned() {
-                if let Some(info) = app.db.get(&pkg.name) {
-                    if can_upgrade(&info.version, &pkg.version) {
-                        let from = info.version.clone();
-                        app.pending_confirm = Some(PendingAction::Upgrade { pkg, from });
-                    }
-                }
-            }
-        }
+        KeyCode::Char('i') => request_action(app, BatchVerb::Install),
+        KeyCode::Char('r') => request_action(app, BatchVerb::Remove),
+        KeyCode::Char('u') => request_action(app, BatchVerb::Upgrade),
         _ => return Ok(false),
     }
     Ok(true)
+}
+
+/// Sets a pending confirmation for `verb`: a batch over all marked, eligible
+/// packages if any are marked, otherwise the single selected package.
+fn request_action(app: &mut App, verb: BatchVerb) {
+    if !app.marked.is_empty() {
+        let ops = batch_ops(
+            verb,
+            &app.marked,
+            &app.packages,
+            |n| app.db.get(n).map(|i| i.version.clone()),
+            &app.prefix,
+        );
+        if !ops.is_empty() {
+            app.pending_confirm = Some(PendingAction::Batch {
+                verb: verb.label(),
+                ops,
+            });
+        }
+        return;
+    }
+
+    let Some(pkg) = app.selected_package().cloned() else {
+        return;
+    };
+    let installed = app.db.get(&pkg.name).map(|i| i.version.clone());
+    app.pending_confirm = match verb {
+        BatchVerb::Install if installed.is_none() => Some(PendingAction::Install(pkg)),
+        BatchVerb::Remove if installed.is_some() => Some(PendingAction::Remove(pkg)),
+        BatchVerb::Upgrade => match installed {
+            Some(from) if can_upgrade(&from, &pkg.version) => {
+                Some(PendingAction::Upgrade { pkg, from })
+            }
+            _ => None,
+        },
+        _ => None,
+    };
 }
 
 /// Renders the packages tab: list panel on top (~60%), details below (~40%).
@@ -304,7 +385,13 @@ fn render_list(f: &mut Frame, app: &App, area: Rect) {
                 }
                 _ => pkg.version.clone(),
             };
+            let (mark, mark_style) = if app.marked.contains(&pkg.name) {
+                ("▪ ", theme::accent())
+            } else {
+                ("  ", Style::default())
+            };
             ListItem::new(Line::from(vec![
+                Span::styled(mark, mark_style),
                 Span::styled(dot, dot_style),
                 Span::raw(format!(" {:<24} ", pkg.name)),
                 Span::styled(version, Style::default()),
@@ -318,6 +405,9 @@ fn render_list(f: &mut Frame, app: &App, area: Rect) {
         app.filtered.len(),
         app.packages.len()
     );
+    if !app.marked.is_empty() {
+        title.push_str(&format!(" · {} marked", app.marked.len()));
+    }
     if app.filter_mode {
         title.push_str(&format!(" · /{}\u{2588}", app.filter));
     } else if !app.filter.is_empty() {
@@ -325,15 +415,20 @@ fn render_list(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let mut hints: Vec<(&str, &str)> = Vec::new();
-    match app.selected_package() {
-        Some(pkg) if app.db.is_installed(&pkg.name) => {
-            hints.push(("r", "remove"));
-            if app.selected_upgradable() {
-                hints.push(("u", "upgrade"));
+    hints.push(("space", "mark"));
+    if app.marked.is_empty() {
+        match app.selected_package() {
+            Some(pkg) if app.db.is_installed(&pkg.name) => {
+                hints.push(("r", "remove"));
+                if app.selected_upgradable() {
+                    hints.push(("u", "upgrade"));
+                }
             }
+            Some(_) => hints.push(("i", "install")),
+            None => {}
         }
-        Some(_) => hints.push(("i", "install")),
-        None => {}
+    } else {
+        hints.push(("i/r/u", "batch marked"));
     }
     hints.push(("/", "filter"));
     hints.push(("tab", "view"));
@@ -535,6 +630,37 @@ mod tests {
     fn can_upgrade_only_when_versions_differ() {
         assert!(can_upgrade("1.0.0", "1.0.1"));
         assert!(!can_upgrade("1.0.0", "1.0.0"));
+    }
+
+    #[test]
+    fn batch_ops_filters_by_verb_eligibility() {
+        use std::collections::HashSet;
+        let packages = vec![
+            make_package("zlib", ""), // installed, up to date
+            make_package("curl", ""), // installed, upgradable
+            make_package("jq", ""),   // not installed
+        ];
+        let prefix = PathBuf::from("/opt/tsi");
+        let marked: HashSet<String> =
+            ["zlib", "curl", "jq"].iter().map(|s| s.to_string()).collect();
+        // zlib installed at latest (1.0.0), curl installed at older 0.9.0, jq absent.
+        let installed = |n: &str| match n {
+            "zlib" => Some("1.0.0".to_string()),
+            "curl" => Some("0.9.0".to_string()),
+            _ => None,
+        };
+
+        let install = batch_ops(BatchVerb::Install, &marked, &packages, installed, &prefix);
+        assert_eq!(install.len(), 1, "only jq is installable");
+        assert_eq!(install[0].0, "install jq");
+
+        let remove = batch_ops(BatchVerb::Remove, &marked, &packages, installed, &prefix);
+        let removed: Vec<&str> = remove.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(removed, vec!["remove curl", "remove zlib"], "sorted, installed only");
+
+        let upgrade = batch_ops(BatchVerb::Upgrade, &marked, &packages, installed, &prefix);
+        assert_eq!(upgrade.len(), 1, "only curl differs from latest");
+        assert_eq!(upgrade[0].0, "upgrade curl");
     }
 
     #[test]

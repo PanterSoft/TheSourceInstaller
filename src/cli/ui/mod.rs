@@ -28,6 +28,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 use runner::OpRunner;
+use std::collections::{HashSet, VecDeque};
 use std::io::{stdout, Stdout};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -117,10 +118,14 @@ pub struct App {
     pub(crate) filter_mode: bool,
     pub(crate) view: View,
     pub(crate) pending_confirm: Option<PendingAction>,
+    /// Package names marked for a batch action (survives filter/view changes).
+    pub(crate) marked: HashSet<String>,
     tab: Tab,
     help_open: bool,
     /// The running or just-finished operation, if any (log pane visible).
     op: Option<OpRunner>,
+    /// Operations waiting to run once the current one finishes.
+    queue: VecDeque<(String, Vec<String>)>,
     /// Awaiting y/N to quit while an operation is still running.
     quit_confirm: bool,
     /// Animation tick, advanced roughly every poll interval (for the spinner).
@@ -144,9 +149,11 @@ impl App {
             filter_mode: false,
             view: View::default(),
             pending_confirm: None,
+            marked: HashSet::new(),
             tab: Tab::Packages,
             help_open: false,
             op: None,
+            queue: VecDeque::new(),
             quit_confirm: false,
             tick: 0,
             tsi_selected: 0,
@@ -154,16 +161,34 @@ impl App {
         }
     }
 
-    /// Spawns a `tsi <args>` subprocess whose output streams into the log pane.
-    /// Callers must ensure no other operation is running ([`App::op_running`]).
+    /// Enqueues a `tsi <args>` operation, starting it immediately if the runner
+    /// is idle (no op, or the previous one already finished). Queued ops run one
+    /// at a time; each launches when its predecessor finishes.
     pub(crate) fn start_op(&mut self, label: String, args: Vec<String>) -> Result<()> {
-        self.op = Some(OpRunner::spawn(label, args)?);
+        self.queue.push_back((label, args));
+        self.start_next_if_idle()
+    }
+
+    /// Pops the next queued operation and spawns it, unless one is still running.
+    /// A finished (but still displayed) op counts as idle and is superseded.
+    fn start_next_if_idle(&mut self) -> Result<()> {
+        if self.op_running() {
+            return Ok(());
+        }
+        if let Some((label, args)) = self.queue.pop_front() {
+            self.op = Some(OpRunner::spawn(label, args)?);
+        }
         Ok(())
     }
 
     /// True while an operation subprocess is still executing.
     pub(crate) fn op_running(&self) -> bool {
         self.op.as_ref().is_some_and(|o| o.running())
+    }
+
+    /// Number of operations still waiting in the queue.
+    pub(crate) fn queued(&self) -> usize {
+        self.queue.len()
     }
 
     /// Reloads the installed-package database (after an operation finishes).
@@ -217,6 +242,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
             if was_running && op.finished() {
                 app.refresh_db()?;
                 app.apply_filter();
+                app.start_next_if_idle()?; // launch the next queued op, if any
             }
         }
 
@@ -393,13 +419,21 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     if let Some(action) = &app.pending_confirm {
         spans.push(Span::styled(action.prompt(), theme::accent()));
     } else if app.op_running() {
-        spans.push(Span::styled(
-            "operation running — actions disabled",
-            theme::dim(),
-        ));
+        spans.push(Span::styled("operation running", theme::dim()));
+        if app.queued() > 0 {
+            spans.push(Span::styled(
+                format!("  ·  {} queued", app.queued()),
+                theme::accent(),
+            ));
+        }
     } else {
         let mut hints: Vec<(&str, &str)> = match app.tab {
-            Tab::Packages => vec![("i", "install"), ("r", "remove"), ("u", "upgrade")],
+            Tab::Packages => vec![
+                ("space", "mark"),
+                ("i", "install"),
+                ("r", "remove"),
+                ("u", "upgrade"),
+            ],
             Tab::System => vec![("d", "doctor")],
             Tab::Tsi => vec![("enter", "run")],
         };
@@ -483,12 +517,14 @@ fn render_help(f: &mut Frame, area: Rect) {
         row("Esc", "Clear filter"),
         Line::from(""),
         heading("Actions"),
-        row("i", "Install selected package"),
-        row("r", "Remove selected package"),
-        row("u", "Upgrade selected package"),
+        row("space", "Mark / unmark package for batch"),
+        row("i", "Install selected (or all marked)"),
+        row("r", "Remove selected (or all marked)"),
+        row("u", "Upgrade selected (or all marked)"),
         row("y / n", "Confirm / cancel a pending action"),
         Line::from(""),
         heading("Operations"),
+        row("", "Batch actions queue and run one at a time"),
         row("PgUp/PgDn", "Scroll finished log"),
         row("Esc", "Close finished log pane"),
         row("q", "Quit (confirms if an op is running)"),
