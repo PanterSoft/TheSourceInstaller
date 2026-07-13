@@ -5,6 +5,7 @@ mod install;
 mod list;
 mod remove;
 mod search;
+pub mod ui;
 mod uninstall;
 mod update;
 mod upgrade;
@@ -14,14 +15,14 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use crate::platform;
-use crate::ui;
+use crate::ui as term;
 
 /// Resolves prefix and packages directory; errors if packages dir does not exist.
 pub fn resolve_packages_dir(prefix: Option<&str>) -> Result<(PathBuf, PathBuf)> {
     let prefix = platform::resolve_prefix(prefix);
     let packages_dir = prefix.join("packages");
     if !packages_dir.exists() {
-        ui::output::error("No package definitions found. Run 'tsi update' first.");
+        term::output::error("No package definitions found. Run 'tsi update' first.");
         return Err(anyhow::anyhow!(
             "Package directory not found: {}",
             packages_dir.display()
@@ -61,6 +62,8 @@ pub enum Commands {
     Bootstrap(bootstrap::BootstrapArgs),
     /// Uninstall TSI from the system
     Remove(remove::RemoveArgs),
+    /// Launch the interactive terminal UI
+    Ui(ui::UiArgs),
 }
 
 /// Extract the `--prefix` argument from any subcommand before full dispatch.
@@ -77,6 +80,7 @@ pub fn prefix_from_cli(cli: &Cli) -> Option<&str> {
         Commands::Doctor(a) => a.prefix.as_deref(),
         Commands::Bootstrap(a) => a.prefix.as_deref(),
         Commands::Remove(a) => a.prefix.as_deref(),
+        Commands::Ui(a) => a.prefix.as_deref(),
     }
 }
 
@@ -97,5 +101,6 @@ pub fn run_with(cli: Cli) -> Result<()> {
         Commands::Doctor(args) => doctor::run(args),
         Commands::Bootstrap(args) => bootstrap::run(args),
         Commands::Remove(args) => remove::run(args),
+        Commands::Ui(args) => ui::run(args),
     }
 }
