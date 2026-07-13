@@ -30,7 +30,7 @@ _tsi() {
     cword=$COMP_CWORD
 
     # All TSI commands
-    local commands="install uninstall upgrade list search info update doctor remove --help --version -h -v"
+    local commands="install uninstall upgrade list search info update self-update doctor remove --help --version -h -v"
 
     # Handle command-specific completions
     case ${prev} in
@@ -155,6 +155,13 @@ print(' '.join(sorted(set(versions), reverse=True)))
         update)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--repo --local --prefix" -- ${cur}))
+            fi
+            return 0
+            ;;
+
+        self-update)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--repo --branch --prefix" -- ${cur}))
             fi
             return 0
             ;;

@@ -5,6 +5,7 @@ mod install;
 mod list;
 mod remove;
 mod search;
+mod self_update;
 pub mod ui;
 mod uninstall;
 mod update;
@@ -56,6 +57,8 @@ pub enum Commands {
     Info(info::InfoArgs),
     /// Fetch the latest package definitions
     Update(update::UpdateArgs),
+    /// Update the TSI binary itself to the latest version
+    SelfUpdate(self_update::SelfUpdateArgs),
     /// Check your system for potential problems
     Doctor(doctor::DoctorArgs),
     /// Install or repair the TSI bootstrap toolchain
@@ -77,6 +80,7 @@ pub fn prefix_from_cli(cli: &Cli) -> Option<&str> {
         Commands::Search(a) => a.prefix.as_deref(),
         Commands::Info(a) => a.prefix.as_deref(),
         Commands::Update(a) => a.prefix.as_deref(),
+        Commands::SelfUpdate(a) => a.prefix.as_deref(),
         Commands::Doctor(a) => a.prefix.as_deref(),
         Commands::Bootstrap(a) => a.prefix.as_deref(),
         Commands::Remove(a) => a.prefix.as_deref(),
@@ -98,6 +102,7 @@ pub fn run_with(cli: Cli) -> Result<()> {
         Commands::Search(args) => search::run(args),
         Commands::Info(args) => info::run(args),
         Commands::Update(args) => update::run(args),
+        Commands::SelfUpdate(args) => self_update::run(args),
         Commands::Doctor(args) => doctor::run(args),
         Commands::Bootstrap(args) => bootstrap::run(args),
         Commands::Remove(args) => remove::run(args),
