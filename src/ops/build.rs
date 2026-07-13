@@ -94,6 +94,8 @@ pub fn build(
 }
 
 fn expand_build_vars(value: &str, install_prefix: &str) -> String {
+    // `mut` is only exercised inside the macOS cfg block below.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut s = value.replace("$TSI_INSTALL_DIR", install_prefix);
     #[cfg(target_os = "macos")]
     {
