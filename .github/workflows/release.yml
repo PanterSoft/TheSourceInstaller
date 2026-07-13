@@ -124,18 +124,17 @@ jobs:
           BIN="target/${{ matrix.target }}/release/tsi"
           echo "== file =="
           file "$BIN"
-          file "$BIN" | grep -qi "static" || { echo "ERROR: $BIN is not statically linked"; exit 1; }
 
-          if command -v ldd >/dev/null 2>&1; then
-            echo "== ldd =="
-            if ldd "$BIN" 2>&1 | grep -qi "not a dynamic executable"; then
-              echo "Confirmed statically linked (ldd)"
-            else
-              echo "ERROR: ldd indicates $BIN is dynamically linked"
-              ldd "$BIN" || true
-              exit 1
-            fi
+          # x86_64-musl produces static-PIE, which glibc ldd reports as
+          # "statically linked" rather than "not a dynamic executable".
+          # The property that matters is zero NEEDED entries.
+          echo "== readelf NEEDED =="
+          if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+            echo "ERROR: $BIN has dynamic library dependencies:" >&2
+            readelf -d "$BIN" | grep NEEDED >&2
+            exit 1
           fi
+          echo "Confirmed: no dynamic dependencies (NEEDED entries: none)"
 
           if [ "${{ matrix.cross }}" = "true" ]; then
             echo "Skipping execution check: no native runner for ${{ matrix.target }}"
