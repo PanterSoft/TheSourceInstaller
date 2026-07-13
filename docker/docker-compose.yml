@@ -29,3 +29,51 @@ services:
       - ../:/root/tsi-source:ro
     command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
 
+  # --------------------------------------------------------------------
+  # Four-distro end-to-end tests, mirroring the docker-tests.yml CI
+  # workflow: bare upstream images (no custom build), only cc+make
+  # installed inside the container, then a real `tsi install bzip2`.
+  #
+  # These reuse a locally built binary rather than building tsi inside
+  # the container. Build it first on the host:
+  #   cargo build --release
+  # then run e.g.:
+  #   docker compose run --rm e2e-alpine
+  # --------------------------------------------------------------------
+
+  e2e-alpine:
+    image: alpine:latest
+    container_name: tsi-e2e-alpine
+    environment:
+      TSI_BIN: /work/target/release/tsi
+    volumes:
+      - ../:/work:ro
+    command: ["sh", "/work/docker/e2e-test.sh"]
+
+  e2e-debian:
+    image: debian:stable-slim
+    container_name: tsi-e2e-debian
+    environment:
+      TSI_BIN: /work/target/release/tsi
+    volumes:
+      - ../:/work:ro
+    command: ["sh", "/work/docker/e2e-test.sh"]
+
+  e2e-ubuntu:
+    image: ubuntu:24.04
+    container_name: tsi-e2e-ubuntu
+    environment:
+      TSI_BIN: /work/target/release/tsi
+    volumes:
+      - ../:/work:ro
+    command: ["sh", "/work/docker/e2e-test.sh"]
+
+  e2e-fedora:
+    image: fedora:latest
+    container_name: tsi-e2e-fedora
+    environment:
+      TSI_BIN: /work/target/release/tsi
+    volumes:
+      - ../:/work:ro
+    command: ["sh", "/work/docker/e2e-test.sh"]
+
