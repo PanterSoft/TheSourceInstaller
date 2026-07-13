@@ -159,6 +159,9 @@ tsi upgrade
 # Check system health
 tsi doctor
 
+# Browse and manage packages interactively (press ? inside for keybindings)
+tsi ui
+
 # Remove a package
 tsi uninstall curl
 ```

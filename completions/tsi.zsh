@@ -33,6 +33,7 @@ _tsi() {
                 "search:Search available packages"
                 "info:Show package information"
                 "update:Update package repository"
+                "self-update:Update the TSI binary itself"
                 "doctor:Check system health"
                 "remove:Uninstall TSI from the system"
                 "--help:Show help"
@@ -74,6 +75,12 @@ _tsi() {
                     _arguments \
                         "--repo[Repository URL]:url:_urls" \
                         "--local[Local path]:directory:_files -/" \
+                        "--prefix[Installation prefix]:directory:_files -/"
+                    ;;
+                self-update)
+                    _arguments \
+                        "--repo[Repository URL]:url:_urls" \
+                        "--branch[Branch]" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
                 doctor|list)

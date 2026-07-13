@@ -53,6 +53,7 @@ autoload -U compinit && compinit
   - `search` - Search available packages
   - `info` - Show package information
   - `update` - Update package repository
+  - `self-update` - Update the TSI binary itself
   - `doctor` - Check system health
   - `--help`, `--version` - Help and version
 
@@ -71,6 +72,7 @@ autoload -U compinit && compinit
 - `tsi update --<TAB>` - Shows options: `--repo`, `--local`, `--prefix`
 - `tsi update --local <TAB>` - Completes directory paths
 - `tsi update --prefix <TAB>` - Completes directory paths
+- `tsi self-update --<TAB>` - Shows options: `--repo`, `--branch`, `--prefix`
 - `tsi uninstall --prefix <TAB>` - Completes directory paths
 - `tsi doctor --prefix <TAB>` - Completes directory paths
 

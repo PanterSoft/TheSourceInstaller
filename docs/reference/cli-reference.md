@@ -199,6 +199,35 @@ Doctor checks for:
 - Install prefix writability
 - git (for some packages)
 
+### UI
+
+Browse, install, and uninstall packages in an interactive terminal UI.
+
+```bash
+tsi ui [options]
+```
+
+**Options:**
+
+- `--prefix PATH` - Installation prefix
+
+**Keybindings** (press `?` inside the UI for this list):
+
+| Key | Action |
+| --- | --- |
+| `Up`/`Down`, `j`/`k` | Move selection |
+| `PageUp`/`PageDown` | Move selection by 10 |
+| `Home`/`g`, `End`/`G` | Jump to first/last |
+| `Tab` | Cycle view (All / Installed / Available) |
+| `/` | Filter packages by name or description |
+| `i` | Install selected package (asks for confirmation) |
+| `u` | Uninstall selected package (asks for confirmation) |
+| `Esc` | Cancel filter/confirmation |
+| `?` | Toggle help |
+| `q` | Quit |
+
+Requires an interactive terminal. Install/uninstall temporarily leave the UI to show the normal streaming output, then return.
+
 ## Exit Codes
 
 - `0` - Success

@@ -19,7 +19,7 @@ fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
 }
 
 /// Returns true if a `git` binary is available on this system.
-fn is_git_available() -> bool {
+pub(crate) fn is_git_available() -> bool {
     std::process::Command::new("git")
         .arg("--version")
         .output()
@@ -45,7 +45,7 @@ fn github_tarball_url(repo: &str) -> Option<String> {
     ))
 }
 
-fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<()> {
+pub(crate) fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<()> {
     let file = std::fs::File::open(archive).context("Open downloaded archive")?;
     let dec = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
     tar::Archive::new(dec)

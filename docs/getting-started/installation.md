@@ -24,7 +24,18 @@ The installer will automatically:
 PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
-**Repair/Update existing installation:**
+**Update an existing installation:**
+
+From an already-installed TSI, just run:
+
+```bash
+tsi self-update
+```
+
+This fetches a pre-built binary for your platform if one's available, or falls back to
+building from source with cargo, then replaces the running `tsi` binary in place.
+
+**Repair a broken installation:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
 ```
@@ -34,10 +45,7 @@ Or using environment variable:
 REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
 ```
 
-This will rebuild and reinstall TSI, useful for:
-- Fixing broken installations
-- Updating to the latest version
-- Rebuilding after system changes
+This is useful when the `tsi` binary itself is missing or broken and `tsi self-update` can't run.
 
 After installation, add to your PATH:
 ```bash
@@ -117,4 +125,4 @@ source ~/.tsi/share/completions/tsi.zsh
 echo 'source ~/.tsi/share/completions/tsi.zsh' >> ~/.zshrc
 ```
 
-**Supported commands:** install, uninstall, upgrade, list, search, info, update, doctor, remove
+**Supported commands:** install, uninstall, upgrade, list, search, info, update, self-update, doctor, remove
