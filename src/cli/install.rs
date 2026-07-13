@@ -69,7 +69,14 @@ pub fn run(args: InstallArgs) -> Result<()> {
             ui::output::detail(url);
 
             ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
-            ops_install::install_package(pkg, &prefix, &mut db, args.force, isolated, args.verbose)?;
+            ops_install::install_package(
+                pkg,
+                &prefix,
+                &mut db,
+                args.force,
+                isolated,
+                args.verbose,
+            )?;
             ui::output::section(format!(
                 "Linking {} {} into {}",
                 pkg.name,

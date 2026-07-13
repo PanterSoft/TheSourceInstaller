@@ -93,7 +93,10 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
                 .context("Move extracted file into source dir")?;
         }
     } else if entries.is_empty() {
-        anyhow::bail!("Archive contained no files after extract: {}", archive_path.display());
+        anyhow::bail!(
+            "Archive contained no files after extract: {}",
+            archive_path.display()
+        );
     } else {
         std::fs::create_dir_all(&target_dir)?;
         for e in entries {
@@ -173,7 +176,13 @@ fn detect_archive_format_from_magic(archive: &Path) -> Option<&'static str> {
     if n >= 2 && buf[0] == 0x1f && buf[1] == 0x8b {
         return Some("gz");
     }
-    if n >= 5 && buf[0] == 0xfd && buf[1] == 0x37 && buf[2] == 0x7a && buf[3] == 0x5a && buf[4] == 0x00 {
+    if n >= 5
+        && buf[0] == 0xfd
+        && buf[1] == 0x37
+        && buf[2] == 0x7a
+        && buf[3] == 0x5a
+        && buf[4] == 0x00
+    {
         return Some("xz");
     }
     if n >= 3 && buf[0] == 0x42 && buf[1] == 0x5a && buf[2] == 0x68 {

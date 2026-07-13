@@ -34,11 +34,7 @@ fn test_cmake_args_os_override_replaces_base() {
     assert_eq!(pkg.cmake_args, vec!["-DLINUX=1"]);
     #[cfg(target_os = "windows")]
     assert_eq!(pkg.cmake_args, vec!["-DWINDOWS=1"]);
-    #[cfg(not(any(
-        target_os = "macos",
-        target_os = "linux",
-        target_os = "windows"
-    )))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     assert_eq!(pkg.cmake_args, vec!["-DBASE=1"]);
 }
 

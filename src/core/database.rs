@@ -32,8 +32,8 @@ fn read_db_file(path: &Path) -> Result<Vec<InstalledPackage>> {
         return Ok(vec![]);
     }
     let json = std::fs::read_to_string(path).context("Failed to read database")?;
-    let db: DatabaseFile = serde_json::from_str(&json)
-        .context("Failed to parse database (it may be corrupted)")?;
+    let db: DatabaseFile =
+        serde_json::from_str(&json).context("Failed to parse database (it may be corrupted)")?;
     Ok(db.installed)
 }
 

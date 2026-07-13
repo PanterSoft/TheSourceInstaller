@@ -29,7 +29,9 @@ fn confirm_remove(prefix: &Path) -> Result<bool> {
     let _ = io::stderr().lock().write_all(prompt.as_bytes());
     let _ = io::stderr().lock().flush();
     let mut line = String::new();
-    io::stdin().read_line(&mut line).context("Read confirmation")?;
+    io::stdin()
+        .read_line(&mut line)
+        .context("Read confirmation")?;
     let trimmed = line.trim().to_lowercase();
     Ok(trimmed == "y" || trimmed == "yes")
 }
@@ -38,14 +40,20 @@ pub fn run(args: RemoveArgs) -> Result<()> {
     let prefix = platform::resolve_prefix(args.prefix.as_deref());
     if !prefix.exists() {
         ui::output::error(format!("No TSI installation found at {}", prefix.display()));
-        return Err(anyhow::anyhow!("Prefix does not exist: {}", prefix.display()));
+        return Err(anyhow::anyhow!(
+            "Prefix does not exist: {}",
+            prefix.display()
+        ));
     }
     if !is_tsi_install(&prefix) {
         ui::output::error(format!(
             "{} does not look like a TSI installation (no bin/tsi). Refusing to remove.",
             prefix.display()
         ));
-        return Err(anyhow::anyhow!("Not a TSI installation: {}", prefix.display()));
+        return Err(anyhow::anyhow!(
+            "Not a TSI installation: {}",
+            prefix.display()
+        ));
     }
     if !args.yes && !confirm_remove(&prefix)? {
         ui::output::info("Cancelled.");
@@ -54,6 +62,8 @@ pub fn run(args: RemoveArgs) -> Result<()> {
     ui::output::step(format!("Removing {}...", prefix.display()));
     std::fs::remove_dir_all(&prefix).context("Remove installation directory")?;
     ui::output::success("TSI uninstalled.");
-    ui::output::info("Remove the TSI bin directory from your PATH in your shell profile if present.");
+    ui::output::info(
+        "Remove the TSI bin directory from your PATH in your shell profile if present.",
+    );
     Ok(())
 }

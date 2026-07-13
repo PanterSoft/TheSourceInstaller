@@ -29,13 +29,10 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &[
 
 /// Returns true if all bootstrap packages are installed.
 pub fn is_bootstrap_complete(db: &Database) -> bool {
-    BOOTSTRAP_PACKAGES
-        .iter()
-        .all(|name| db.is_installed(name))
+    BOOTSTRAP_PACKAGES.iter().all(|name| db.is_installed(name))
 }
 
 /// Returns true if the given package is part of the bootstrap toolchain.
 pub fn is_bootstrap_package(name: &str) -> bool {
     BOOTSTRAP_PACKAGES.contains(&name)
 }
-

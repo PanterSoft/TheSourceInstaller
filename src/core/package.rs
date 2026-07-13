@@ -200,9 +200,7 @@ fn merge_cmake_args_for_os(v: &PackageVersion) -> Vec<String> {
         "windows" => v.cmake_args_windows.as_ref(),
         _ => None,
     };
-    os_override
-        .cloned()
-        .unwrap_or_else(|| v.cmake_args.clone())
+    os_override.cloned().unwrap_or_else(|| v.cmake_args.clone())
 }
 
 pub fn parse_package_file(json: &str) -> Result<Vec<Package>, anyhow::Error> {
