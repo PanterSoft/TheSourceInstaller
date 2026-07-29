@@ -7,6 +7,9 @@ use clap::Args;
 pub struct ListArgs {
     #[arg(long)]
     pub versions: bool,
+    /// Emit the installed set as JSON (for scripts and CI)
+    #[arg(long)]
+    pub json: bool,
     #[arg(long)]
     pub prefix: Option<String>,
 }
@@ -17,6 +20,10 @@ pub fn run(args: ListArgs) -> Result<()> {
     let db = Database::new(&db_dir)?;
 
     let packages = db.list();
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(packages)?);
+        return Ok(());
+    }
     if packages.is_empty() {
         ui::output::info("No packages installed");
         return Ok(());

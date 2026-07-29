@@ -69,11 +69,16 @@ pub fn get_build_order(packages: &[Package]) -> Vec<Package> {
         name_to_pkg.keys().map(|n| (n.clone(), 0)).collect();
 
     for pkg in packages {
-        for dep in pkg.dependencies.iter().chain(pkg.build_dependencies.iter()) {
-            if name_to_pkg.contains_key(dep) {
-                *in_degree.get_mut(&pkg.name).unwrap() += 1;
-            }
-        }
+        // Deduplicate: a dep listed in both `dependencies` and `build_dependencies` would
+        // otherwise count twice while the drain loop below only decrements once, stranding
+        // the package at a non-zero in-degree and pushing it into the unordered tail.
+        let deps: HashSet<&String> = pkg
+            .dependencies
+            .iter()
+            .chain(pkg.build_dependencies.iter())
+            .filter(|d| **d != pkg.name && name_to_pkg.contains_key(*d))
+            .collect();
+        *in_degree.get_mut(&pkg.name).unwrap() += deps.len();
     }
 
     let mut queue: Vec<String> = in_degree

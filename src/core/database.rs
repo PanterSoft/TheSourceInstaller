@@ -22,6 +22,7 @@ struct DatabaseFile {
     installed: Vec<InstalledPackage>,
 }
 
+#[derive(Debug)]
 pub struct Database {
     path: std::path::PathBuf,
     packages: Vec<InstalledPackage>,
@@ -56,7 +57,11 @@ impl Database {
             installed: self.packages.clone(),
         };
         let json = serde_json::to_string_pretty(&db).context("Failed to serialize database")?;
-        std::fs::write(&self.path, json).context("Failed to write database")?;
+        // Write-then-rename: a crash or full disk mid-write must not leave a truncated
+        // installed.json behind, which would lose the record of every installed package.
+        let tmp = self.path.with_extension("json.tmp");
+        std::fs::write(&tmp, json).context("Failed to write database")?;
+        std::fs::rename(&tmp, &self.path).context("Failed to commit database")?;
         Ok(())
     }
 
@@ -110,6 +115,19 @@ impl Database {
 
     pub fn list(&self) -> &[InstalledPackage] {
         &self.packages
+    }
+
+    /// Names of installed packages that depend on `name`. Removing `name` while this is
+    /// non-empty leaves those packages with missing libraries/headers.
+    pub fn reverse_dependencies(&self, name: &str) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .packages
+            .iter()
+            .filter(|p| p.name != name && p.dependencies.iter().any(|d| d == name))
+            .map(|p| p.name.clone())
+            .collect();
+        names.sort();
+        names
     }
 
     pub fn installed_set(&self) -> HashSet<String> {
