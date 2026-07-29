@@ -208,10 +208,7 @@ pub fn render_log(f: &mut Frame, op: &mut OpRunner, tick: usize, area: Rect) {
     let status_spans: Vec<Span<'static>> = match op.status {
         OpStatus::Running => vec![
             Span::styled(" · ", theme::dim()),
-            Span::styled(
-                SPINNER[tick % SPINNER.len()].to_string(),
-                theme::accent(),
-            ),
+            Span::styled(SPINNER[tick % SPINNER.len()].to_string(), theme::accent()),
         ],
         OpStatus::Done => vec![
             Span::styled(" · ", theme::dim()),

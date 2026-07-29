@@ -3,7 +3,7 @@
 PREFIX ?= $(HOME)/.tsi
 export PATH := $(HOME)/.cargo/bin:$(PATH)
 
-.PHONY: help test build clean install uninstall lint fmt deps dev run dev-packages
+.PHONY: help test check build clean install uninstall lint fmt deps dev run dev-packages
 
 help:
 	@echo "TSI Makefile"
@@ -15,6 +15,7 @@ help:
 	@echo "  build         - Build TSI (release)"
 	@echo "  run           - Run TSI (development)"
 	@echo "  test          - Run tests"
+	@echo "  check         - Everything CI checks: fmt + clippy + tests"
 	@echo "  lint          - Run clippy"
 	@echo "  fmt           - Check code formatting"
 	@echo "  clean         - Clean build artifacts"
@@ -58,9 +59,12 @@ test:
 	@echo "Running tests..."
 	cargo test
 
+# Same gates as .github/workflows/rust-ci.yml — run this before pushing.
+check: fmt lint test
+
 lint:
 	@echo "Running clippy..."
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets -- -D warnings
 
 fmt:
 	@echo "Checking formatting..."

@@ -7,6 +7,8 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'tests/**'
+      - '*.sh'
+      - 'docker/**'
       - '.github/workflows/test.yml'
   pull_request:
     branches: [ main, dev ]
@@ -14,6 +16,8 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'tests/**'
+      - '*.sh'
+      - 'docker/**'
       - '.github/workflows/test.yml'
   workflow_dispatch:
 
@@ -30,3 +34,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
+
+  # The bootstrap script is how most users first get TSI, so a syntax or quoting
+  # slip there is a broken install, not a broken build.
+  shell:
+    name: Shellcheck (bootstrap, docker, package scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.0.1
+      - name: Check shell scripts
+        run: shellcheck -S warning tsi-bootstrap.sh docker/*.sh
+
+      - name: Verify bootstrap script parses under sh and bash
+        run: |
+          sh -n tsi-bootstrap.sh
+          bash -n tsi-bootstrap.sh
+
+      - name: Bootstrap --help works without network or toolchain
+        run: sh tsi-bootstrap.sh --help

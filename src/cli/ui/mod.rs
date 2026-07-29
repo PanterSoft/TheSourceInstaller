@@ -195,6 +195,45 @@ impl App {
     pub(crate) fn refresh_db(&mut self) -> Result<()> {
         self.db.load()
     }
+
+    /// Reloads the package definitions from disk, so a `tsi update` run from the
+    /// TSI tab is reflected in the list without restarting the UI.
+    ///
+    /// A registry that fails to load or comes back empty (mid-update, or the prefix
+    /// was just removed) leaves the previous snapshot in place rather than blanking
+    /// the list.
+    pub(crate) fn refresh_registry(&mut self) {
+        let packages_dir = self.prefix.join("packages");
+        if !packages_dir.is_dir() {
+            return;
+        }
+        match Registry::load_from_dir(&packages_dir) {
+            Ok(registry) if registry.count() > 0 => {
+                self.packages = collect_packages(&registry);
+            }
+            Ok(_) => {}
+            Err(e) => log::warn!("Could not reload package definitions: {e}"),
+        }
+    }
+
+    /// Rebuilds derived state after an operation finishes, keeping the cursor on
+    /// the same package instead of wherever its old index happens to land.
+    fn refresh_after_op(&mut self) -> Result<()> {
+        let previous = self.selected_package().map(|p| p.name.clone());
+        self.refresh_db()?;
+        self.refresh_registry();
+        self.apply_filter();
+        if let Some(name) = previous {
+            if let Some(pos) = self
+                .filtered
+                .iter()
+                .position(|&i| self.packages[i].name == name)
+            {
+                self.selected = pos;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// RAII guard that enters raw mode + the alternate screen and always restores
@@ -240,8 +279,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
             let was_running = op.running();
             op.poll();
             if was_running && op.finished() {
-                app.refresh_db()?;
-                app.apply_filter();
+                app.refresh_after_op()?;
                 app.start_next_if_idle()?; // launch the next queued op, if any
             }
         }
@@ -398,8 +436,8 @@ fn render_tab_bar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(Line::from(spans)), cols[0]);
 
     let version = format!("tsi v{} ", env!("CARGO_PKG_VERSION"));
-    let right = Paragraph::new(Line::from(Span::styled(version, theme::dim())))
-        .alignment(Alignment::Right);
+    let right =
+        Paragraph::new(Line::from(Span::styled(version, theme::dim()))).alignment(Alignment::Right);
     f.render_widget(right, cols[1]);
 }
 
@@ -417,7 +455,12 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let mut spans: Vec<Span<'static>> = Vec::new();
 
     if let Some(action) = &app.pending_confirm {
-        spans.push(Span::styled(action.prompt(), theme::accent()));
+        let style = if action.warns() {
+            theme::warn()
+        } else {
+            theme::accent()
+        };
+        spans.push(Span::styled(action.prompt(), style));
     } else if app.op_running() {
         spans.push(Span::styled("operation running", theme::dim()));
         if app.queued() > 0 {
@@ -522,6 +565,14 @@ fn render_help(f: &mut Frame, area: Rect) {
         row("r", "Remove selected (or all marked)"),
         row("u", "Upgrade selected (or all marked)"),
         row("y / n", "Confirm / cancel a pending action"),
+        Line::from(Span::styled(
+            "  a removal that other installed packages need names them",
+            theme::dim(),
+        )),
+        Line::from(Span::styled(
+            "  in the prompt and forces only with your confirmation",
+            theme::dim(),
+        )),
         Line::from(""),
         heading("Operations"),
         row("", "Batch actions queue and run one at a time"),
@@ -532,7 +583,9 @@ fn render_help(f: &mut Frame, area: Rect) {
     ];
 
     let block = theme::panel(theme::panel_title("help"), true);
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
     f.render_widget(Clear, popup);
     f.render_widget(paragraph, popup);
 }
@@ -540,6 +593,195 @@ fn render_help(f: &mut Frame, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write_pkg(dir: &std::path::Path, name: &str, version: &str) {
+        let json = format!(
+            r#"{{"name":"{name}","version":"{version}",
+                 "source":{{"type":"tarball","url":"https://e/x.tar.gz"}}}}"#
+        );
+        std::fs::write(dir.join(format!("{name}.json")), json).unwrap();
+    }
+
+    /// An App rooted at a real temp prefix, so registry reloads hit the filesystem.
+    fn app_at(prefix: &std::path::Path, names: &[&str]) -> App {
+        let packages_dir = prefix.join("packages");
+        std::fs::create_dir_all(&packages_dir).unwrap();
+        for n in names {
+            write_pkg(&packages_dir, n, "1.0.0");
+        }
+        let registry = Registry::load_from_dir(&packages_dir).unwrap();
+        let db = Database::new(&prefix.join("db")).unwrap();
+        App::new(prefix.to_path_buf(), collect_packages(&registry), db)
+    }
+
+    #[test]
+    fn refresh_registry_picks_up_definitions_added_by_tsi_update() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+        assert_eq!(app.packages.len(), 1);
+
+        // A `tsi update` run in the log pane drops new definitions into the prefix.
+        write_pkg(&temp.path().join("packages"), "jq", "1.7.1");
+        app.refresh_registry();
+
+        let names: Vec<&str> = app.packages.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["curl", "jq"]);
+    }
+
+    #[test]
+    fn refresh_registry_keeps_the_old_snapshot_when_definitions_vanish() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+
+        // Mid-update (or after `tsi remove`) the directory can be empty — the list
+        // must not blank out.
+        std::fs::remove_file(temp.path().join("packages/curl.json")).unwrap();
+        app.refresh_registry();
+        assert_eq!(app.packages.len(), 1, "kept the previous snapshot");
+
+        std::fs::remove_dir_all(temp.path().join("packages")).unwrap();
+        app.refresh_registry();
+        assert_eq!(app.packages.len(), 1);
+    }
+
+    #[test]
+    fn refresh_after_op_keeps_the_cursor_on_the_same_package() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl", "jq", "zlib"]);
+        app.apply_filter();
+        app.selected = 2; // zlib
+        assert_eq!(app.selected_package().unwrap().name, "zlib");
+
+        // A new definition sorts ahead of zlib and would otherwise shift it down.
+        write_pkg(&temp.path().join("packages"), "aaa", "1.0.0");
+        app.refresh_after_op().unwrap();
+
+        assert_eq!(app.packages.len(), 4);
+        assert_eq!(
+            app.selected_package().unwrap().name,
+            "zlib",
+            "cursor followed the package, not the index"
+        );
+    }
+
+    #[test]
+    fn refresh_after_op_survives_the_selected_package_disappearing() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl", "jq"]);
+        app.apply_filter();
+        app.selected = 1;
+
+        std::fs::remove_file(temp.path().join("packages/jq.json")).unwrap();
+        app.refresh_after_op().unwrap();
+        assert!(app.selected < app.filtered.len().max(1));
+    }
+
+    #[test]
+    fn version_bump_in_the_registry_is_visible_after_refresh() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+        write_pkg(&temp.path().join("packages"), "curl", "9.9.9");
+
+        app.refresh_registry();
+        assert_eq!(app.packages[0].version, "9.9.9");
+    }
+
+    /// Draws one frame into an off-screen buffer. Layout math that underflows or
+    /// splits a zero-sized `Rect` panics inside `draw`, so "it rendered" is the
+    /// assertion — this is what catches a TUI that dies on a small terminal.
+    fn draw(app: &mut App, width: u16, height: u16) -> String {
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, app)).unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect()
+    }
+
+    #[test]
+    fn every_tab_renders_at_sizes_down_to_one_cell() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl", "jq", "zlib"]);
+        app.apply_filter();
+
+        for tab in Tab::all() {
+            app.tab = tab;
+            for (w, h) in [(1, 1), (2, 3), (20, 4), (40, 10), (80, 24), (200, 60)] {
+                draw(&mut app, w, h);
+            }
+        }
+    }
+
+    #[test]
+    fn overlays_render_without_clipping_panics() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+        app.apply_filter();
+
+        app.help_open = true;
+        for (w, h) in [(1, 1), (10, 5), (80, 24)] {
+            draw(&mut app, w, h);
+        }
+        app.help_open = false;
+
+        app.quit_confirm = true;
+        for (w, h) in [(1, 1), (10, 5), (80, 24)] {
+            draw(&mut app, w, h);
+        }
+        app.quit_confirm = false;
+
+        app.tab = Tab::Tsi;
+        app.tsi_confirm = Some(tabs::tsi::TsiConfirm::for_test());
+        for (w, h) in [(1, 1), (10, 5), (80, 24)] {
+            draw(&mut app, w, h);
+        }
+    }
+
+    #[test]
+    fn packages_tab_renders_an_empty_filter_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+        app.filter = "nothing-matches".into();
+        app.apply_filter();
+        assert!(app.filtered.is_empty());
+
+        let screen = draw(&mut app, 80, 24);
+        assert!(screen.contains("no package matches"), "{screen}");
+    }
+
+    #[test]
+    fn a_breaking_removal_prompt_reaches_the_footer() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl", "zlib"]);
+        app.apply_filter();
+        app.db
+            .add("zlib", "1.0.0", &temp.path().join("install/zlib"), &[])
+            .unwrap();
+        app.db
+            .add(
+                "curl",
+                "1.0.0",
+                &temp.path().join("install/curl"),
+                &["zlib".to_string()],
+            )
+            .unwrap();
+
+        // Select zlib and ask to remove it: curl depends on it.
+        app.apply_filter();
+        app.selected = app
+            .filtered
+            .iter()
+            .position(|&i| app.packages[i].name == "zlib")
+            .unwrap();
+        tabs::packages::handle_key(&mut app, KeyCode::Char('r')).unwrap();
+
+        let screen = draw(&mut app, 120, 24);
+        assert!(screen.contains("breaks curl"), "{screen}");
+    }
 
     #[test]
     fn log_pane_height_never_exceeds_body_and_never_panics() {
