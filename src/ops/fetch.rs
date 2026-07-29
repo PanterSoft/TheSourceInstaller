@@ -172,26 +172,39 @@ fn download_file_with_retry(url: &str, dest: &Path) -> Result<()> {
 fn detect_archive_format_from_magic(archive: &Path) -> Option<&'static str> {
     let mut f = File::open(archive).ok()?;
     let mut buf = [0u8; 6];
-    let n = std::io::Read::read(&mut f, &mut buf).ok()?;
-    if n >= 2 && buf[0] == 0x1f && buf[1] == 0x8b {
+    // A single `read` may return a short count even on a local file; fill the whole
+    // buffer so the longest signature (xz, 6 bytes) can always be compared.
+    let n = read_up_to(&mut f, &mut buf)?;
+    let head = &buf[..n];
+    let starts_with = |sig: &[u8]| head.starts_with(sig);
+
+    if starts_with(&[0x1f, 0x8b]) {
         return Some("gz");
     }
-    if n >= 5
-        && buf[0] == 0xfd
-        && buf[1] == 0x37
-        && buf[2] == 0x7a
-        && buf[3] == 0x5a
-        && buf[4] == 0x00
-    {
+    // xz: FD '7' 'z' 'X' 'Z' 00
+    if starts_with(&[0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]) {
         return Some("xz");
     }
-    if n >= 3 && buf[0] == 0x42 && buf[1] == 0x5a && buf[2] == 0x68 {
+    if starts_with(b"BZh") {
         return Some("bz2");
     }
-    if n >= 4 && buf[0] == 0x50 && buf[1] == 0x4b && (buf[2] == 0x03 || buf[2] == 0x05) {
+    if starts_with(&[0x50, 0x4b, 0x03]) || starts_with(&[0x50, 0x4b, 0x05]) {
         return Some("zip");
     }
     None
+}
+
+/// Reads until `buf` is full or EOF, returning the number of bytes read.
+fn read_up_to(f: &mut File, buf: &mut [u8]) -> Option<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match std::io::Read::read(f, &mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(_) => return None,
+        }
+    }
+    Some(filled)
 }
 
 fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
@@ -379,4 +392,208 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a `.tar` of `files` and wraps it with `compress`.
+    fn make_tar(files: &[(&str, &[u8])], compress: impl Fn(Vec<u8>) -> Vec<u8>) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        for (name, body) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder.append_data(&mut header, name, *body).unwrap();
+        }
+        compress(builder.into_inner().unwrap())
+    }
+
+    fn gzip(data: Vec<u8>) -> Vec<u8> {
+        use std::io::Write;
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        enc.write_all(&data).unwrap();
+        enc.finish().unwrap()
+    }
+
+    fn xz(data: Vec<u8>) -> Vec<u8> {
+        use std::io::Write;
+        let mut enc = xz2::write::XzEncoder::new(Vec::new(), 1);
+        enc.write_all(&data).unwrap();
+        enc.finish().unwrap()
+    }
+
+    fn bzip2(data: Vec<u8>) -> Vec<u8> {
+        use std::io::Write;
+        let mut enc = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
+        enc.write_all(&data).unwrap();
+        enc.finish().unwrap()
+    }
+
+    fn write_temp(name: &str, bytes: &[u8]) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn extracts_every_supported_compression() {
+        for (name, bytes) in [
+            ("src.tar.gz", make_tar(&[("a.txt", b"hi")], gzip)),
+            ("src.tgz", make_tar(&[("a.txt", b"hi")], gzip)),
+            ("src.tar.xz", make_tar(&[("a.txt", b"hi")], xz)),
+            ("src.tar.bz2", make_tar(&[("a.txt", b"hi")], bzip2)),
+            ("src.tar", make_tar(&[("a.txt", b"hi")], |d| d)),
+        ] {
+            let (dir, archive) = write_temp(name, &bytes);
+            let dest = dir.path().join("out");
+            std::fs::create_dir_all(&dest).unwrap();
+            extract_archive(&archive, &dest).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                std::fs::read_to_string(dest.join("a.txt")).unwrap(),
+                "hi",
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn falls_back_to_magic_bytes_for_a_misnamed_archive() {
+        // Servers hand out extensionless or wrongly-named downloads; the content decides.
+        for (name, bytes) in [
+            ("download", make_tar(&[("a.txt", b"hi")], gzip)),
+            ("download.bin", make_tar(&[("a.txt", b"hi")], xz)),
+            ("release?raw=1", make_tar(&[("a.txt", b"hi")], bzip2)),
+        ] {
+            let (dir, archive) = write_temp(name, &bytes);
+            let dest = dir.path().join("out");
+            std::fs::create_dir_all(&dest).unwrap();
+            extract_archive(&archive, &dest).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(dest.join("a.txt").is_file(), "{name}");
+        }
+    }
+
+    #[test]
+    fn unrecognizable_content_is_an_error_not_a_silent_success() {
+        let (dir, archive) = write_temp("mystery.bin", b"not an archive at all");
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+        let err = extract_archive(&archive, &dest).unwrap_err();
+        assert!(
+            err.to_string().contains("Unsupported archive format"),
+            "got: {err}"
+        );
+    }
+
+    // Tar traversal is tar-rs's guarantee (it rejects `..` on both read and write, so
+    // such an archive can't even be built here). The zip loop below is our own code.
+    #[test]
+    fn zip_entries_cannot_escape_the_destination() {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            use std::io::Write;
+            let mut zip = zip::ZipWriter::new(&mut buf);
+            let opts: zip::write::FileOptions = Default::default();
+            zip.start_file("../escaped.txt", opts).unwrap();
+            zip.write_all(b"pwned").unwrap();
+            zip.start_file("safe.txt", opts).unwrap();
+            zip.write_all(b"ok").unwrap();
+            zip.finish().unwrap();
+        }
+        let (dir, archive) = write_temp("evil.zip", &buf.into_inner());
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        extract_archive(&archive, &dest).unwrap();
+        assert!(
+            !dir.path().join("escaped.txt").exists(),
+            "zip escaped the destination directory"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dest.join("safe.txt")).unwrap(),
+            "ok"
+        );
+    }
+
+    #[test]
+    fn nested_zip_paths_are_created() {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            use std::io::Write;
+            let mut zip = zip::ZipWriter::new(&mut buf);
+            let opts: zip::write::FileOptions = Default::default();
+            zip.start_file("pkg-1.0/src/main.c", opts).unwrap();
+            zip.write_all(b"int main(){}").unwrap();
+            zip.finish().unwrap();
+        }
+        let (dir, archive) = write_temp("pkg.zip", &buf.into_inner());
+        let dest = dir.path().join("out");
+        std::fs::create_dir_all(&dest).unwrap();
+
+        extract_archive(&archive, &dest).unwrap();
+        assert!(dest.join("pkg-1.0/src/main.c").is_file());
+    }
+
+    #[test]
+    fn magic_detection_recognizes_each_format() {
+        for (bytes, expected) in [
+            (make_tar(&[("a", b"x")], gzip), "gz"),
+            (make_tar(&[("a", b"x")], xz), "xz"),
+            (make_tar(&[("a", b"x")], bzip2), "bz2"),
+        ] {
+            let (_d, path) = write_temp("blob", &bytes);
+            assert_eq!(detect_archive_format_from_magic(&path), Some(expected));
+        }
+
+        let (_d, path) = write_temp("blob", b"plain text file");
+        assert_eq!(detect_archive_format_from_magic(&path), None);
+
+        // Shorter than any magic signature: must not panic on the slice.
+        let (_d, path) = write_temp("blob", b"\x1f");
+        assert_eq!(detect_archive_format_from_magic(&path), None);
+    }
+
+    #[test]
+    fn local_source_must_exist() {
+        let pkg: crate::core::package::Package = {
+            let json = r#"{"name":"p","version":"1.0",
+                "source":{"type":"local","path":"/definitely/not/here"}}"#;
+            crate::core::package::parse_package_file(json).unwrap()[0].clone()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let err = fetch(&pkg, dir.path(), false).unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "got: {err}");
+    }
+
+    #[test]
+    fn unknown_source_type_is_rejected() {
+        let json = r#"{"name":"p","version":"1.0","source":{"type":"carrier-pigeon"}}"#;
+        let pkg = crate::core::package::parse_package_file(json).unwrap()[0].clone();
+        let dir = tempfile::tempdir().unwrap();
+        let err = fetch(&pkg, dir.path(), false).unwrap_err();
+        assert!(
+            err.to_string().contains("Unknown source type"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn copy_dir_all_copies_nested_trees() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(src.join("a/b")).unwrap();
+        std::fs::write(src.join("top.txt"), "top").unwrap();
+        std::fs::write(src.join("a/b/deep.txt"), "deep").unwrap();
+
+        let dst = dir.path().join("dst");
+        copy_dir_all(&src, &dst).unwrap();
+        assert_eq!(std::fs::read_to_string(dst.join("top.txt")).unwrap(), "top");
+        assert_eq!(
+            std::fs::read_to_string(dst.join("a/b/deep.txt")).unwrap(),
+            "deep"
+        );
+    }
 }
