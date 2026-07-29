@@ -43,8 +43,17 @@ impl View {
 #[derive(Clone)]
 pub enum PendingAction {
     Install(Package),
-    Remove(Package),
-    Upgrade { pkg: Package, from: String },
+    Remove {
+        pkg: Package,
+        /// Installed packages that depend on this one and are *not* being removed
+        /// alongside it. Non-empty means the removal needs `--force` and the prompt
+        /// says what it will break.
+        breaks: Vec<String>,
+    },
+    Upgrade {
+        pkg: Package,
+        from: String,
+    },
     Batch {
         verb: &'static str,
         ops: Vec<(String, Vec<String>)>,
@@ -55,13 +64,33 @@ impl PendingAction {
     pub fn prompt(&self) -> String {
         match self {
             PendingAction::Install(pkg) => format!("Install {} {}? y/N", pkg.name, pkg.version),
-            PendingAction::Remove(pkg) => format!("Remove {} {}? y/N", pkg.name, pkg.version),
+            PendingAction::Remove { pkg, breaks } if breaks.is_empty() => {
+                format!("Remove {} {}? y/N", pkg.name, pkg.version)
+            }
+            PendingAction::Remove { pkg, breaks } => format!(
+                "Remove {} {} — breaks {}. Force? y/N",
+                pkg.name,
+                pkg.version,
+                breaks.join(", ")
+            ),
             PendingAction::Upgrade { pkg, from } => {
                 format!("Upgrade {} {} → {}? y/N", pkg.name, from, pkg.version)
             }
             PendingAction::Batch { verb, ops } => {
                 format!("{} {} marked package(s)? y/N", verb, ops.len())
             }
+        }
+    }
+
+    /// True when confirming this action breaks something — the footer prompt is
+    /// drawn in the warning color instead of the usual accent.
+    pub fn warns(&self) -> bool {
+        match self {
+            PendingAction::Remove { breaks, .. } => !breaks.is_empty(),
+            PendingAction::Batch { ops, .. } => ops
+                .iter()
+                .any(|(_, args)| args.iter().any(|a| a == "--force")),
+            _ => false,
         }
     }
 
@@ -74,13 +103,28 @@ impl PendingAction {
                 format!("install {}", pkg.name),
                 vec!["install".into(), pkg.spec(), "--prefix".into(), prefix],
             ),
-            PendingAction::Remove(pkg) => (
-                format!("remove {}", pkg.name),
-                vec!["uninstall".into(), pkg.name.clone(), "--prefix".into(), prefix],
-            ),
+            PendingAction::Remove { pkg, breaks } => {
+                let mut args = vec![
+                    "uninstall".into(),
+                    pkg.name.clone(),
+                    "--prefix".into(),
+                    prefix,
+                ];
+                // The CLI refuses to strand dependents; the user already confirmed
+                // the breakage in the prompt, so pass it through.
+                if !breaks.is_empty() {
+                    args.push("--force".into());
+                }
+                (format!("remove {}", pkg.name), args)
+            }
             PendingAction::Upgrade { pkg, .. } => (
                 format!("upgrade {}", pkg.name),
-                vec!["upgrade".into(), pkg.name.clone(), "--prefix".into(), prefix],
+                vec![
+                    "upgrade".into(),
+                    pkg.name.clone(),
+                    "--prefix".into(),
+                    prefix,
+                ],
             ),
             PendingAction::Batch { .. } => {
                 unreachable!("Batch carries its own ops; label_args is single-action only")
@@ -107,6 +151,36 @@ impl BatchVerb {
     }
 }
 
+/// Orders a removal batch so a package is removed before anything it depends on,
+/// which is what the CLI's dependency guard wants to see. `dependents_of` returns
+/// the installed packages that depend on the given name.
+///
+/// ponytail: O(n²) over the marked set — a batch is a handful of packages, not a
+/// distro. Swap in a real topological sort if batches ever get large.
+fn order_removals(names: &[String], dependents_of: impl Fn(&str) -> Vec<String>) -> Vec<String> {
+    let in_batch: std::collections::HashSet<&String> = names.iter().collect();
+    let mut remaining: Vec<&String> = names.iter().collect();
+    let mut ordered: Vec<String> = Vec::with_capacity(names.len());
+
+    while !remaining.is_empty() {
+        // Take every package whose in-batch dependents have all been ordered already.
+        let (ready, blocked): (Vec<&String>, Vec<&String>) = remaining.iter().partition(|name| {
+            dependents_of(name)
+                .iter()
+                .all(|d| !in_batch.contains(d) || ordered.contains(d))
+        });
+        if ready.is_empty() {
+            // A dependency cycle among installed packages: fall back to input order
+            // rather than looping forever.
+            ordered.extend(blocked.into_iter().cloned());
+            break;
+        }
+        ordered.extend(ready.into_iter().cloned());
+        remaining = blocked;
+    }
+    ordered
+}
+
 /// Resolves the (label, args) op for every marked package eligible for `verb`,
 /// skipping any that don't apply (e.g. already-installed for Install). Pure
 /// over the passed slices so it can be unit tested.
@@ -115,18 +189,31 @@ fn batch_ops(
     marked: &std::collections::HashSet<String>,
     packages: &[Package],
     installed_version: impl Fn(&str) -> Option<String>,
+    dependents_of: impl Fn(&str) -> Vec<String>,
     prefix: &Path,
 ) -> Vec<(String, Vec<String>)> {
-    let mut names: Vec<&String> = marked.iter().collect();
+    let mut names: Vec<String> = marked.iter().cloned().collect();
     names.sort(); // deterministic queue order
+    if matches!(verb, BatchVerb::Remove) {
+        names = order_removals(&names, &dependents_of);
+    }
     names
         .into_iter()
         .filter_map(|name| {
+            let name = &name;
             let pkg = packages.iter().find(|p| &p.name == name)?;
             let installed = installed_version(name);
             let action = match verb {
                 BatchVerb::Install if installed.is_none() => PendingAction::Install(pkg.clone()),
-                BatchVerb::Remove if installed.is_some() => PendingAction::Remove(pkg.clone()),
+                BatchVerb::Remove if installed.is_some() => PendingAction::Remove {
+                    pkg: pkg.clone(),
+                    // Dependents inside the batch are removed first (see order_removals),
+                    // so only outside dependents still need forcing.
+                    breaks: dependents_of(name)
+                        .into_iter()
+                        .filter(|d| !marked.contains(d))
+                        .collect(),
+                },
                 BatchVerb::Upgrade => {
                     let from = installed?;
                     if !can_upgrade(&from, &pkg.version) {
@@ -330,6 +417,7 @@ fn request_action(app: &mut App, verb: BatchVerb) {
             &app.marked,
             &app.packages,
             |n| app.db.get(n).map(|i| i.version.clone()),
+            |n| app.db.reverse_dependencies(n),
             &app.prefix,
         );
         if !ops.is_empty() {
@@ -347,7 +435,10 @@ fn request_action(app: &mut App, verb: BatchVerb) {
     let installed = app.db.get(&pkg.name).map(|i| i.version.clone());
     app.pending_confirm = match verb {
         BatchVerb::Install if installed.is_none() => Some(PendingAction::Install(pkg)),
-        BatchVerb::Remove if installed.is_some() => Some(PendingAction::Remove(pkg)),
+        BatchVerb::Remove if installed.is_some() => {
+            let breaks = app.db.reverse_dependencies(&pkg.name);
+            Some(PendingAction::Remove { pkg, breaks })
+        }
         BatchVerb::Upgrade => match installed {
             Some(from) if can_upgrade(&from, &pkg.version) => {
                 Some(PendingAction::Upgrade { pkg, from })
@@ -433,8 +524,8 @@ fn render_list(f: &mut Frame, app: &App, area: Rect) {
     hints.push(("/", "filter"));
     hints.push(("tab", "view"));
 
-    let block = theme::panel(theme::panel_title(title), true)
-        .title_bottom(theme::hint_line(&hints));
+    let block =
+        theme::panel(theme::panel_title(title), true).title_bottom(theme::hint_line(&hints));
     let list = List::new(items)
         .block(block)
         .highlight_style(theme::selection())
@@ -486,6 +577,14 @@ fn render_details(f: &mut Frame, app: &App, area: Rect) {
                     theme::ok(),
                 )));
                 lines.push(field("path", info.install_path.clone()));
+                // Removing this package would strand these — worth seeing before pressing r.
+                let dependents = app.db.reverse_dependencies(&pkg.name);
+                if !dependents.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled("required by: ", theme::dim()),
+                        Span::styled(dependents.join(", "), theme::warn()),
+                    ]));
+                }
             }
             None => {
                 lines.push(Line::from(Span::styled("○ not installed", theme::dim())));
@@ -632,6 +731,117 @@ mod tests {
         assert!(!can_upgrade("1.0.0", "1.0.0"));
     }
 
+    /// zlib is depended on by curl and git; curl by nothing.
+    fn dependents(name: &str) -> Vec<String> {
+        match name {
+            "zlib" => vec!["curl".into(), "git".into()],
+            _ => vec![],
+        }
+    }
+
+    #[test]
+    fn order_removals_puts_dependents_before_their_dependencies() {
+        let names: Vec<String> = vec!["zlib".into(), "curl".into(), "git".into()];
+        let ordered = order_removals(&names, dependents);
+        let zlib = ordered.iter().position(|n| n == "zlib").unwrap();
+        assert!(ordered.iter().position(|n| n == "curl").unwrap() < zlib);
+        assert!(ordered.iter().position(|n| n == "git").unwrap() < zlib);
+        assert_eq!(ordered.len(), 3);
+    }
+
+    #[test]
+    fn order_removals_ignores_dependents_outside_the_batch() {
+        // Only zlib is marked; curl and git stay installed, so nothing to order.
+        let names: Vec<String> = vec!["zlib".into()];
+        assert_eq!(order_removals(&names, dependents), vec!["zlib".to_string()]);
+    }
+
+    #[test]
+    fn order_removals_survives_a_dependency_cycle() {
+        let cyclic = |n: &str| match n {
+            "a" => vec!["b".to_string()],
+            "b" => vec!["a".to_string()],
+            _ => vec![],
+        };
+        let names: Vec<String> = vec!["a".into(), "b".into()];
+        let ordered = order_removals(&names, cyclic);
+        assert_eq!(ordered.len(), 2, "no package dropped, no infinite loop");
+    }
+
+    #[test]
+    fn batch_remove_orders_dependents_first_and_needs_no_force() {
+        use std::collections::HashSet;
+        let packages = vec![
+            make_package("zlib", ""),
+            make_package("curl", ""),
+            make_package("git", ""),
+        ];
+        let marked: HashSet<String> = ["zlib", "curl", "git"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let ops = batch_ops(
+            BatchVerb::Remove,
+            &marked,
+            &packages,
+            |_| Some("1.0.0".to_string()),
+            dependents,
+            &PathBuf::from("/opt/tsi"),
+        );
+        let labels: Vec<&str> = ops.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(
+            labels.last(),
+            Some(&"remove zlib"),
+            "zlib comes last: {labels:?}"
+        );
+        assert!(
+            ops.iter()
+                .all(|(_, args)| !args.contains(&"--force".into())),
+            "the whole dependency chain is in the batch, so nothing needs forcing"
+        );
+    }
+
+    #[test]
+    fn batch_remove_forces_only_for_dependents_left_installed() {
+        use std::collections::HashSet;
+        let packages = vec![make_package("zlib", ""), make_package("curl", "")];
+        // git depends on zlib but is NOT marked, so removing zlib must force.
+        let marked: HashSet<String> = ["zlib", "curl"].iter().map(|s| s.to_string()).collect();
+        let ops = batch_ops(
+            BatchVerb::Remove,
+            &marked,
+            &packages,
+            |_| Some("1.0.0".to_string()),
+            dependents,
+            &PathBuf::from("/opt/tsi"),
+        );
+        let zlib = ops.iter().find(|(l, _)| l == "remove zlib").unwrap();
+        assert!(zlib.1.contains(&"--force".to_string()), "{:?}", zlib.1);
+        let curl = ops.iter().find(|(l, _)| l == "remove curl").unwrap();
+        assert!(!curl.1.contains(&"--force".to_string()));
+    }
+
+    #[test]
+    fn remove_prompt_names_what_it_breaks() {
+        let pkg = make_package("zlib", "");
+        let plain = PendingAction::Remove {
+            pkg: pkg.clone(),
+            breaks: vec![],
+        };
+        assert_eq!(plain.prompt(), "Remove zlib 1.0.0? y/N");
+        assert!(!plain.warns());
+
+        let breaking = PendingAction::Remove {
+            pkg,
+            breaks: vec!["curl".into(), "git".into()],
+        };
+        assert_eq!(
+            breaking.prompt(),
+            "Remove zlib 1.0.0 — breaks curl, git. Force? y/N"
+        );
+        assert!(breaking.warns(), "a breaking removal is drawn as a warning");
+    }
+
     #[test]
     fn batch_ops_filters_by_verb_eligibility() {
         use std::collections::HashSet;
@@ -641,8 +851,10 @@ mod tests {
             make_package("jq", ""),   // not installed
         ];
         let prefix = PathBuf::from("/opt/tsi");
-        let marked: HashSet<String> =
-            ["zlib", "curl", "jq"].iter().map(|s| s.to_string()).collect();
+        let marked: HashSet<String> = ["zlib", "curl", "jq"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         // zlib installed at latest (1.0.0), curl installed at older 0.9.0, jq absent.
         let installed = |n: &str| match n {
             "zlib" => Some("1.0.0".to_string()),
@@ -650,15 +862,40 @@ mod tests {
             _ => None,
         };
 
-        let install = batch_ops(BatchVerb::Install, &marked, &packages, installed, &prefix);
+        let install = batch_ops(
+            BatchVerb::Install,
+            &marked,
+            &packages,
+            installed,
+            |_| vec![],
+            &prefix,
+        );
         assert_eq!(install.len(), 1, "only jq is installable");
         assert_eq!(install[0].0, "install jq");
 
-        let remove = batch_ops(BatchVerb::Remove, &marked, &packages, installed, &prefix);
+        let remove = batch_ops(
+            BatchVerb::Remove,
+            &marked,
+            &packages,
+            installed,
+            |_| vec![],
+            &prefix,
+        );
         let removed: Vec<&str> = remove.iter().map(|(l, _)| l.as_str()).collect();
-        assert_eq!(removed, vec!["remove curl", "remove zlib"], "sorted, installed only");
+        assert_eq!(
+            removed,
+            vec!["remove curl", "remove zlib"],
+            "sorted, installed only"
+        );
 
-        let upgrade = batch_ops(BatchVerb::Upgrade, &marked, &packages, installed, &prefix);
+        let upgrade = batch_ops(
+            BatchVerb::Upgrade,
+            &marked,
+            &packages,
+            installed,
+            |_| vec![],
+            &prefix,
+        );
         assert_eq!(upgrade.len(), 1, "only curl differs from latest");
         assert_eq!(upgrade[0].0, "upgrade curl");
     }
@@ -672,7 +909,11 @@ mod tests {
         assert_eq!(label, "install curl");
         assert_eq!(args, vec!["install", "curl@1.0.0", "--prefix", "/opt/tsi"]);
 
-        let (label, args) = PendingAction::Remove(pkg.clone()).label_args(&prefix);
+        let (label, args) = PendingAction::Remove {
+            pkg: pkg.clone(),
+            breaks: vec![],
+        }
+        .label_args(&prefix);
         assert_eq!(label, "remove curl");
         assert_eq!(args, vec!["uninstall", "curl", "--prefix", "/opt/tsi"]);
 

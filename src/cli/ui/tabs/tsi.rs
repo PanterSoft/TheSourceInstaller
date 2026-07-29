@@ -54,9 +54,18 @@ impl Action {
     fn label_args(self, prefix: &Path) -> (String, Vec<String>) {
         let p = prefix.to_string_lossy().to_string();
         match self {
-            Action::Update => ("update definitions".into(), vec!["update".into(), "--prefix".into(), p]),
-            Action::SelfUpdate => ("self-update".into(), vec!["self-update".into(), "--prefix".into(), p]),
-            Action::Bootstrap => ("bootstrap".into(), vec!["bootstrap".into(), "--prefix".into(), p]),
+            Action::Update => (
+                "update definitions".into(),
+                vec!["update".into(), "--prefix".into(), p],
+            ),
+            Action::SelfUpdate => (
+                "self-update".into(),
+                vec!["self-update".into(), "--prefix".into(), p],
+            ),
+            Action::Bootstrap => (
+                "bootstrap".into(),
+                vec!["bootstrap".into(), "--prefix".into(), p],
+            ),
             // --yes: the subprocess has no stdin, so it can't prompt; our own
             // typed-"yes" gate stands in for the interactive confirmation.
             Action::Remove => (
@@ -76,6 +85,15 @@ pub struct TsiConfirm {
 }
 
 impl TsiConfirm {
+    /// A destructive confirmation (typed-`yes` gate), for render tests.
+    #[cfg(test)]
+    pub fn for_test() -> Self {
+        Self {
+            action: Action::Remove,
+            typed: Some(String::new()),
+        }
+    }
+
     fn prompt(&self) -> Line<'static> {
         match &self.typed {
             Some(buf) => Line::from(vec![
@@ -194,7 +212,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     ];
     let detail_block = theme::panel(theme::panel_title("action"), false);
     f.render_widget(
-        Paragraph::new(detail).block(detail_block).wrap(Wrap { trim: true }),
+        Paragraph::new(detail)
+            .block(detail_block)
+            .wrap(Wrap { trim: true }),
         chunks[1],
     );
 

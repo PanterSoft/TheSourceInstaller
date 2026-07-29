@@ -13,6 +13,8 @@ pub const MUTED: Color = Color::DarkGray;
 pub const OK: Color = Color::Green;
 /// Errors and failed operations only.
 pub const ERR: Color = Color::Red;
+/// Destructive-but-confirmable situations, e.g. a removal that strands dependents.
+pub const WARN: Color = Color::Yellow;
 
 pub fn dim() -> Style {
     Style::default().fg(MUTED)
@@ -34,11 +36,13 @@ pub fn err() -> Style {
     Style::default().fg(ERR)
 }
 
+pub fn warn() -> Style {
+    Style::default().fg(WARN)
+}
+
 /// Style for the selected list row.
 pub fn selection() -> Style {
-    Style::default()
-        .fg(ACCENT)
-        .add_modifier(Modifier::REVERSED)
+    Style::default().fg(ACCENT).add_modifier(Modifier::REVERSED)
 }
 
 /// Rounded panel with the border in accent when focused, dim otherwise.
