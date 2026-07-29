@@ -13,6 +13,12 @@ Many commands support:
 
 - `--prefix PATH` - Use custom installation prefix (default: `~/.tsi` on Unix, `%USERPROFILE%\.tsi` on Windows)
 
+## Output Streams
+
+All human-facing progress and diagnostics go to **stderr**. Machine-readable output
+(currently `tsi list --json`) goes to **stdout**, so `tsi list --json > packages.json`
+captures only clean JSON even when TSI is chatty.
+
 ## Commands
 
 ### Install
@@ -47,8 +53,13 @@ Remove an installed package.
 tsi uninstall <package> [package...] [options]
 ```
 
+By default TSI refuses to remove a package that other installed packages depend on,
+since doing so leaves them with missing libraries and headers. Remove the dependents
+first, or override with `--force`.
+
 **Options:**
 
+- `--force` - Remove even if other installed packages depend on it
 - `--prefix PATH` - Installation prefix
 
 **Examples:**
@@ -56,7 +67,12 @@ tsi uninstall <package> [package...] [options]
 ```bash
 tsi uninstall zlib
 tsi uninstall curl openssl
+tsi uninstall --force zlib     # even though curl needs it
 ```
+
+Exits non-zero if any named package was refused or failed, so scripts can't mistake a
+partial uninstall for a clean one. Packages that were simply not installed are a warning,
+not a failure.
 
 ### Remove
 
@@ -110,7 +126,19 @@ tsi list [options]
 
 **Options:**
 
+- `--json` - Emit the installed set as JSON on stdout (for scripts and CI)
 - `--prefix PATH` - Installation prefix
+
+**Examples:**
+
+```bash
+tsi list
+tsi list --json | jq -r '.[].name'
+tsi list --json | jq -r '.[] | select(.dependencies | index("zlib")) | .name'
+```
+
+Each JSON record carries `name`, `version`, `install_path`, `installed_at` (Unix seconds),
+and `dependencies`.
 
 ### Search
 
@@ -201,7 +229,7 @@ Doctor checks for:
 
 ### UI
 
-Browse, install, and uninstall packages in an interactive terminal UI.
+A btop-style terminal workspace for browsing, installing and maintaining packages.
 
 ```bash
 tsi ui [options]
@@ -211,22 +239,57 @@ tsi ui [options]
 
 - `--prefix PATH` - Installation prefix
 
+Requires an interactive terminal (fails fast if stdout is not a TTY) and package
+definitions in the prefix — run `tsi update` first.
+
+**Tabs**
+
+| Tab | Contents |
+| --- | --- |
+| `1` Packages | Filterable package list with a details panel |
+| `2` System | Prefix, package counts, upgradable count, `d` runs `tsi doctor` |
+| `3` TSI | Maintenance actions: update definitions, self-update, bootstrap, remove TSI |
+
 **Keybindings** (press `?` inside the UI for this list):
 
 | Key | Action |
 | --- | --- |
+| `1`/`2`/`3` | Switch tab |
 | `Up`/`Down`, `j`/`k` | Move selection |
-| `PageUp`/`PageDown` | Move selection by 10 |
+| `PageUp`/`PageDown` | Move selection by 10 (scrolls the log pane when it is open) |
 | `Home`/`g`, `End`/`G` | Jump to first/last |
 | `Tab` | Cycle view (All / Installed / Available) |
 | `/` | Filter packages by name or description |
-| `i` | Install selected package (asks for confirmation) |
-| `u` | Uninstall selected package (asks for confirmation) |
-| `Esc` | Cancel filter/confirmation |
+| `Space` | Mark/unmark the package for a batch action |
+| `i` | Install — the selected package, or every marked one |
+| `r` | Remove — the selected package, or every marked one |
+| `u` | Upgrade — the selected package, or every marked one |
+| `y`/`n` | Confirm/cancel the pending action |
+| `Esc` | Clear marks, then filter; closes a finished log pane |
 | `?` | Toggle help |
-| `q` | Quit |
+| `q` | Quit (confirms first if an operation is running) |
 
-Requires an interactive terminal. Install/uninstall temporarily leave the UI to show the normal streaming output, then return.
+**Operations**
+
+Actions run as `tsi` subprocesses whose output streams into a log pane inside the UI —
+the display never leaves the TUI. One runs at a time; a batch queues the rest and the
+footer shows how many are waiting. The pane title shows a spinner while running and
+`✔ done` / `✖ failed (exit N)` afterwards; scroll it with `PageUp`/`PageDown` and close
+it with `Esc`.
+
+When an operation finishes, the installed-package database *and* the package definitions
+are reloaded, so a `tsi update` run from the TSI tab shows up in the list immediately.
+The cursor stays on the package it was on, not on the index it happened to occupy.
+
+**Removals that would break something**
+
+The details panel lists `required by:` for an installed package. Pressing `r` on such a
+package prompts with what the removal breaks — `Remove zlib 1.3 — breaks curl, git.
+Force? y/N` — in the warning color, and only passes `--force` once you confirm.
+
+Marking a whole dependency chain and pressing `r` needs no forcing: the batch is ordered
+so dependents are removed before the packages they depend on. Only dependents left
+installed outside the batch require a forced removal.
 
 ## Exit Codes
 

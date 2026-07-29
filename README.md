@@ -162,9 +162,15 @@ tsi doctor
 # Browse and manage packages interactively (press ? inside for keybindings)
 tsi ui
 
-# Remove a package
+# Remove a package (refuses if something else depends on it; --force overrides)
 tsi uninstall curl
+
+# Machine-readable installed set for scripts and CI
+tsi list --json | jq -r '.[].name'
 ```
+
+Human-facing output goes to stderr; `--json` output goes to stdout, so redirecting gives
+you clean JSON.
 
 ## Requirements
 
@@ -187,6 +193,7 @@ Complete documentation is available at [https://pantersoft.github.io/TheSourceIn
 - [User Guide](https://pantersoft.github.io/TheSourceInstaller/user-guide/package-management/)
 - [Package Format](https://pantersoft.github.io/TheSourceInstaller/user-guide/package-format/)
 - [Developer Guide](https://pantersoft.github.io/TheSourceInstaller/developer-guide/architecture/)
+- [Testing Guide](https://pantersoft.github.io/TheSourceInstaller/developer-guide/testing/)
 
 ## Contributing
 

@@ -55,8 +55,10 @@ nav:
     - Package Format: user-guide/package-format.md
     - External Packages: user-guide/external-packages.md
     - Version Discovery: user-guide/version-discovery.md
+    - Strict Isolation: user-guide/strict-isolation.md
   - Developer Guide:
     - Architecture: developer-guide/architecture.md
+    - Testing: developer-guide/testing.md
     - OS-Specific Config: developer-guide/os-specific-config.md
     - Repository: developer-guide/repository.md
     - Maintenance: developer-guide/maintenance.md
