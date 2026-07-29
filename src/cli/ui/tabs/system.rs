@@ -98,7 +98,9 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
     let block = theme::panel(theme::panel_title("system"), true)
         .title_bottom(theme::hint_line(&[("d", "doctor")]));
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
     f.render_widget(paragraph, area);
 }
 
