@@ -203,3 +203,100 @@ fn a_held_install_lock_is_reported_not_silently_ignored() {
     let out = tsi(temp.path(), &["uninstall", "zlib"]);
     assert!(out.status.success(), "{}", combined(&out));
 }
+
+/// Writes a minimal package definition into `dir`, returning nothing.
+/// `extra` is spliced in as raw JSON fields (e.g. `"platforms": ["linux"]`).
+fn write_pkg(dir: &Path, name: &str, deps: &[&str], extra: &str) {
+    std::fs::create_dir_all(dir).unwrap();
+    let deps_json = serde_json::to_string(deps).unwrap();
+    let body = format!(
+        r#"{{
+            "name": "{name}",
+            "version": "1.0.0",
+            "description": "fixture",
+            "source": {{
+                "type": "tarball",
+                "url": "https://example.invalid/{name}-1.0.0.tar.gz"
+            }},
+            "dependencies": {deps_json},
+            "build_system": "make"{extra}
+        }}"#
+    );
+    std::fs::write(dir.join(format!("{name}.json")), body).unwrap();
+}
+
+#[test]
+fn installing_a_package_unsupported_here_fails_before_any_download() {
+    let temp = tempfile::tempdir().unwrap();
+    let defs = temp.path().join("defs");
+    write_pkg(&defs, "elsewhere", &[], r#", "platforms": ["nosuchos"]"#);
+
+    let prefix = temp.path().join("prefix");
+    let up = tsi(&prefix, &["update", "--local", defs.to_str().unwrap()]);
+    assert!(up.status.success(), "{}", combined(&up));
+
+    let out = tsi(&prefix, &["install", "elsewhere"]);
+    assert!(!out.status.success(), "{}", combined(&out));
+    assert!(
+        combined(&out).contains("Unsupported on platform"),
+        "{}",
+        combined(&out)
+    );
+    // The source URL is unresolvable on purpose: reaching the fetch at all
+    // would mean the platform gate ran too late to save a full build.
+    assert!(
+        !prefix.join("sources").exists(),
+        "nothing should have been fetched"
+    );
+}
+
+#[test]
+fn an_unsupported_dependency_blocks_the_install_that_needs_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let defs = temp.path().join("defs");
+    write_pkg(&defs, "kernelish", &[], r#", "platforms": ["nosuchos"]"#);
+    write_pkg(&defs, "dependent", &["kernelish"], "");
+
+    let prefix = temp.path().join("prefix");
+    tsi(&prefix, &["update", "--local", defs.to_str().unwrap()]);
+
+    let out = tsi(&prefix, &["install", "dependent"]);
+    assert!(!out.status.success(), "{}", combined(&out));
+    // Names the dependency, not the package that was asked for.
+    assert!(combined(&out).contains("kernelish"), "{}", combined(&out));
+}
+
+#[test]
+fn a_package_with_no_platform_restriction_is_not_blocked() {
+    let temp = tempfile::tempdir().unwrap();
+    let defs = temp.path().join("defs");
+    write_pkg(&defs, "portable", &[], "");
+
+    let prefix = temp.path().join("prefix");
+    tsi(&prefix, &["update", "--local", defs.to_str().unwrap()]);
+
+    // The install still fails -- the URL is unresolvable -- but it must get
+    // past the platform gate to a fetch error, not stop at "Unsupported".
+    let out = tsi(&prefix, &["install", "portable"]);
+    assert!(
+        !combined(&out).contains("Unsupported on platform"),
+        "{}",
+        combined(&out)
+    );
+}
+
+#[test]
+fn update_local_pointed_at_its_own_packages_dir_does_not_empty_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let prefix = temp.path().to_path_buf();
+    let packages = prefix.join("packages");
+    write_pkg(&packages, "zlib", &[], "");
+    let before = std::fs::read_to_string(packages.join("zlib.json")).unwrap();
+    assert!(!before.is_empty());
+
+    let out = tsi(&prefix, &["update", "--local", packages.to_str().unwrap()]);
+    assert!(!out.status.success(), "{}", combined(&out));
+
+    let after = std::fs::read_to_string(packages.join("zlib.json")).unwrap();
+    assert_eq!(after, before, "the registry must survive the refusal");
+}

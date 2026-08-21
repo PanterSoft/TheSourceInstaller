@@ -102,9 +102,29 @@ A package that genuinely cannot build somewhere declares it with `platforms` (se
 [OS-specific configuration](os-specific-config.md#restricting-a-package-to-some-platforms))
 instead of quietly failing there.
 
-In the tsi-packages repository, `test-build-packages.yml` builds every changed package on
-Linux-x86_64, Linux-aarch64 and macOS-aarch64, and `validate-all-packages.yml` rebuilds the
-whole catalogue weekly on all three and regenerates `PACKAGES_STATUS.md` from the results.
+Nothing here has to be run locally to be trusted — every check below runs in CI. The local
+runner exists so you get the answer in minutes instead of after a push.
+
+**In this repository**
+
+| Workflow | When | What it proves |
+|---|---|---|
+| `test.yml` | push / PR | `cargo build`, `test`, `clippy -D warnings`, `fmt --check` on ubuntu x86_64 and arm64, macOS, and Windows x86_64 and arm64; shellcheck over `tsi-bootstrap.sh` and `docker/*.sh` |
+| `docker-tests.yml` | push / PR | a real source build of bzip2 inside bare Alpine/Debian/Ubuntu/Fedora containers on amd64 and arm64, plus a zero-dependency proof that the static binary works with no toolchain at all |
+
+**In tsi-packages**
+
+| Workflow | When | What it proves |
+|---|---|---|
+| `package-validation.yml` | push / PR | catalogue schema and invariants, version ordering, the scripts' self-checks, shellcheck, and that changed packages' sources are pinned and reachable |
+| `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64 and macOS-aarch64 |
+| `verify-sources.yml` | daily | every package's default source still downloads and matches its recorded sha256 |
+| `validate-all-packages.yml` | weekly + manual | the whole catalogue on all three platforms, regenerating `PACKAGES_STATUS.md` |
+
+The behaviour that a full-catalogue run would otherwise be the only witness to is pinned by
+ordinary tests instead, so it is checked on every commit rather than every week: the
+archive-cache keying (`src/ops/fetch.rs`), `make_args` expansion (`src/ops/build.rs`), and
+the platform gate and `update --local` self-copy guard (`tests/cli_scenarios.rs`).
 
 ## CI
 
