@@ -73,9 +73,7 @@ for platform in "${PLATFORM_LIST[@]}"; do
       tsi update --local /src/tsi-packages/packages
 
       if [ "$TSI_VALIDATE_ALL" = "true" ]; then
-        cd /src/tsi-packages
-        # Keep the tree read-only from the container: build into a temp copy of
-        # the scripts dir so .build-logs lands somewhere writable.
+        # Work from a copy so .build-logs never lands in the mounted tree.
         cp -r /src/tsi-packages /tmp/pkgs
         cd /tmp/pkgs
         bash scripts/build-all-packages.sh --exclude-slow || true

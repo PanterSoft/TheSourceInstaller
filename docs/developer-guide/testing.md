@@ -81,6 +81,31 @@ That matrix (Alpine/Ubuntu, minimal and no-tools images, x86_64 and arm64) is wh
 toolchain-dependent behavior is verified. Keep it for things that genuinely need a
 compiler; everything else should be a `cargo test`.
 
+## Cross-architecture package validation
+
+"It builds on my machine" is not a package passing. A package definition must install on
+every architecture it claims to support, so validate it on more than the host you wrote it
+on:
+
+```bash
+make validate PKGS="zlib bzip2"   # linux/arm64 + linux/amd64
+make validate                     # the whole catalogue (hours)
+./docker/validate-packages.sh --platform linux/amd64 rsync
+```
+
+The script builds `tsi` inside a container per platform and runs `tsi install` for each
+package. On an Apple Silicon host `linux/amd64` runs under emulation — correct, just slow.
+Results land in `.validate-logs/<arch>/results.tsv` in the same format CI produces, and
+failing build logs stay next to them.
+
+A package that genuinely cannot build somewhere declares it with `platforms` (see
+[OS-specific configuration](os-specific-config.md#restricting-a-package-to-some-platforms))
+instead of quietly failing there.
+
+In the tsi-packages repository, `test-build-packages.yml` builds every changed package on
+Linux-x86_64, Linux-aarch64 and macOS-aarch64, and `validate-all-packages.yml` rebuilds the
+whole catalogue weekly on all three and regenerates `PACKAGES_STATUS.md` from the results.
+
 ## CI
 
 `rust-ci.yml` runs fmt, clippy and the test suite on push and PR; `docker-tests.yml` runs

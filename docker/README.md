@@ -117,6 +117,17 @@ docker compose run --rm alpine-c-only /bin/sh
 - **`run-tests.sh`** (bash) -- local convenience runner; may use bash
   features (unlike the scripts above, which run *inside* containers and
   must stay POSIX sh).
+- **`validate-packages.sh`** (bash) -- cross-architecture package
+  validation. Builds tsi inside a container per platform and runs
+  `tsi install` for the named packages (or `--all`) on `linux/arm64` and
+  `linux/amd64`, so a package definition is proven on both before it is
+  pushed. Writes `.validate-logs/<arch>/results.tsv` in the format
+  `tsi-packages/scripts/merge-status.py` consumes, plus a log per failed
+  build. Also reachable as `make validate PKGS="zlib bzip2"`.
+
+  On an Apple Silicon host `linux/amd64` runs under emulation: correct,
+  just slow. Named docker volumes cache the cargo target dir and the tsi
+  prefix per architecture, so only the first run pays for compiling tsi.
 
 ## Container / Compose Details
 
