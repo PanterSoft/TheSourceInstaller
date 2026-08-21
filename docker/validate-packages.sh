@@ -11,6 +11,10 @@
 # Results go to .validate-logs/<platform>/results.tsv, in the same format
 # tsi-packages/scripts/merge-status.py consumes, so a local run and a CI run
 # produce the same table.
+#
+# Disk: a full-catalogue run needs tens of gigabytes for source trees and build
+# artifacts, per architecture, inside the named docker volumes. Check free space
+# before --all, and `docker volume rm tsi-prefix-<arch> tsi-target-<arch>` after.
 
 set -euo pipefail
 
