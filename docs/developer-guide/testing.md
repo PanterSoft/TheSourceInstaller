@@ -118,7 +118,7 @@ runner exists so you get the answer in minutes instead of after a push.
 |---|---|---|
 | `package-validation.yml` | push / PR | catalogue schema and invariants, version ordering, the scripts' self-checks, shellcheck, and that changed packages' sources are pinned and reachable |
 | `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64 and macOS-aarch64 |
-| `verify-sources.yml` | daily | every package's default source still downloads and matches its recorded sha256 |
+| `verify-sources.yml` | weekly | every package's default source still downloads and matches its recorded sha256 |
 | `validate-all-packages.yml` | weekly + manual | the whole catalogue on all three platforms, regenerating `PACKAGES_STATUS.md` |
 
 The behaviour that a full-catalogue run would otherwise be the only witness to is pinned by
