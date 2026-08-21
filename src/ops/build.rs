@@ -41,6 +41,8 @@ pub fn build(
         run_cmd(&mut cmd, env_ref, &step_name, verbose)?;
     }
 
+    check_build_system_present(pkg, source_dir)?;
+
     let install_path = install_dir.to_string_lossy();
 
     match pkg.build_system.as_str() {
@@ -91,6 +93,72 @@ pub fn build(
         _ => anyhow::bail!("Unknown build system: {}", pkg.build_system),
     }
     Ok(())
+}
+
+/// The file each build system needs to find in the source tree, and what a
+/// project that ships it instead usually means.
+const BUILD_SYSTEM_MARKERS: &[(&str, &[&str])] = &[
+    ("cmake", &["CMakeLists.txt"]),
+    ("meson", &["meson.build"]),
+    ("autotools", &["configure"]),
+    ("make", &["Makefile", "makefile", "GNUmakefile"]),
+];
+
+/// Files that identify a build system a package did *not* declare, so the error
+/// can name the likely correct one instead of only saying what is missing.
+const FOREIGN_MARKERS: &[(&str, &str)] = &[
+    ("CMakeLists.txt", "cmake"),
+    ("meson.build", "meson"),
+    ("configure", "autotools"),
+    ("configure.ac", "autotools (run its autogen.sh first)"),
+    ("SConstruct", "SCons, which TSI has no build system for"),
+    ("BUILD.bazel", "Bazel, which TSI has no build system for"),
+    (
+        "setup.py",
+        "Python packaging, best driven from build_commands",
+    ),
+];
+
+/// Fails early when the declared build system is not actually in the source tree.
+///
+/// Without this the build system's own error surfaces instead, which describes
+/// a missing file rather than a wrong package definition -- mongodb declared
+/// `cmake` while shipping only a `SConstruct`, and said so as a CMake usage
+/// error a hundred lines into the output.
+fn check_build_system_present(pkg: &Package, source_dir: &Path) -> Result<()> {
+    let Some((_, markers)) = BUILD_SYSTEM_MARKERS
+        .iter()
+        .find(|(name, _)| *name == pkg.build_system)
+    else {
+        // "custom" (and anything unknown, which the dispatch below rejects)
+        // has no marker to look for.
+        return Ok(());
+    };
+
+    if markers.iter().any(|m| source_dir.join(m).exists()) {
+        return Ok(());
+    }
+
+    let found: Vec<String> = FOREIGN_MARKERS
+        .iter()
+        .filter(|(file, _)| source_dir.join(file).exists())
+        .map(|(file, system)| format!("{} ({})", file, system))
+        .collect();
+
+    let hint = if found.is_empty() {
+        String::new()
+    } else {
+        format!(" The source tree does contain: {}.", found.join(", "))
+    };
+
+    anyhow::bail!(
+        "{} declares build_system \"{}\", but none of {:?} exists in {}.{}",
+        pkg.name,
+        pkg.build_system,
+        markers,
+        source_dir.display(),
+        hint
+    );
 }
 
 fn expand_build_vars(value: &str, install_prefix: &str) -> String {
@@ -737,6 +805,89 @@ fn build_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tmpdir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tsi-bs-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn pkg_with_build_system(system: &str) -> Package {
+        let json = format!(
+            r#"{{
+                "name": "p",
+                "version": "1",
+                "source": {{ "type": "tarball", "url": "https://example.com/x.tar.gz" }},
+                "build_system": "{}"
+            }}"#,
+            system
+        );
+        crate::core::package::parse_package_file(&json)
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn a_present_build_system_passes() {
+        for (system, marker) in [
+            ("cmake", "CMakeLists.txt"),
+            ("meson", "meson.build"),
+            ("autotools", "configure"),
+            ("make", "Makefile"),
+        ] {
+            let dir = tmpdir(system);
+            std::fs::write(dir.join(marker), "").unwrap();
+            check_build_system_present(&pkg_with_build_system(system), &dir)
+                .unwrap_or_else(|e| panic!("{system}: {e}"));
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[test]
+    fn a_missing_build_system_is_reported_with_the_one_actually_shipped() {
+        // mongodb's real shape: declared cmake, ships only SConstruct.
+        let dir = tmpdir("scons");
+        std::fs::write(dir.join("SConstruct"), "").unwrap();
+
+        let err = check_build_system_present(&pkg_with_build_system("cmake"), &dir)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("CMakeLists.txt"), "{err}");
+        assert!(err.contains("SConstruct"), "{err}");
+        assert!(err.contains("SCons"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bare_source_tree_still_says_what_was_expected() {
+        let dir = tmpdir("bare");
+        let err = check_build_system_present(&pkg_with_build_system("meson"), &dir)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("meson.build"), "{err}");
+        // Nothing to suggest, so no misleading "does contain" clause.
+        assert!(!err.contains("does contain"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn custom_builds_are_not_second_guessed() {
+        let dir = tmpdir("custom");
+        check_build_system_present(&pkg_with_build_system("custom"), &dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn any_make_variant_filename_counts() {
+        for name in ["Makefile", "makefile", "GNUmakefile"] {
+            let dir = tmpdir(&format!("mk-{name}"));
+            std::fs::write(dir.join(name), "").unwrap();
+            check_build_system_present(&pkg_with_build_system("make"), &dir).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
     use crate::core::package::parse_package_file;
 
     fn pkg_with_make_args(args: &str) -> Package {
