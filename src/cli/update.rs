@@ -7,6 +7,16 @@ use std::path::{Path, PathBuf};
 const DEFAULT_REPO: &str = "https://github.com/PanterSoft/tsi-packages.git";
 
 fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
+    // std::fs::copy truncates the destination before reading the source, so
+    // copying a directory onto itself empties every package file in it. Refuse
+    // instead: `tsi update --local ~/.tsi/packages` used to wipe the registry.
+    if same_dir(from_dir, packages_dir) {
+        anyhow::bail!(
+            "Source and destination are the same directory ({}); \
+             nothing to copy, and copying would empty the package files.",
+            packages_dir.display()
+        );
+    }
     for entry in std::fs::read_dir(from_dir).context("Read package source dir")? {
         let entry = entry?;
         let path = entry.path();
@@ -16,6 +26,15 @@ fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Whether two paths name the same directory, following symlinks and `..`.
+/// Falls back to a plain comparison when either path cannot be canonicalized.
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
 }
 
 /// Returns true if a `git` binary is available on this system.
@@ -171,7 +190,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::github_tarball_url;
+    use super::{copy_package_jsons, github_tarball_url};
 
     #[test]
     fn github_tarball_url_derivation() {
@@ -215,5 +234,32 @@ mod tests {
             github_tarball_url("https://github.com/owner/repo/tree/main"),
             None
         );
+    }
+    #[test]
+    fn copying_a_directory_onto_itself_is_refused_and_leaves_files_intact() {
+        let dir = std::env::temp_dir().join(format!("tsi-selfcopy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pkg = dir.join("zlib.json");
+        std::fs::write(&pkg, r#"{"name":"zlib"}"#).unwrap();
+
+        let err = copy_package_jsons(&dir, &dir).unwrap_err();
+        assert!(
+            err.to_string().contains("same directory"),
+            "unexpected error: {err}"
+        );
+        // The whole point: fs::copy would have truncated this to zero bytes.
+        assert_eq!(std::fs::read_to_string(&pkg).unwrap(), r#"{"name":"zlib"}"#);
+
+        // A genuinely different directory still copies.
+        let other = dir.join("out");
+        std::fs::create_dir_all(&other).unwrap();
+        copy_package_jsons(&dir, &other).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(other.join("zlib.json")).unwrap(),
+            r#"{"name":"zlib"}"#
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -48,6 +48,18 @@ pub fn run(args: InstallArgs) -> Result<()> {
             continue;
         }
 
+        // Fail before fetching anything: a platform-restricted package (or dep)
+        // would otherwise burn a full source build before erroring out.
+        if let Some(bad) = order.iter().find(|p| !p.supports_host()) {
+            anyhow::bail!(
+                "Unsupported on platform '{}-{}': {} (supported: {})",
+                crate::platform::os_name(),
+                crate::platform::arch_name(),
+                bad.name,
+                bad.platforms.join(", ")
+            );
+        }
+
         ui::output::section(format!("Resolving dependencies for {}...", spec));
         ui::output::section(format!(
             "Installing {} packages: {}",

@@ -636,6 +636,23 @@ fn build_meson(
     Ok(())
 }
 
+/// `make` command-line arguments for a package: its own `make_args` with build
+/// variables expanded, plus TSI's own `PREFIX=`.
+///
+/// The expansion is not optional. Passed through raw, `make` treats the leading
+/// `$T` of `$TSI_INSTALL_DIR` as an (empty) make variable and the argument
+/// silently becomes `prefix=SI_INSTALL_DIR` -- which is how libcap's install
+/// step ended up writing man pages to a relative junk path.
+fn make_args_with_prefix(pkg: &Package, prefix: &str) -> Vec<String> {
+    let mut args: Vec<String> = pkg
+        .make_args
+        .iter()
+        .map(|a| expand_build_vars(a, prefix))
+        .collect();
+    args.push(format!("PREFIX={}", prefix));
+    args
+}
+
 fn build_make(
     pkg: &Package,
     source_dir: &Path,
@@ -649,8 +666,7 @@ fn build_make(
     let env_ref: &[(String, String)] = &env;
 
     let prefix = install_dir.to_string_lossy();
-    let mut make_args = pkg.make_args.clone();
-    make_args.push(format!("PREFIX={}", prefix));
+    let mut make_args = make_args_with_prefix(pkg, prefix.as_ref());
 
     // Promote AR and RANLIB from the build environment into make command-line arguments.
     // Make's file-level variable assignments (e.g. `AR=ar` in bzip2's Makefile) take
@@ -669,7 +685,8 @@ fn build_make(
     run_cmd(
         Command::new("make")
             .args(&make_args)
-            .current_dir(source_dir),
+            .current_dir(source_dir)
+            .env("TSI_INSTALL_DIR", prefix.as_ref()),
         env_ref,
         "make",
         verbose,
@@ -678,7 +695,8 @@ fn build_make(
         Command::new("make")
             .args(["install"])
             .args(&make_args)
-            .current_dir(source_dir),
+            .current_dir(source_dir)
+            .env("TSI_INSTALL_DIR", prefix.as_ref()),
         env_ref,
         "make install",
         verbose,
@@ -714,4 +732,47 @@ fn build_custom(
         run_cmd(&mut cmd, env_ref, &step_name, verbose)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::package::parse_package_file;
+
+    fn pkg_with_make_args(args: &str) -> Package {
+        let json = format!(
+            r#"{{
+                "name": "p",
+                "version": "1",
+                "source": {{ "type": "tarball", "url": "https://example.com/x.tar.gz" }},
+                "build_system": "make",
+                "make_args": {}
+            }}"#,
+            args
+        );
+        parse_package_file(&json).unwrap().remove(0)
+    }
+
+    #[test]
+    fn make_args_expand_install_dir_before_make_sees_them() {
+        let pkg = pkg_with_make_args(r#"["prefix=$TSI_INSTALL_DIR", "lib=lib"]"#);
+        let args = make_args_with_prefix(&pkg, "/opt/tsi/install/libcap-2.70");
+        assert_eq!(
+            args,
+            vec![
+                "prefix=/opt/tsi/install/libcap-2.70",
+                "lib=lib",
+                "PREFIX=/opt/tsi/install/libcap-2.70",
+            ]
+        );
+        // Nothing may reach make still holding the literal variable: make would
+        // eat `$T` and leave "SI_INSTALL_DIR".
+        assert!(!args.iter().any(|a| a.contains("$TSI_INSTALL_DIR")));
+    }
+
+    #[test]
+    fn make_args_always_get_tsi_prefix_appended() {
+        let args = make_args_with_prefix(&pkg_with_make_args("[]"), "/p");
+        assert_eq!(args, vec!["PREFIX=/p"]);
+    }
 }

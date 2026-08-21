@@ -50,3 +50,5 @@ site/
 *.bak
 Cargo.lock
 graphify-out/*
+.validate-logs/
+

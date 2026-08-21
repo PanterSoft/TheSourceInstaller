@@ -3,7 +3,7 @@
 PREFIX ?= $(HOME)/.tsi
 export PATH := $(HOME)/.cargo/bin:$(PATH)
 
-.PHONY: help test check build clean install uninstall lint fmt deps dev run dev-packages
+.PHONY: help test check build clean install uninstall lint fmt deps dev run dev-packages validate
 
 help:
 	@echo "TSI Makefile"
@@ -16,6 +16,7 @@ help:
 	@echo "  run           - Run TSI (development)"
 	@echo "  test          - Run tests"
 	@echo "  check         - Everything CI checks: fmt + clippy + tests"
+	@echo "  validate      - Install packages in Linux containers on every arch (PKGS=\"a b\", or all)"
 	@echo "  lint          - Run clippy"
 	@echo "  fmt           - Check code formatting"
 	@echo "  clean         - Clean build artifacts"
@@ -26,6 +27,7 @@ help:
 	@echo "  make deps     # First-time: install Rust, fetch crates"
 	@echo "  make dev      # Development build"
 	@echo "  make dev-packages   # After git submodule update --init tsi-packages"
+	@echo "  make validate PKGS=\"zlib bzip2\"   # verify on linux/arm64 + linux/amd64"
 	@echo "  make install PREFIX=/opt/tsi"
 	@echo "  make uninstall PREFIX=/opt/tsi"
 
@@ -61,6 +63,12 @@ test:
 
 # Same gates as .github/workflows/rust-ci.yml — run this before pushing.
 check: fmt lint test
+
+# Cross-architecture package validation (needs docker). PKGS defaults to the
+# whole catalogue, which takes hours — name packages while iterating.
+PKGS ?= --all
+validate:
+	./docker/validate-packages.sh $(PKGS)
 
 lint:
 	@echo "Running clippy..."

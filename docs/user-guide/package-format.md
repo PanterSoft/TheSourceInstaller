@@ -228,6 +228,8 @@ Dependencies can be:
 - `env`: Environment variables
 - `patches`: Array of patch file URLs or paths
 - `build_commands`: Custom build commands (for custom build system)
+- `source_dir`: Subdirectory of the fetched tree that holds the build root
+- `platforms`: Platforms this version can build on, e.g. `["linux"]` or `["linux-aarch64", "darwin"]`. Omit it (the default) for portable packages; see [OS-specific configuration](../developer-guide/os-specific-config.md#restricting-a-package-to-some-platforms).
 
 ## Example Package Definitions
 
