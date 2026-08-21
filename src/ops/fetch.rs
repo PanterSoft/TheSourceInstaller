@@ -22,6 +22,36 @@ pub fn fetch(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
     }
 }
 
+/// Filename to cache a package's archive under, inside the shared sources dir.
+///
+/// Keyed on the package, not on the URL's basename. GitHub tag archives are all
+/// called `v1.1.0.tar.gz`, so a basename-keyed cache hands the second package
+/// with that tag the *first* package's source tree and builds it silently --
+/// brotli 1.1.0's tree was compiled as capnproto 1.1.0 this way.
+fn cached_archive_name(name: &str, version: &str, url: &str) -> String {
+    let basename = url.rsplit('/').next().unwrap_or("");
+    // Keep the extension: extract_archive dispatches on it (with a magic-byte
+    // fallback), and a human looking in sources/ should still recognise the file.
+    let ext = [".tar.gz", ".tar.xz", ".tar.bz2", ".tar.zst", ".tar.Z"]
+        .into_iter()
+        .find(|e| {
+            basename
+                .to_ascii_lowercase()
+                .ends_with(&e.to_ascii_lowercase())
+        })
+        .map(str::to_string)
+        .or_else(|| {
+            basename
+                .rsplit_once('.')
+                .filter(|(stem, e)| !stem.is_empty() && !e.is_empty() && e.len() <= 5)
+                .map(|(_, e)| format!(".{}", e))
+        })
+        // Never empty: the extracted tree is `sources/<name>-<version>`, so an
+        // extensionless archive name would collide with the directory itself.
+        .unwrap_or_else(|| ".archive".to_string());
+    format!("{}-{}{}", name, version, ext)
+}
+
 fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::PathBuf> {
     let url = pkg
         .source
@@ -31,8 +61,7 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
 
     std::fs::create_dir_all(dest_dir).context("Failed to create dest dir")?;
 
-    let filename = url.rsplit('/').next().unwrap_or("archive").to_string();
-    let archive_path = dest_dir.join(&filename);
+    let archive_path = dest_dir.join(cached_archive_name(&pkg.name, &pkg.version, url));
 
     if !archive_path.exists() || force {
         download_file_with_retry(url, &archive_path)?;
@@ -396,6 +425,42 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::cached_archive_name;
+
+    #[test]
+    fn same_tag_filename_from_two_projects_does_not_share_a_cache_entry() {
+        let brotli = cached_archive_name(
+            "brotli",
+            "1.1.0",
+            "https://github.com/google/brotli/archive/refs/tags/v1.1.0.tar.gz",
+        );
+        let capnproto = cached_archive_name(
+            "capnproto",
+            "1.1.0",
+            "https://github.com/capnproto/capnproto/archive/refs/tags/v1.1.0.tar.gz",
+        );
+        assert_eq!(brotli, "brotli-1.1.0.tar.gz");
+        assert_eq!(capnproto, "capnproto-1.1.0.tar.gz");
+        assert_ne!(brotli, capnproto);
+    }
+
+    #[test]
+    fn archive_extension_survives_renaming() {
+        for (url, want) in [
+            ("https://example.com/p-1.tar.gz", "p-1.tar.gz"),
+            ("https://example.com/p-1.tar.xz", "p-1.tar.xz"),
+            ("https://example.com/p-1.tar.bz2", "p-1.tar.bz2"),
+            ("https://example.com/p-1.tgz", "p-1.tgz"),
+            ("https://example.com/p-1.zip", "p-1.zip"),
+            // No usable extension: must still not collide with the extracted
+            // tree, which is `sources/p-1`.
+            ("https://example.com/download", "p-1.archive"),
+            ("https://example.com/", "p-1.archive"),
+        ] {
+            assert_eq!(cached_archive_name("p", "1", url), want, "url: {}", url);
+        }
+    }
+
     use super::*;
 
     /// Builds a `.tar` of `files` and wraps it with `compress`.
