@@ -71,6 +71,10 @@ pub struct PackageVersion {
     /// Subdirectory within the fetched source tree where the build root lives (e.g. "avro-c-1.11.3" when the tarball extracts with that top-level dir and we store as {name}-{version}).
     #[serde(default)]
     pub source_dir: Option<String>,
+    /// Platforms this version can build on. Entries are `os` ("linux", "darwin",
+    /// "windows") or `os-arch` ("linux-aarch64"). Empty means "every platform".
+    #[serde(default)]
+    pub platforms: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -110,6 +114,7 @@ pub struct Package {
     pub env: HashMap<String, String>,
     pub patches: Vec<String>,
     pub source_dir: Option<String>,
+    pub platforms: Vec<String>,
 }
 
 impl Package {
@@ -133,12 +138,31 @@ impl Package {
             env,
             patches: v.patches.clone(),
             source_dir: v.source_dir.clone(),
+            platforms: v.platforms.clone(),
         }
+    }
+
+    /// True when this package declares no platform restriction, or declares one
+    /// that matches the host. Entries match either the bare OS ("linux") or the
+    /// full `os-arch` pair ("linux-aarch64").
+    pub fn supports_host(&self) -> bool {
+        supports(
+            &self.platforms,
+            crate::platform::os_name(),
+            crate::platform::arch_name(),
+        )
     }
 
     pub fn spec(&self) -> String {
         format!("{}@{}", self.name, self.version)
     }
+}
+
+fn supports(platforms: &[String], os: &str, arch: &str) -> bool {
+    platforms.is_empty()
+        || platforms
+            .iter()
+            .any(|p| p == os || *p == format!("{}-{}", os, arch))
 }
 
 fn merge_env_for_os(v: &PackageVersion) -> HashMap<String, String> {

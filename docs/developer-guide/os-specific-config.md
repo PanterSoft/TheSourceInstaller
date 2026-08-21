@@ -26,6 +26,25 @@ These keys are **implemented** for the three primary families:
 
 Not implemented in JSON today: OS-specific `make_args_*`, `build_system_*`, or OS-specific dependencies.
 
+## Restricting a package to some platforms
+
+Some packages cannot build everywhere at all — `libcap`, `libseccomp`, and `liburing` wrap Linux kernel APIs with no macOS equivalent. Declare that with `platforms`:
+
+```json
+{
+  "name": "liburing",
+  "version": "2.13",
+  "platforms": ["linux"]
+}
+```
+
+- Entries are either a bare OS name (`linux`, `darwin`, `windows`) or an `os-arch` pair (`linux-aarch64`, `darwin-x86_64`).
+- An **absent or empty** `platforms` means "every platform" — the default, and what almost every package should use.
+- `tsi install` refuses **before fetching anything** when the requested package or any of its dependencies is unsupported here, so an unbuildable package never burns a source build first.
+- CI and `scripts/build-all-packages.sh` read this field to decide whether a package is legitimately skipped (`—` in the status table) or genuinely broken (`❌`).
+
+Use it only for packages that are impossible on a platform, not for ones that are merely untested or currently failing — a `platforms` entry silences the validation matrix, which is exactly what you do not want for a fixable build.
+
 ## Examples
 
 ### Environment (key merge)

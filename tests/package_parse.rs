@@ -47,3 +47,40 @@ fn test_parse_all_packages() {
         "Should have parsed at least one package"
     );
 }
+
+#[test]
+fn test_platforms_absent_means_every_host() {
+    let json = r#"{
+        "name": "p",
+        "version": "1",
+        "source": { "type": "tarball", "url": "https://example.com/x.tar.gz" }
+    }"#;
+    let pkg = &parse_package_file(json).unwrap()[0];
+    assert!(pkg.platforms.is_empty());
+    assert!(pkg.supports_host());
+}
+
+#[test]
+fn test_platforms_matches_bare_os_and_os_arch() {
+    let host_os = tsi::platform::os_name();
+    let host_arch = tsi::platform::arch_name();
+
+    let mk = |platforms: &str| {
+        let json = format!(
+            r#"{{
+                "name": "p",
+                "version": "1",
+                "source": {{ "type": "tarball", "url": "https://example.com/x.tar.gz" }},
+                "platforms": {}
+            }}"#,
+            platforms
+        );
+        parse_package_file(&json).unwrap().remove(0)
+    };
+
+    assert!(mk(&format!(r#"["{}"]"#, host_os)).supports_host());
+    assert!(mk(&format!(r#"["{}-{}"]"#, host_os, host_arch)).supports_host());
+    // Right OS, wrong arch: os-arch entries must not match on OS alone.
+    assert!(!mk(&format!(r#"["{}-nosucharch"]"#, host_os)).supports_host());
+    assert!(!mk(r#"["nosuchos"]"#).supports_host());
+}
