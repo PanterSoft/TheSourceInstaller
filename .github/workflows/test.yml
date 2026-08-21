@@ -9,7 +9,8 @@ on:
       - 'tests/**'
       - '*.sh'
       - 'docker/**'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
   pull_request:
     branches: [ main, dev ]
     paths:
@@ -18,7 +19,8 @@ on:
       - 'tests/**'
       - '*.sh'
       - 'docker/**'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
   workflow_dispatch:
 
 permissions:
@@ -34,6 +36,24 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest, windows-11-arm]
+
+  # A workflow that only parses as YAML can still be broken: an unknown context,
+  # a typo'd `needs`, a job referencing an output that does not exist. actionlint
+  # catches those before a push, and shellchecks the `run:` blocks too -- which
+  # nothing else did.
+  workflows:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.0.1
+      - name: Install actionlint
+        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+      - name: Lint workflows
+        # -S warning matches the severity the shell job uses, so the two agree
+        # on what counts as a problem.
+        env:
+          SHELLCHECK_OPTS: -S warning
+        run: ./actionlint -color
 
   # The bootstrap script is how most users first get TSI, so a syntax or quoting
   # slip there is a broken install, not a broken build.

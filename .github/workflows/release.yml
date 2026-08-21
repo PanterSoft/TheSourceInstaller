@@ -146,14 +146,20 @@ jobs:
       - name: Prepare artifact
         shell: bash
         run: |
-          if [[ "${{ matrix.platform }}" == windows* ]]; then
+          # Bind the matrix values to shell variables before testing them:
+          # interpolating an expression straight into a comparison hides the
+          # comparison from static analysis (and is the wrong habit for any
+          # value that is not a fixed matrix entry).
+          PLATFORM='${{ matrix.platform }}'
+          TARGET='${{ matrix.target }}'
+          if [[ "$PLATFORM" == windows* ]]; then
             SRC="target/release/tsi.exe"
-          elif [ -n "${{ matrix.target }}" ]; then
-            SRC="target/${{ matrix.target }}/release/tsi"
+          elif [ -n "$TARGET" ]; then
+            SRC="target/$TARGET/release/tsi"
           else
             SRC="target/release/tsi"
           fi
-          cp "$SRC" tsi-${{ matrix.platform }}
+          cp "$SRC" "tsi-$PLATFORM"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6.0.0

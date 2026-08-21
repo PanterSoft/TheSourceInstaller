@@ -1,0 +1,6 @@
+# actionlint's built-in runner-label list lags GitHub's actual offering.
+# windows-11-arm is a real GitHub-hosted runner (Windows on Arm); without this
+# it is reported as an unknown label on every run.
+self-hosted-runner:
+  labels:
+    - windows-11-arm
