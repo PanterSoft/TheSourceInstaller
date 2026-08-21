@@ -143,6 +143,27 @@ tsi install curl --prefix /opt/tsi
 # Environment variables are adjusted automatically
 ```
 
+## Build Parallelism
+
+TSI builds with one job per CPU by default (`make -j<cpus>` for autotools,
+`cmake --build --parallel` for CMake; Meson is parallel on its own). Set
+`TSI_JOBS` to change that:
+
+```bash
+TSI_JOBS=4 tsi install curl    # cap at four jobs
+TSI_JOBS=1 tsi install curl    # serial
+```
+
+Reach for `TSI_JOBS=1` when a build fails and you need to read the error: a
+parallel build interleaves output from every job, and the failing command's
+message is rarely the last thing printed. It is also worth trying when a package
+fails only sometimes — a Makefile with missing dependencies can build at `-j1`
+and race at `-j8`.
+
+Packages using the raw `make` build system are built serially regardless;
+hand-written Makefiles too often lack the dependency information `-j` needs. A
+package that is known to be safe can request it in `make_args`.
+
 ## Package Database
 
 TSI maintains a database of installed packages at `~/.tsi/db/`. This tracks:
