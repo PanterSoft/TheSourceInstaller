@@ -525,10 +525,13 @@ fn build_autotools(
         verbose,
     )?;
 
+    let jobs = build_jobs().to_string();
     run_cmd(
-        Command::new("make").current_dir(source_dir),
+        Command::new("make")
+            .arg(format!("-j{}", jobs))
+            .current_dir(source_dir),
         env_ref,
-        "make",
+        &format!("make -j{}", jobs),
         verbose,
     )?;
     run_cmd(
@@ -540,6 +543,25 @@ fn build_autotools(
         verbose,
     )?;
     Ok(())
+}
+
+/// How many build jobs to run at once.
+///
+/// `TSI_JOBS` overrides it; `TSI_JOBS=1` forces a serial build, which is the
+/// first thing to try when a parallel build fails or its output is interleaved
+/// beyond reading. Anything unparseable or zero falls back to the CPU count.
+fn build_jobs() -> usize {
+    if let Ok(v) = std::env::var("TSI_JOBS") {
+        if let Ok(n) = v.trim().parse::<usize>() {
+            if n > 0 {
+                return n;
+            }
+        }
+        log::warn!("Ignoring invalid TSI_JOBS={:?}", v);
+    }
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
 }
 
 /// The default `CPPFLAGS` TSI hands every build.
@@ -618,7 +640,12 @@ fn build_cmake(
         verbose,
     )?;
     run_cmd(
-        Command::new("cmake").args(["--build", build_dir.to_string_lossy().as_ref()]),
+        Command::new("cmake").args([
+            "--build",
+            build_dir.to_string_lossy().as_ref(),
+            "--parallel",
+            &build_jobs().to_string(),
+        ]),
         env_ref,
         "cmake --build",
         verbose,
@@ -776,6 +803,36 @@ fn build_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `TSI_JOBS` is process-global, so these assertions share one test rather
+    /// than racing each other across threads.
+    #[test]
+    fn tsi_jobs_overrides_the_cpu_count_and_rejects_nonsense() {
+        let restore = std::env::var("TSI_JOBS").ok();
+
+        std::env::set_var("TSI_JOBS", "3");
+        assert_eq!(build_jobs(), 3);
+
+        // Forcing serial is the documented way to debug a parallel build.
+        std::env::set_var("TSI_JOBS", "1");
+        assert_eq!(build_jobs(), 1);
+
+        let cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        for bad in ["0", "-2", "many", ""] {
+            std::env::set_var("TSI_JOBS", bad);
+            assert_eq!(build_jobs(), cpus, "TSI_JOBS={bad:?} should fall back");
+        }
+
+        std::env::remove_var("TSI_JOBS");
+        assert_eq!(build_jobs(), cpus);
+        assert!(build_jobs() >= 1);
+
+        if let Some(v) = restore {
+            std::env::set_var("TSI_JOBS", v);
+        }
+    }
 
     #[test]
     fn the_default_prefix_include_is_demoted_only_on_macos() {
