@@ -32,6 +32,17 @@ pub fn run(args: InfoArgs) -> Result<()> {
             pkg.build_dependencies.join(", ")
         ));
     }
+    if !pkg.platforms.is_empty() {
+        ui::output::detail(format!(
+            "Platforms: {}{}",
+            pkg.platforms.join(", "),
+            if pkg.supports_host() {
+                ""
+            } else {
+                " (not this host)"
+            }
+        ));
+    }
 
     Ok(())
 }
