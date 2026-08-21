@@ -90,6 +90,9 @@ pub fn build(
             &env,
             verbose,
         )?,
+        // Handled before any of this in ops::install; reaching build() means a
+        // caller bypassed that, so say so rather than silently doing nothing.
+        "meta" => anyhow::bail!("Metapackage {} has nothing to build", pkg.name),
         _ => anyhow::bail!("Unknown build system: {}", pkg.build_system),
     }
     Ok(())
@@ -295,7 +298,7 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
             "CMAKE_PREFIX_PATH".to_string(),
             prefix.to_string_lossy().to_string(),
         ),
-        ("CPPFLAGS".to_string(), format!("-I{}", include.display())),
+        ("CPPFLAGS".to_string(), default_cppflags(&include)),
         ("LDFLAGS".to_string(), format!("-L{}", lib.display())),
     ];
 
@@ -501,8 +504,7 @@ fn build_autotools(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let env = augment_env_for_autotools(env, source_dir, deps_prefix)?;
-    let env_ref: &[(String, String)] = &env;
+    let env_ref: &[(String, String)] = env;
 
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
@@ -540,57 +542,29 @@ fn build_autotools(
     Ok(())
 }
 
-/// TSI's default `CPPFLAGS=-I$prefix/include` must not win over system/SDK headers (e.g. git's
-/// `archive.h`, prefix `uuid/uuid.h` vs Apple `uuid_string_t` for Cocoa). On macOS, demote the
-/// prefix to `-idirafter` and rely on SDKROOT for SDK headers; injecting `-isystem $SDK/usr/include`
-/// breaks C++ builds because it places C headers ahead of libc++'s wrapper headers
+/// The default `CPPFLAGS` TSI hands every build.
+///
+/// On macOS the prefix is passed with `-idirafter`, not `-I`: prefix headers
+/// must not shadow SDK ones (git's `archive.h`, prefix `uuid/uuid.h` vs Apple's
+/// `uuid_string_t` for Cocoa). Injecting `-isystem $SDK/usr/include` instead
+/// breaks C++ builds, because it puts C headers ahead of libc++'s wrappers
 /// ("<cstdlib> tried including <stdlib.h> but didn't find libc++'s <stdlib.h>").
-fn augment_env_cppflags(
-    env: &[(String, String)],
-    source_dir: &Path,
-    deps_prefix: &Path,
-) -> Result<Vec<(String, String)>> {
-    let mut out = Vec::with_capacity(env.len());
-    for (k, v) in env {
-        if k == "CPPFLAGS" {
-            out.push((
-                k.clone(),
-                augment_cppflags_for_tsi_prefix(v, source_dir, deps_prefix)?,
-            ));
-        } else {
-            out.push((k.clone(), v.clone()));
-        }
+///
+/// This is only TSI's *default*. A package that sets `CPPFLAGS` itself replaces
+/// it outright and is taken at its word, which it previously could not be:
+/// every CPPFLAGS value was rewritten to `-idirafter` on the way to the
+/// compiler, including the package's own. That mattered because `-idirafter`
+/// is unopposable -- given both `-idirafter DIR` and `-I DIR`, clang keeps the
+/// lowest-priority position for DIR *whichever order they appear in*, so a
+/// package asking for prefix headers first could never get them. PostgreSQL's
+/// psql compiled against Apple's libedit `<readline/readline.h>` while linking
+/// the prefix's GNU readline, and failed on undeclared `append_history`.
+fn default_cppflags(include: &Path) -> String {
+    if cfg!(target_os = "macos") {
+        format!("-idirafter {}", include.display())
+    } else {
+        format!("-I{}", include.display())
     }
-    Ok(out)
-}
-
-fn augment_env_for_autotools(
-    env: &[(String, String)],
-    source_dir: &Path,
-    deps_prefix: &Path,
-) -> Result<Vec<(String, String)>> {
-    augment_env_cppflags(env, source_dir, deps_prefix)
-}
-
-fn augment_cppflags_for_tsi_prefix(
-    cppflags: &str,
-    source_dir: &Path,
-    deps_prefix: &Path,
-) -> Result<String> {
-    // No -I<source_dir>: on case-insensitive filesystems it makes C++'s `#include <version>`
-    // resolve to a package's VERSION file (libtiff). Sources reference their own headers
-    // relatively or via their build system.
-    let inc = deps_prefix.join("include");
-    let inc_flag = format!("-I{}", inc.display());
-    let _ = source_dir;
-    let rest = cppflags
-        .split_whitespace()
-        .filter(|tok| *tok != inc_flag)
-        .collect::<Vec<_>>()
-        .join(" ");
-    let idir = format!("-idirafter {}", inc.display());
-    let joined = format!("{} {}", rest, idir);
-    Ok(joined.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 fn build_cmake(
@@ -602,7 +576,7 @@ fn build_cmake(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let mut env = augment_env_cppflags(env, source_dir, deps_prefix)?;
+    let mut env = env.to_vec();
     // CMake ignores CPPFLAGS; mirror it into CFLAGS/CXXFLAGS so prefix headers are found
     // (leveldb -> snappy.h, grpc -> openssl headers).
     let cpp = env
@@ -667,8 +641,7 @@ fn build_meson(
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
-    let env_ref: &[(String, String)] = &env;
+    let env_ref: &[(String, String)] = env;
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
     let mut setup_args = vec![
@@ -726,12 +699,11 @@ fn build_make(
     source_dir: &Path,
     _build_dir: &Path,
     install_dir: &Path,
-    deps_prefix: &Path,
+    _deps_prefix: &Path,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
-    let env_ref: &[(String, String)] = &env;
+    let env_ref: &[(String, String)] = env;
 
     let prefix = install_dir.to_string_lossy();
     let mut make_args = make_args_with_prefix(pkg, prefix.as_ref());
@@ -775,13 +747,12 @@ fn build_make(
 fn build_custom(
     pkg: &Package,
     source_dir: &Path,
-    deps_prefix: &Path,
+    _deps_prefix: &Path,
     install_path: &str,
     env: &[(String, String)],
     verbose: bool,
 ) -> Result<()> {
-    let env = augment_env_cppflags(env, source_dir, deps_prefix)?;
-    let env_ref: &[(String, String)] = &env;
+    let env_ref: &[(String, String)] = env;
 
     let shell = if cfg!(windows) { "cmd" } else { "sh" };
     let flag = if cfg!(windows) { "/C" } else { "-c" };
@@ -805,6 +776,44 @@ fn build_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_default_prefix_include_is_demoted_only_on_macos() {
+        let flags = default_cppflags(Path::new("/p/include"));
+        if cfg!(target_os = "macos") {
+            assert_eq!(flags, "-idirafter /p/include");
+        } else {
+            assert_eq!(flags, "-I/p/include");
+        }
+    }
+
+    #[test]
+    fn a_package_cppflags_replaces_the_default_verbatim() {
+        let json = r#"{
+            "name": "p",
+            "version": "1",
+            "source": { "type": "tarball", "url": "https://example.com/x.tar.gz" },
+            "build_system": "make",
+            "env": { "CPPFLAGS": "-I$TSI_INSTALL_DIR/include" }
+        }"#;
+        let pkg = crate::core::package::parse_package_file(json)
+            .unwrap()
+            .remove(0);
+        let env = build_env_with_package(Path::new("/p"), &pkg, false);
+
+        // Later entries win when applied to a Command, so the package's value is
+        // the effective one -- and it must reach the compiler as written. If it
+        // were rewritten to -idirafter, the package could not opt out of the
+        // demotion at all: -idirafter beats -I for the same directory in either
+        // order.
+        let effective = env
+            .iter()
+            .rfind(|(k, _)| k == "CPPFLAGS")
+            .map(|(_, v)| v.clone())
+            .unwrap();
+        assert_eq!(effective, "-I/p/include");
+        assert!(!effective.contains("-idirafter"), "{effective}");
+    }
 
     fn tmpdir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("tsi-bs-{}-{}", tag, std::process::id()));

@@ -76,11 +76,21 @@ pub fn run(args: InstallArgs) -> Result<()> {
             let bootstrap_complete = bootstrap::is_bootstrap_complete(&db);
             let isolated = config.strict_isolation && bootstrap_complete && !is_bootstrap_pkg;
 
-            ui::output::section(format!("Fetching {}-{}", pkg.name, pkg.version));
-            let url = pkg.source.url.as_deref().unwrap_or("(git)");
-            ui::output::detail(url);
+            let is_meta = pkg.build_system == "meta";
+            if is_meta {
+                // Nothing is fetched or built, so saying so beats printing
+                // "Fetching ... (git)" for a package that has no source at all.
+                ui::output::section(format!(
+                    "Recording metapackage {} {}",
+                    pkg.name, pkg.version
+                ));
+            } else {
+                ui::output::section(format!("Fetching {}-{}", pkg.name, pkg.version));
+                let url = pkg.source.url.as_deref().unwrap_or("(git)");
+                ui::output::detail(url);
 
-            ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
+                ui::output::section(format!("Building {} {}", pkg.name, pkg.version));
+            }
             ops_install::install_package(
                 pkg,
                 &prefix,
@@ -89,12 +99,14 @@ pub fn run(args: InstallArgs) -> Result<()> {
                 isolated,
                 args.verbose,
             )?;
-            ui::output::section(format!(
-                "Linking {} {} into {}",
-                pkg.name,
-                pkg.version,
-                prefix.display()
-            ));
+            if !is_meta {
+                ui::output::section(format!(
+                    "Linking {} {} into {}",
+                    pkg.name,
+                    pkg.version,
+                    prefix.display()
+                ));
+            }
             total_installed += 1;
             last_pkg = Some((pkg.name.clone(), pkg.version.clone()));
         }

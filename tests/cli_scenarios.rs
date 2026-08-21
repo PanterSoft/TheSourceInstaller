@@ -300,3 +300,54 @@ fn update_local_pointed_at_its_own_packages_dir_does_not_empty_it() {
     let after = std::fs::read_to_string(packages.join("zlib.json")).unwrap();
     assert_eq!(after, before, "the registry must survive the refusal");
 }
+
+#[test]
+fn a_metapackage_installs_its_dependencies_and_fetches_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let defs = temp.path().join("defs");
+    // A real dependency would need a real build; the point here is that the
+    // metapackage itself never reaches the fetcher.
+    std::fs::create_dir_all(&defs).unwrap();
+    std::fs::write(
+        defs.join("meta.json"),
+        r#"{
+            "name": "meta",
+            "version": "1.0",
+            "description": "metapackage",
+            "dependencies": [],
+            "build_system": "meta"
+        }"#,
+    )
+    .unwrap();
+
+    let prefix = temp.path().join("prefix");
+    let up = tsi(&prefix, &["update", "--local", defs.to_str().unwrap()]);
+    assert!(up.status.success(), "{}", combined(&up));
+
+    let out = tsi(&prefix, &["install", "meta"]);
+    assert!(out.status.success(), "{}", combined(&out));
+    // No source was declared, so nothing may have been downloaded or unpacked.
+    assert!(
+        !prefix.join("sources").exists(),
+        "a metapackage must not fetch: {}",
+        combined(&out)
+    );
+    let listed = combined(&tsi(&prefix, &["list"]));
+    assert!(
+        listed.contains("meta"),
+        "metapackage should be recorded as installed, got: {listed}"
+    );
+}
+
+#[test]
+fn a_metapackage_needs_no_source_field_to_parse() {
+    let json = r#"{
+        "name": "m",
+        "version": "1.0",
+        "source": { "type": "tarball", "url": "https://example.com/x.tar.gz" },
+        "build_system": "meta"
+    }"#;
+    // A source is harmless to parse; the validator is what rejects declaring one.
+    let pkg = &tsi::core::package::parse_package_file(json).unwrap()[0];
+    assert_eq!(pkg.build_system, "meta");
+}

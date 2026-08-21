@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Source location and type (git, tarball, zip, local).
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PackageSource {
     #[serde(rename = "type")]
     pub source_type: String,
@@ -23,6 +23,9 @@ pub struct PackageVersion {
     pub version: String,
     #[serde(default)]
     pub description: String,
+    /// Absent for `build_system: "meta"` packages, which install nothing of
+    /// their own and exist only to pull in their dependencies.
+    #[serde(default)]
     pub source: PackageSource,
     #[serde(default)]
     pub dependencies: Vec<String>,

@@ -174,6 +174,27 @@ Or with a specific tag or commit:
 }
 ```
 
+### Meta
+
+A package that installs nothing of its own and exists only to pull in others.
+It declares **no source** — TSI records it and its dependencies and skips fetch,
+build and link entirely.
+
+```json
+{
+  "name": "autotools",
+  "version": "2.72",
+  "description": "Meta-package for GNU Autoconf, Automake, and Libtool",
+  "dependencies": ["autoconf", "automake", "libtool"],
+  "build_system": "meta"
+}
+```
+
+Before this existed, `autotools` had to name some source to satisfy the schema
+and downloaded GNU hello on every install. A `meta` package that declares a
+source, or that declares no dependencies, is rejected by
+`scripts/validate-packages.py`.
+
 ## Dependencies
 
 ### Runtime Dependencies

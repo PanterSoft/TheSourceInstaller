@@ -15,6 +15,25 @@ pub fn install_package(
     isolated: bool,
     verbose: bool,
 ) -> Result<()> {
+    // A metapackage has nothing of its own to fetch, build or link: recording it
+    // (with its dependencies, which the resolver has already installed) is the
+    // whole job. `autotools` previously had to name *some* source to satisfy the
+    // schema and downloaded GNU hello on every install.
+    if pkg.build_system == "meta" {
+        let deps: Vec<String> = pkg
+            .dependencies
+            .iter()
+            .chain(pkg.build_dependencies.iter())
+            .cloned()
+            .collect();
+        let marker = prefix
+            .join("install")
+            .join(format!("{}-{}", pkg.name, pkg.version));
+        std::fs::create_dir_all(&marker).context("Create metapackage record dir")?;
+        db.add(&pkg.name, &pkg.version, &marker, &deps)?;
+        return Ok(());
+    }
+
     let sources_dir = prefix.join("sources");
     let build_dir = prefix
         .join("build")
