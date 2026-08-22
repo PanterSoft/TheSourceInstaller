@@ -531,7 +531,9 @@ mod tests {
         for (name, bytes) in [
             ("download", make_tar(&[("a.txt", b"hi")], gzip)),
             ("download.bin", make_tar(&[("a.txt", b"hi")], xz)),
-            ("release?raw=1", make_tar(&[("a.txt", b"hi")], bzip2)),
+            // No '?' here: Windows refuses to create such a file, and the cache
+            // names downloads <pkg>-<version>.<ext>, so it never sees one.
+            ("release.raw", make_tar(&[("a.txt", b"hi")], bzip2)),
         ] {
             let (dir, archive) = write_temp(name, &bytes);
             let dest = dir.path().join("out");
