@@ -2,6 +2,7 @@
 # Smoke-test that named packages install on Linux, on every architecture.
 #
 #   docker/validate-packages.sh [--platform linux/arm64,linux/amd64] PKG [PKG...]
+#   docker/validate-packages.sh --fresh PKG    # discard the prefix first
 #   docker/validate-packages.sh --all          # CI only; see below
 #
 # Scope: this is for sanity-checking a definition you are editing. Building the
@@ -29,14 +30,16 @@ PLATFORMS="linux/arm64,linux/amd64"
 IMAGE="rust:1-trixie"
 LOG_ROOT="$REPO_ROOT/.validate-logs"
 ALL=false
+FRESH=false
 PKGS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --platform) PLATFORMS="$2"; shift 2 ;;
     --all)      ALL=true; shift ;;
+    --fresh)    FRESH=true; shift ;;
     --image)    IMAGE="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,16p' "$0"; exit 0 ;;
     *)          PKGS+=("$1"); shift ;;
   esac
 done
@@ -76,6 +79,16 @@ for platform in "${PLATFORM_LIST[@]}"; do
   # this run produced.
   rm -rf "$out"
   mkdir -p "$out"
+
+  # A warm prefix makes a pass mean less than it looks: a package can build
+  # only because something an earlier run installed happened to be there, which
+  # is how nano passed against a broken ncurses. --fresh throws the prefix away
+  # so the run stands on its own declared dependencies. The cargo target volume
+  # is kept -- it changes build time, not the result.
+  if [ "$FRESH" = true ]; then
+    docker volume rm "tsi-prefix-$arch" >/dev/null 2>&1 || true
+    echo "==> Discarded the $arch prefix; this run builds its dependencies itself"
+  fi
   echo "==> Validating on $platform"
 
   # Named per-arch volumes so the cargo build and the tsi prefix survive
