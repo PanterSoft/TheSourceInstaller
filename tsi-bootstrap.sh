@@ -7,7 +7,7 @@
 set -e
 
 PREFIX="${PREFIX:-$HOME/.tsi}"
-TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/tsi.git}"
+TSI_REPO="${TSI_REPO:-https://github.com/PanterSoft/TheSourceInstaller.git}"
 TSI_BRANCH="${TSI_BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/tsi-install}"
 REPAIR_MODE="${REPAIR:-false}"
@@ -208,7 +208,8 @@ main() {
         log_info "Downloading TSI source..."
         if command_exists git; then
             rm -rf tsi
-            if "$(get_command_path git)" clone --depth 1 --branch "$TSI_BRANCH" "$TSI_REPO" tsi 2>&1; then
+            if "$(get_command_path git)" clone --depth 1 --shallow-submodules --recurse-submodules \
+                --branch "$TSI_BRANCH" "$TSI_REPO" tsi 2>&1; then
                 log_info "Repository cloned successfully"
             else
                 log_error "Git clone failed"
@@ -216,7 +217,7 @@ main() {
             fi
         else
             log_info "Downloading tarball..."
-            tarball_url="https://github.com/PanterSoft/tsi/archive/refs/heads/${TSI_BRANCH}.tar.gz"
+            tarball_url="https://github.com/PanterSoft/TheSourceInstaller/archive/refs/heads/${TSI_BRANCH}.tar.gz"
             tarball="tsi-${TSI_BRANCH}.tar.gz"
             if ! download_file "$tarball_url" "$tarball"; then
                 log_error "Failed to download. Install git or check network."
@@ -242,7 +243,7 @@ main() {
 
     TSI_BINARY=""
     PLATFORM=$(detect_arch)
-    RELEASE_URL="https://github.com/PanterSoft/tsi/releases/latest/download/tsi-${PLATFORM}"
+    RELEASE_URL="https://github.com/PanterSoft/TheSourceInstaller/releases/latest/download/tsi-${PLATFORM}"
 
     if [ -n "$PLATFORM" ] && [ "$PLATFORM" != "-" ]; then
         log_info "Trying pre-built binary for $PLATFORM..."
@@ -299,12 +300,21 @@ main() {
 
     log_info "Setting up package repository..."
     mkdir -p "$PREFIX/packages"
-    if [ -d "packages" ]; then
+    # Definitions live in the tsi-packages submodule; older checkouts kept them
+    # at the top level. A tarball download has no submodule, so finding neither
+    # is fine -- `tsi update` fetches them.
+    PKG_SRC=""
+    for d in "tsi-packages/packages" "packages"; do
+        [ -d "$d" ] && PKG_SRC="$d" && break
+    done
+    if [ -n "$PKG_SRC" ]; then
         count=0
-        for f in packages/*.json; do
+        for f in "$PKG_SRC"/*.json; do
             [ -f "$f" ] && cp "$f" "$PREFIX/packages/" && count=$((count + 1))
         done
         log_info "  Copied $count package definitions"
+    else
+        log_info "  None bundled; run 'tsi update' to fetch them"
     fi
 
     log_info ""
