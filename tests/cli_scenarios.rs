@@ -351,3 +351,43 @@ fn a_metapackage_needs_no_source_field_to_parse() {
     let pkg = &tsi::core::package::parse_package_file(json).unwrap()[0];
     assert_eq!(pkg.build_system, "meta");
 }
+
+#[test]
+fn a_build_that_installs_nothing_is_not_a_success() {
+    let temp = tempfile::tempdir().unwrap();
+    let defs = temp.path().join("defs");
+    let src = temp.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("README"), "nothing to build").unwrap();
+
+    // A custom build whose commands succeed but write nothing to the prefix --
+    // the shape of liburing configuring without --prefix and installing to /usr.
+    std::fs::create_dir_all(&defs).unwrap();
+    std::fs::write(
+        defs.join("hollow.json"),
+        format!(
+            r#"{{
+                "name": "hollow",
+                "version": "1.0",
+                "description": "builds fine, installs nowhere",
+                "source": {{ "type": "local", "path": "{}" }},
+                "build_system": "custom",
+                "build_commands": ["true"]
+            }}"#,
+            src.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+
+    let prefix = temp.path().join("prefix");
+    let up = tsi(&prefix, &["update", "--local", defs.to_str().unwrap()]);
+    assert!(up.status.success(), "{}", combined(&up));
+
+    let out = tsi(&prefix, &["install", "hollow"]);
+    assert!(!out.status.success(), "{}", combined(&out));
+    assert!(
+        combined(&out).contains("installed no files"),
+        "{}",
+        combined(&out)
+    );
+}

@@ -6,6 +6,12 @@ use crate::ops::link;
 use anyhow::{Context, Result};
 use std::path::Path;
 
+fn is_dir_empty(dir: &Path) -> Result<bool> {
+    let mut entries =
+        std::fs::read_dir(dir).with_context(|| format!("Read install dir {}", dir.display()))?;
+    Ok(entries.next().is_none())
+}
+
 /// Fetches, builds, links, and records a package under prefix.
 pub fn install_package(
     pkg: &Package,
@@ -72,6 +78,21 @@ pub fn install_package(
         isolated,
         verbose,
     )?;
+
+    // A build that exits zero having installed nothing is not a success. It is
+    // usually a package whose install step ignored the prefix it was given:
+    // liburing ran `./configure` with no --prefix and then `make install
+    // prefix=...`, which cannot retarget the paths configure had already baked
+    // in, so the files landed in /usr and TSI reported OK over an empty tree.
+    if is_dir_empty(&install_dir)? {
+        anyhow::bail!(
+            "{} installed no files into {}. Its build succeeded, so the install step \
+             most likely wrote somewhere else -- check that the package passes the \
+             prefix to configure, not only to `make install`.",
+            pkg.name,
+            install_dir.display()
+        );
+    }
 
     link::create_symlinks(&install_dir, &main_install)?;
 
