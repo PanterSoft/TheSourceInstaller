@@ -299,7 +299,7 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
             prefix.to_string_lossy().to_string(),
         ),
         ("CPPFLAGS".to_string(), default_cppflags(&include)),
-        ("LDFLAGS".to_string(), format!("-L{}", lib.display())),
+        ("LDFLAGS".to_string(), default_ldflags(&lib)),
     ];
 
     // macOS uses DYLD_LIBRARY_PATH; LD_LIBRARY_PATH is ignored by the Darwin dynamic linker.
@@ -564,6 +564,22 @@ fn build_jobs() -> usize {
         .unwrap_or(1)
 }
 
+/// The default `LDFLAGS` TSI hands every build.
+///
+/// `-L` alone only resolves libraries at *link* time. TSI installs to a prefix
+/// no dynamic loader searches, so without an RPATH the result links cleanly and
+/// then fails to load: cjson's libcjson_utils could not find libcjson, its own
+/// sibling in the same package. Recording the prefix's shared lib directory
+/// makes what TSI builds runnable without LD_LIBRARY_PATH.
+fn default_ldflags(lib: &Path) -> String {
+    if cfg!(windows) {
+        // No RPATH concept; the loader uses PATH and the binary's directory.
+        format!("-L{}", lib.display())
+    } else {
+        format!("-L{} -Wl,-rpath,{}", lib.display(), lib.display())
+    }
+}
+
 /// The default `CPPFLAGS` TSI hands every build.
 ///
 /// On macOS the prefix is passed with `-idirafter`, not `-I`: prefix headers
@@ -803,6 +819,43 @@ fn build_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_ldflags_record_an_rpath_off_windows() {
+        let flags = default_ldflags(Path::new("/p/lib"));
+        assert!(flags.contains("-L/p/lib"), "{flags}");
+        if cfg!(windows) {
+            assert!(!flags.contains("rpath"), "{flags}");
+        } else {
+            // Without this the build links but the result cannot load: TSI
+            // installs to a prefix no dynamic loader searches by default.
+            assert!(flags.contains("-Wl,-rpath,/p/lib"), "{flags}");
+        }
+    }
+
+    #[test]
+    fn a_package_ldflags_replaces_the_default_including_the_rpath() {
+        let json = r#"{
+            "name": "p",
+            "version": "1",
+            "source": { "type": "tarball", "url": "https://example.com/x.tar.gz" },
+            "build_system": "make",
+            "env": { "LDFLAGS": "-L$TSI_INSTALL_DIR/lib -lcustom" }
+        }"#;
+        let pkg = crate::core::package::parse_package_file(json)
+            .unwrap()
+            .remove(0);
+        let env = build_env_with_package(Path::new("/p"), &pkg, false);
+        let effective = env
+            .iter()
+            .rfind(|(k, _)| k == "LDFLAGS")
+            .map(|(_, v)| v.clone())
+            .unwrap();
+        // Documented merge semantics: a package's env value replaces the
+        // default outright. Overriding LDFLAGS therefore drops the rpath, which
+        // is worth knowing when a package needs to set it.
+        assert_eq!(effective, "-L/p/lib -lcustom");
+    }
 
     /// `TSI_JOBS` is process-global, so these assertions share one test rather
     /// than racing each other across threads.
