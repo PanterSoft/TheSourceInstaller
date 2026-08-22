@@ -252,6 +252,40 @@ Dependencies can be:
 - `source_dir`: Subdirectory of the fetched tree that holds the build root
 - `platforms`: Platforms this version can build on, e.g. `["linux"]` or `["linux-aarch64", "darwin"]`. Omit it (the default) for portable packages; see [OS-specific configuration](../developer-guide/os-specific-config.md#restricting-a-package-to-some-platforms).
 
+## `$TSI_INSTALL_DIR`
+
+Package definitions can write `$TSI_INSTALL_DIR`, and TSI expands it before the
+build tool sees it. **It expands to two different directories depending on where
+you write it**, because two different directories are what you want in each
+place:
+
+| Where | Expands to | Use it for |
+|---|---|---|
+| `make_args`, `build_commands` | this package's own versioned install dir, `install/<name>-<version>/` | telling the build where to install: `PREFIX=$TSI_INSTALL_DIR` |
+| `env` values | the shared prefix, `install/` | pointing the compiler at what dependencies already installed: `-I$TSI_INSTALL_DIR/include` |
+
+Packages install into their own versioned directory and are then symlinked into
+the shared prefix, so an `env` value naming the package's own directory would
+point at something that is still empty while the package is being built.
+
+### Overriding `CPPFLAGS`
+
+TSI already puts the shared prefix on the include path, but on macOS it uses
+`-idirafter`, which loses to `/usr/include`. That is deliberate -- it keeps the
+prefix from shadowing system headers -- but it is wrong when a dependency in the
+prefix *replaces* a system library. `gawk` is the case: macOS ships a
+`readline/readline.h` that is really a libedit shim without `history_list()`, so
+gawk has to be told to prefer the prefix's GNU readline:
+
+```json
+"dependencies": ["readline"],
+"env": { "CPPFLAGS": "-I$TSI_INSTALL_DIR/include" }
+```
+
+A package's own `CPPFLAGS` replaces TSI's default rather than adding to it, so
+`-I` here wins over `/usr/include`. Reach for this only when a prefix header
+must beat a system one; otherwise leave the default alone.
+
 ## Example Package Definitions
 
 See the `packages/` directory for complete examples.
