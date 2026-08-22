@@ -698,6 +698,29 @@ fn build_cmake(
     Ok(())
 }
 
+/// The `meson setup` arguments TSI always supplies.
+///
+/// `--libdir lib` matters. Left to itself meson picks the host's convention --
+/// on Debian and Ubuntu that is the multiarch `lib/x86_64-linux-gnu` -- and
+/// TSI's prefix has exactly one lib directory, which is what PKG_CONFIG_PATH,
+/// the `-L` and the recorded rpath all name. pixman installed its pixman-1.pc
+/// into the multiarch path, so cairo could not find pixman at all and tried to
+/// download it as a subproject instead.
+///
+/// A package's own configure_args are appended after these, so it can still
+/// override any of them.
+fn meson_setup_args(build_dir: &Path, source_dir: &Path, prefix: &str) -> Vec<String> {
+    vec![
+        "setup".to_string(),
+        build_dir.to_string_lossy().into_owned(),
+        source_dir.to_string_lossy().into_owned(),
+        "--prefix".to_string(),
+        prefix.to_string(),
+        "--libdir".to_string(),
+        "lib".to_string(),
+    ]
+}
+
 fn build_meson(
     pkg: &Package,
     source_dir: &Path,
@@ -710,13 +733,7 @@ fn build_meson(
     let env_ref: &[(String, String)] = env;
     let prefix = install_dir.to_string_lossy();
     let deps_prefix_str = deps_prefix.to_string_lossy();
-    let mut setup_args = vec![
-        "setup".to_string(),
-        build_dir.to_string_lossy().into_owned(),
-        source_dir.to_string_lossy().into_owned(),
-        "--prefix".to_string(),
-        prefix.into_owned(),
-    ];
+    let mut setup_args = meson_setup_args(build_dir, source_dir, prefix.as_ref());
     setup_args.extend(
         pkg.configure_args
             .iter()
@@ -1067,6 +1084,19 @@ mod tests {
     fn make_args_always_get_tsi_prefix_appended() {
         let args = make_args_with_prefix(&pkg_with_make_args("[]"), "/p");
         assert_eq!(args, vec!["PREFIX=/p"]);
+    }
+
+    #[test]
+    fn meson_installs_into_a_single_lib_dir() {
+        // Without --libdir, meson follows the host convention; on Debian and
+        // Ubuntu that is lib/<triple>, where nothing TSI sets up ever looks.
+        let args = meson_setup_args(Path::new("/b"), Path::new("/s"), "/p");
+        let i = args
+            .iter()
+            .position(|a| a == "--libdir")
+            .expect("no --libdir");
+        assert_eq!(args[i + 1], "lib");
+        assert_eq!(args[0], "setup");
     }
 
     #[test]
