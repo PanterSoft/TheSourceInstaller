@@ -72,6 +72,9 @@ IFS=',' read -r -a PLATFORM_LIST <<< "$PLATFORMS"
 for platform in "${PLATFORM_LIST[@]}"; do
   arch="${platform##*/}"
   out="$LOG_ROOT/$arch"
+  # Start clean: a failure log left by an earlier run reads exactly like one
+  # this run produced.
+  rm -rf "$out"
   mkdir -p "$out"
   echo "==> Validating on $platform"
 
@@ -121,6 +124,12 @@ for platform in "${PLATFORM_LIST[@]}"; do
             printf "%s\tfail\t\n" "$pkg" >> /out/results.tsv
           fi
         done
+
+        # The same gate CI applies: a package that installs but whose binaries
+        # cannot load is not a pass. Reported, not fatal -- the per-package
+        # results above are what this script exists to produce.
+        bash /src/tsi-packages/scripts/check-linkage.sh /root/.tsi $TSI_VALIDATE_PKGS \
+          || echo "WARNING: unresolved dynamic dependencies (see above)"
       fi
     '
   echo "==> $platform results: $out/results.tsv"
@@ -134,8 +143,19 @@ for platform in "${PLATFORM_LIST[@]}"; do
   sed 's/^/    /' "$LOG_ROOT/$arch/results.tsv" 2>/dev/null || echo "    (no results)"
 done
 
-# Non-zero if anything failed on any architecture -- that is the whole point.
-if grep -rq $'\tfail\t' "$LOG_ROOT"/*/results.tsv 2>/dev/null; then
+# Non-zero if anything failed on an architecture *this run* covered. Globbing
+# $LOG_ROOT/*/ instead swept in results from previous runs of other platforms,
+# so a clean single-platform smoke test reported failures it had not produced.
+failed=false
+for platform in "${PLATFORM_LIST[@]}"; do
+  results="$LOG_ROOT/${platform##*/}/results.tsv"
+  [ -f "$results" ] || continue
+  if grep -q $'\tfail\t' "$results"; then
+    failed=true
+  fi
+done
+
+if [ "$failed" = true ]; then
   echo "FAILURES on at least one architecture." >&2
   exit 1
 fi
