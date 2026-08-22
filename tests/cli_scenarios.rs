@@ -372,9 +372,12 @@ fn a_build_that_installs_nothing_is_not_a_success() {
                 "description": "builds fine, installs nowhere",
                 "source": {{ "type": "local", "path": "{}" }},
                 "build_system": "custom",
-                "build_commands": ["true"]
+                "build_commands": ["cd ."]
             }}"#,
-            src.to_str().unwrap()
+            // A Windows path is full of backslashes, and JSON reads those as
+            // escapes; and `true` is a shell builtin cmd.exe does not have,
+            // while `cd .` succeeds under both sh -c and cmd /C.
+            src.to_str().unwrap().replace('\\', "\\\\")
         ),
     )
     .unwrap();
