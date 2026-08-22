@@ -83,15 +83,21 @@ compiler; everything else should be a `cargo test`.
 
 ## Cross-architecture package validation
 
-"It builds on my machine" is not a package passing. A package definition must install on
-every architecture it claims to support, so validate it on more than the host you wrote it
-on:
+**Package builds are CI's job.** `test-build-packages.yml` builds every changed package on
+Linux-x86_64, Linux-aarch64 and macOS-aarch64 per PR, and `validate-all-packages.yml`
+rebuilds the whole catalogue weekly and regenerates `PACKAGES_STATUS.md`. Those results are
+the ones that count; a laptop's are not recorded anywhere.
+
+Locally, smoke-test the definition you are editing and let CI do the rest:
 
 ```bash
-make validate PKGS="zlib bzip2"   # linux/arm64 + linux/amd64
-make validate                     # the whole catalogue (hours)
+make validate PKGS="zlib bzip2"                  # linux/arm64 + linux/amd64
 ./docker/validate-packages.sh --platform linux/amd64 rsync
 ```
+
+`make validate` with no `PKGS` refuses rather than starting a full run, and `--all` needs an
+explicit `TSI_VALIDATE_ALL_I_MEAN_IT=1`: a full catalogue run needs tens of gigabytes per
+architecture and hours of build time, and it filled this project's development machine once.
 
 The script builds `tsi` inside a container per platform and runs `tsi install` for each
 package. On an Apple Silicon host `linux/amd64` runs under emulation — correct, just slow.
@@ -117,7 +123,7 @@ runner exists so you get the answer in minutes instead of after a push.
 | Workflow | When | What it proves |
 |---|---|---|
 | `package-validation.yml` | push / PR | catalogue schema and invariants, version ordering, the scripts' self-checks, shellcheck, and that changed packages' sources are pinned and reachable |
-| `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64 and macOS-aarch64 |
+| `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64 and macOS-aarch64, and their installed binaries can actually load |
 | `verify-sources.yml` | weekly | every package's default source still downloads and matches its recorded sha256 |
 | `validate-all-packages.yml` | weekly + manual | the whole catalogue on all three platforms, regenerating `PACKAGES_STATUS.md` |
 

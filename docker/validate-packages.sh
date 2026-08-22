@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Validate that packages install on Linux, on every architecture, locally.
+# Smoke-test that named packages install on Linux, on every architecture.
 #
 #   docker/validate-packages.sh [--platform linux/arm64,linux/amd64] PKG [PKG...]
-#   docker/validate-packages.sh --all
+#   docker/validate-packages.sh --all          # CI only; see below
+#
+# Scope: this is for sanity-checking a definition you are editing. Building the
+# catalogue is CI's job -- test-build-packages.yml builds changed packages on
+# three platforms per PR, and validate-all-packages.yml rebuilds everything
+# weekly and regenerates PACKAGES_STATUS.md. Results from a laptop do not go in
+# that table.
 #
 # Builds tsi inside a container once per platform (cached in a named volume),
 # then runs `tsi install` for each package. On an arm64 host linux/amd64 runs
@@ -36,7 +42,18 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$ALL" = false ] && [ ${#PKGS[@]} -eq 0 ]; then
-  echo "Error: name at least one package, or pass --all." >&2
+  echo "Error: name at least one package to smoke-test." >&2
+  echo "Full-catalogue runs belong in CI (validate-all-packages.yml)." >&2
+  exit 1
+fi
+
+# --all needs tens of gigabytes per architecture and hours of build time. It
+# filled this repo's development machine once. CI has both; a laptop usually
+# does not, so make the caller say so out loud.
+if [ "$ALL" = true ] && [ "${TSI_VALIDATE_ALL_I_MEAN_IT:-}" != "1" ]; then
+  echo "Refusing --all: it needs tens of GB per architecture and hours to run," >&2
+  echo "and CI already does it (validate-all-packages.yml, weekly)." >&2
+  echo "Set TSI_VALIDATE_ALL_I_MEAN_IT=1 to override." >&2
   exit 1
 fi
 

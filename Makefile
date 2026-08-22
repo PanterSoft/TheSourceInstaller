@@ -16,7 +16,7 @@ help:
 	@echo "  run           - Run TSI (development)"
 	@echo "  test          - Run tests"
 	@echo "  check         - Everything CI checks: fmt + clippy + tests"
-	@echo "  validate      - Install packages in Linux containers on every arch (PKGS=\"a b\", or all)"
+	@echo "  validate      - Smoke-test named packages in Linux containers (PKGS=\"a b\")"
 	@echo "  lint          - Run clippy"
 	@echo "  fmt           - Check code formatting"
 	@echo "  clean         - Clean build artifacts"
@@ -27,7 +27,7 @@ help:
 	@echo "  make deps     # First-time: install Rust, fetch crates"
 	@echo "  make dev      # Development build"
 	@echo "  make dev-packages   # After git submodule update --init tsi-packages"
-	@echo "  make validate PKGS=\"zlib bzip2\"   # verify on linux/arm64 + linux/amd64"
+	@echo "  make validate PKGS=\"zlib bzip2\"   # smoke-test on linux/arm64 + linux/amd64"
 	@echo "  make install PREFIX=/opt/tsi"
 	@echo "  make uninstall PREFIX=/opt/tsi"
 
@@ -64,10 +64,15 @@ test:
 # Same gates as .github/workflows/rust-ci.yml — run this before pushing.
 check: fmt lint test
 
-# Cross-architecture package validation (needs docker). PKGS defaults to the
-# whole catalogue, which takes hours — name packages while iterating.
-PKGS ?= --all
+# Smoke-test one or two packages in Linux containers (needs docker).
+#
+# Building the catalogue is CI's job, not a laptop's: test-build-packages.yml
+# builds changed packages on three platforms per PR, and validate-all-packages.yml
+# rebuilds everything weekly. Use this to sanity-check a definition you are
+# editing, and let CI produce the results that count.
+PKGS ?=
 validate:
+	@if [ -z "$(PKGS)" ]; then 		echo "Name the package(s) to smoke-test, e.g.:"; 		echo "    make validate PKGS=\"zlib bzip2\""; 		echo ""; 		echo "Full-catalogue runs belong in CI (validate-all-packages.yml),"; 		echo "not here — they take hours and tens of GB per architecture."; 		exit 2; 	fi
 	./docker/validate-packages.sh $(PKGS)
 
 lint:
