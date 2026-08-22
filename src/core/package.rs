@@ -62,6 +62,12 @@ pub struct PackageVersion {
     #[serde(default)]
     pub cmake_args_windows: Option<Vec<String>>,
     #[serde(default)]
+    pub make_args_darwin: Option<Vec<String>>,
+    #[serde(default)]
+    pub make_args_linux: Option<Vec<String>>,
+    #[serde(default)]
+    pub make_args_windows: Option<Vec<String>>,
+    #[serde(default)]
     pub env_x86_64: Option<HashMap<String, String>>,
     #[serde(default)]
     pub env_aarch64: Option<HashMap<String, String>>,
@@ -125,6 +131,7 @@ impl Package {
         let env = merge_env_for_os(v);
         let configure_args = merge_configure_args_for_os(v);
         let cmake_args = merge_cmake_args_for_os(v);
+        let make_args = merge_make_args_for_os(v);
 
         Self {
             name: name.to_string(),
@@ -136,7 +143,7 @@ impl Package {
             build_system: v.build_system.clone(),
             configure_args,
             cmake_args,
-            make_args: v.make_args.clone(),
+            make_args,
             build_commands: v.build_commands.clone(),
             env,
             patches: v.patches.clone(),
@@ -230,6 +237,23 @@ fn merge_cmake_args_for_os(v: &PackageVersion) -> Vec<String> {
     os_override.cloned().unwrap_or_else(|| v.cmake_args.clone())
 }
 
+/// Same semantics as configure_args and cmake_args: an OS-specific list
+/// replaces the base list when present.
+///
+/// giflib is why this exists. Its Makefile assigns CFLAGS itself, so only a
+/// make command-line argument can change it, and on macOS the link line needs
+/// an -install_name that would be an error on Linux -- there was no way to say
+/// that in a package definition.
+fn merge_make_args_for_os(v: &PackageVersion) -> Vec<String> {
+    let os_override = match crate::platform::os_name() {
+        "darwin" => v.make_args_darwin.as_ref(),
+        "linux" => v.make_args_linux.as_ref(),
+        "windows" => v.make_args_windows.as_ref(),
+        _ => None,
+    };
+    os_override.cloned().unwrap_or_else(|| v.make_args.clone())
+}
+
 pub fn parse_package_file(json: &str) -> Result<Vec<Package>, anyhow::Error> {
     let file: PackageFile = serde_json::from_str(json)?;
     match file {
@@ -255,5 +279,51 @@ pub fn parse_package_spec(spec: &str) -> (String, Option<String>) {
         (name, Some(version))
     } else {
         (spec.to_string(), None)
+    }
+}
+
+#[cfg(test)]
+mod make_args_os_tests {
+    use super::*;
+
+    fn parse(json: &str) -> Package {
+        parse_package_file(json).unwrap().remove(0)
+    }
+
+    #[test]
+    fn an_os_specific_make_args_list_replaces_the_base_one() {
+        // libgif needs an -install_name on macOS that would be an error on
+        // Linux, and its Makefile assigns CFLAGS itself, so nothing but a make
+        // command-line argument can carry it.
+        let pkg = parse(
+            r#"{
+                "name": "libgif", "version": "5.2.2", "description": "d",
+                "source": {"type": "tarball", "url": "http://x/libgif-5.2.2.tar.gz"},
+                "build_system": "make",
+                "make_args": ["MAKE=true", "PREFIX=$TSI_INSTALL_DIR"],
+                "make_args_darwin": ["MAKE=true", "CFLAGS=-Wl,-install_name,x"],
+                "make_args_linux": ["MAKE=true", "PREFIX=$TSI_INSTALL_DIR"]
+            }"#,
+        );
+        let expected: Vec<String> = match crate::platform::os_name() {
+            "darwin" => vec!["MAKE=true".into(), "CFLAGS=-Wl,-install_name,x".into()],
+            "linux" => vec!["MAKE=true".into(), "PREFIX=$TSI_INSTALL_DIR".into()],
+            // No list for this OS: the base one stands.
+            _ => vec!["MAKE=true".into(), "PREFIX=$TSI_INSTALL_DIR".into()],
+        };
+        assert_eq!(pkg.make_args, expected);
+    }
+
+    #[test]
+    fn without_an_os_list_the_base_make_args_are_used() {
+        let pkg = parse(
+            r#"{
+                "name": "lmdb", "version": "0.9.31", "description": "d",
+                "source": {"type": "tarball", "url": "http://x/lmdb-0.9.31.tar.gz"},
+                "build_system": "make",
+                "make_args": ["prefix=$TSI_INSTALL_DIR"]
+            }"#,
+        );
+        assert_eq!(pkg.make_args, vec!["prefix=$TSI_INSTALL_DIR".to_string()]);
     }
 }

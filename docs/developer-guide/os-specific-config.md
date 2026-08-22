@@ -23,8 +23,16 @@ These keys are **implemented** for the three primary families:
 | `env` | `env_darwin`, `env_linux`, `env_windows` | **Merge keys:** start from base `env`, then apply the current OS map (overwriting duplicate keys), then apply arch maps `env_x86_64` / `env_aarch64` on top. |
 | `configure_args` | `configure_args_darwin`, `configure_args_linux`, `configure_args_windows` | **Replace list:** if the OS-specific list is present, it **replaces** base `configure_args` entirely; otherwise base is used. Arch extras `configure_args_x86_64` / `configure_args_aarch64` are **appended** when set. |
 | `cmake_args` | `cmake_args_darwin`, `cmake_args_linux`, `cmake_args_windows` | **Replace list:** if the OS-specific list is present, it **replaces** base `cmake_args` entirely; otherwise base `cmake_args` is used. No arch-specific cmake keys (yet). |
+| `make_args` | `make_args_darwin`, `make_args_linux`, `make_args_windows` | **Replace list:** same as `cmake_args`. Note these are the *whole* list, so repeat `PREFIX=$TSI_INSTALL_DIR` in the OS-specific one if the package needs it. No arch-specific make keys. |
 
-Not implemented in JSON today: OS-specific `make_args_*`, `build_system_*`, or OS-specific dependencies.
+`make_args` is the only way to reach a variable a Makefile assigns itself,
+since a command-line argument beats a file assignment and the environment does
+not. `libgif` needs both halves: its Makefile sets `CFLAGS`, and on macOS its
+link line records no `-install_name`, so the dylib comes out with a bare
+relative id that nothing can load. The flag that fixes it is an error on Linux,
+which is what `make_args_darwin` is for.
+
+Not implemented in JSON today: `build_system_*`, or OS-specific dependencies.
 
 ## What TSI puts in the build environment
 
