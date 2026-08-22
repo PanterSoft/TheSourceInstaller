@@ -26,6 +26,23 @@ These keys are **implemented** for the three primary families:
 
 Not implemented in JSON today: OS-specific `make_args_*`, `build_system_*`, or OS-specific dependencies.
 
+## What TSI puts in the build environment
+
+Every build starts from these, before any package `env` is applied:
+
+| Variable | Value | Why |
+|---|---|---|
+| `CPPFLAGS` | `-I<prefix>/include`, or `-idirafter <prefix>/include` on macOS | Prefix headers must not shadow SDK ones on macOS (git's `archive.h`, prefix `uuid/uuid.h` vs Apple's `uuid_string_t`) |
+| `LDFLAGS` | `-L<prefix>/lib -Wl,-rpath,<prefix>/lib` | `-L` alone resolves at link time only; TSI installs where no loader searches, so without the RPATH the result links and then fails to load |
+| `PKG_CONFIG_PATH`, `CMAKE_PREFIX_PATH`, `PATH` | prefix-first | So configure and CMake find what TSI already built |
+
+A package that sets one of these in `env` **replaces** it outright — that is the
+documented merge behaviour, and it means overriding `LDFLAGS` drops the RPATH and
+overriding `CPPFLAGS` opts out of the macOS header demotion. Both are sometimes
+exactly what you want: postgresql sets `CPPFLAGS` precisely to get prefix headers
+ahead of the SDK, because `-idirafter` beats `-I` for the same directory in
+either order and psql needs GNU readline's `append_history`.
+
 ## Restricting a package to some platforms
 
 Some packages cannot build everywhere at all — `libcap`, `libseccomp`, and `liburing` wrap Linux kernel APIs with no macOS equivalent. Declare that with `platforms`:
