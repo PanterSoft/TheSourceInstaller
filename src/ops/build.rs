@@ -495,6 +495,25 @@ fn run_cmd(
     Ok(())
 }
 
+/// Overrides passed to `make` for an autotools package.
+///
+/// An autotools package gets its `--prefix` from configure, so `make_args` here
+/// are never about where to install -- they are overrides for variables the
+/// Makefile assigns itself, which command-line arguments beat and nothing else
+/// does. readline needs one: configure leaves `SHLIB_LIBS` empty, so its shared
+/// library links no termcap library and every dependent dies on an undefined
+/// `UP`.
+///
+/// `$TSI_INSTALL_DIR` expands to the shared prefix here, matching
+/// `configure_args` in the same build system -- an autotools package never has
+/// to name its own install directory, because configure was already told it.
+fn autotools_make_args(pkg: &Package, deps_prefix: &str) -> Vec<String> {
+    pkg.make_args
+        .iter()
+        .map(|a| expand_build_vars(a, deps_prefix))
+        .collect()
+}
+
 fn build_autotools(
     pkg: &Package,
     source_dir: &Path,
@@ -525,10 +544,13 @@ fn build_autotools(
         verbose,
     )?;
 
+    let make_args = autotools_make_args(pkg, deps_prefix_str.as_ref());
+
     let jobs = build_jobs().to_string();
     run_cmd(
         Command::new("make")
             .arg(format!("-j{}", jobs))
+            .args(&make_args)
             .current_dir(source_dir),
         env_ref,
         &format!("make -j{}", jobs),
@@ -537,6 +559,7 @@ fn build_autotools(
     run_cmd(
         Command::new("make")
             .args(["install"])
+            .args(&make_args)
             .current_dir(source_dir),
         env_ref,
         "make install",
@@ -1044,5 +1067,22 @@ mod tests {
     fn make_args_always_get_tsi_prefix_appended() {
         let args = make_args_with_prefix(&pkg_with_make_args("[]"), "/p");
         assert_eq!(args, vec!["PREFIX=/p"]);
+    }
+
+    #[test]
+    fn autotools_make_args_reach_make_and_name_the_shared_prefix() {
+        // They were dropped on the floor: an autotools package could declare
+        // make_args and nothing passed them to make. readline is the case that
+        // needs them, and the path it needs is the shared prefix, where its
+        // dependencies were linked -- not its own still-empty install dir.
+        let pkg = pkg_with_make_args(r#"["SHLIB_LIBS=-L$TSI_INSTALL_DIR/lib -ltinfow"]"#);
+        assert_eq!(
+            autotools_make_args(&pkg, "/shared"),
+            vec!["SHLIB_LIBS=-L/shared/lib -ltinfow"]
+        );
+
+        // No PREFIX= is appended here, unlike the make build system: configure
+        // was already told where to install.
+        assert!(autotools_make_args(&pkg_with_make_args("[]"), "/shared").is_empty());
     }
 }

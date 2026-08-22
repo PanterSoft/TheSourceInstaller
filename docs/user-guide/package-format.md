@@ -261,12 +261,23 @@ place:
 
 | Where | Expands to | Use it for |
 |---|---|---|
-| `make_args`, `build_commands` | this package's own versioned install dir, `install/<name>-<version>/` | telling the build where to install: `PREFIX=$TSI_INSTALL_DIR` |
-| `env` values | the shared prefix, `install/` | pointing the compiler at what dependencies already installed: `-I$TSI_INSTALL_DIR/include` |
+| `make_args` (build_system `make`), `build_commands` | this package's own versioned install dir, `install/<name>-<version>/` | telling the build where to install: `PREFIX=$TSI_INSTALL_DIR` |
+| `configure_args`, `cmake_args`, `meson_args`, `make_args` (build_system `autotools`), `env` values | the shared prefix, `install/` | pointing at what dependencies already installed: `-I$TSI_INSTALL_DIR/include` |
 
-Packages install into their own versioned directory and are then symlinked into
-the shared prefix, so an `env` value naming the package's own directory would
-point at something that is still empty while the package is being built.
+The split is by what you need in each place, not by whim. Packages install into
+their own versioned directory and are symlinked into the shared prefix
+afterwards, so a value naming the package's own directory points at something
+still empty while the package is being built -- useless for finding a
+dependency. Conversely `make` and `build_commands` have no `--prefix` to
+receive, so they have to be told where to install.
+
+`autotools` is the case worth pausing on: it is the one build system where
+`make_args` mean the shared prefix, because TSI passes `--prefix` to configure
+itself, so an autotools package never has to name its own install directory.
+Use `make_args` there for variables configure assigns in the Makefile and does
+not let you override any other way -- `readline` needs
+`SHLIB_LIBS=-L$TSI_INSTALL_DIR/lib -ltinfow`, without which its shared library
+links no termcap library and everything using it dies on an undefined `UP`.
 
 ### Overriding `CPPFLAGS`
 
