@@ -117,7 +117,12 @@ detect_arch() {
     case "$UNAME_M" in
         x86_64|amd64) ARCH="x86_64" ;;
         aarch64|arm64) ARCH="aarch64" ;;
-        armv7l) ARCH="armv7" ;;
+        i686) ARCH="i686" ;;
+        # armv8l is a 32-bit userland on a 64-bit ARM kernel: it runs armv7 code.
+        armv7l|armv8l) ARCH="armv7" ;;
+        armv6l) ARCH="armv6" ;;
+        riscv64) ARCH="riscv64" ;;
+        ppc64le) ARCH="ppc64le" ;;
         *) ARCH="" ;;
     esac
     echo "${OS}-${ARCH}"

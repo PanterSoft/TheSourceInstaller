@@ -34,6 +34,35 @@ pub fn arch_name() -> &'static str {
     return "unknown";
 }
 
+/// The `<os>-<arch>` suffix of this build's release asset (`tsi-<suffix>`), matching
+/// the names `.github/workflows/build-binaries.yml` publishes and `tsi-bootstrap.sh`
+/// downloads. Unlike `arch_name()`, it tells apart targets that share a
+/// `target_arch` (armv6 vs armv7) and uses the conventional names for the rest.
+pub fn release_platform() -> String {
+    format!(
+        "{}-{}",
+        os_name(),
+        release_arch(env!("TSI_BUILD_TARGET"), arch_name())
+    )
+}
+
+/// Maps a Rust target triple to the arch part of a release asset name, falling back
+/// to `fallback` for triples that have no dedicated asset.
+pub fn release_arch<'a>(target: &str, fallback: &'a str) -> &'a str {
+    let arch = target.split('-').next().unwrap_or("");
+    match arch {
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        "i686" | "i586" => "i686",
+        // The ARM assets are hard-float; a soft-float build has no asset to take.
+        a if a.starts_with("armv7") && target.ends_with("hf") => "armv7",
+        "arm" | "armv6" if target.ends_with("hf") => "armv6",
+        a if a.starts_with("riscv64") => "riscv64",
+        "powerpc64le" => "ppc64le",
+        _ => fallback,
+    }
+}
+
 pub fn os_name() -> &'static str {
     #[cfg(target_os = "macos")]
     return "darwin";

@@ -117,6 +117,7 @@ runner exists so you get the answer in minutes instead of after a push.
 |---|---|---|
 | `test.yml` | push / PR | `cargo build`, `test`, `clippy -D warnings`, `fmt --check` on ubuntu x86_64 and arm64, macOS, and Windows x86_64 and arm64; shellcheck over `tsi-bootstrap.sh` and `docker/*.sh` |
 | `docker-tests.yml` | push / PR | a real source build of bzip2 inside bare Alpine/Debian/Ubuntu/Fedora containers on amd64 and arm64, plus a zero-dependency proof that the static binary works with no toolchain at all |
+| `build-binaries.yml` | push / PR, and every release | the release binary for every shipped platform builds: Linux x86_64/aarch64 natively and i686/armv7/armv6/riscv64/ppc64le with cargo-zigbuild (static, smoke-tested under qemu-user), macOS aarch64 and x86_64, Windows x86_64 and aarch64. `release.yml` publishes exactly these artifacts |
 
 **In tsi-packages**
 

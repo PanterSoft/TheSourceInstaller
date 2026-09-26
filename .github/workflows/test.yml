@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.toml'
+      - 'build.rs'
       - 'tests/**'
       - '*.sh'
       - 'docker/**'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.toml'
+      - 'build.rs'
       - 'tests/**'
       - '*.sh'
       - 'docker/**'

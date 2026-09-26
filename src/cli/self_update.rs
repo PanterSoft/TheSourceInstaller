@@ -43,7 +43,7 @@ fn replace_binary(new_bin: &Path, target: &Path) -> Result<()> {
 /// Tries to download a pre-built binary for this platform from the latest GitHub release.
 /// Returns `None` (not an error) if no matching release asset exists.
 fn try_prebuilt(tmp: &Path) -> Option<PathBuf> {
-    let plat = format!("{}-{}", platform::os_name(), platform::arch_name());
+    let plat = platform::release_platform();
     let url = format!("https://github.com/PanterSoft/tsi/releases/latest/download/tsi-{plat}");
     let dest = tmp.join("tsi-new");
     match crate::ops::fetch::download_file(&url, &dest) {

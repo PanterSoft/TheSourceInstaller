@@ -1,0 +1,233 @@
+name: Build Release Binaries
+
+# One matrix for every platform a release ships. release.yml calls this for
+# tagged releases; the push/pull_request triggers run the same matrix on every
+# change that could break a leg, so a broken architecture shows up on the
+# branch that broke it rather than on release day.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to build (defaults to the triggering ref)'
+        required: false
+        type: string
+        default: ''
+  push:
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.github/workflows/build-binaries.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.github/workflows/build-binaries.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # platform: the release asset suffix (tsi-<platform>). tsi-bootstrap.sh
+        #   and `tsi self-update` (platform::release_platform) derive the same
+        #   names, so a rename here must happen there too.
+        # mode: native builds on a runner of that architecture; zig
+        #   cross-compiles with cargo-zigbuild, since there is no hosted runner
+        #   for it. cross-rs has no musl image for riscv64 or ppc64le, zig does.
+        # run: how to smoke-test the binary on this runner (a qemu-user
+        #   binary for the zig legs, "native" to exec it directly).
+        # test: whether `cargo test` can run on this runner for this target.
+        include:
+          # Linux legs build fully static musl binaries so they run unmodified
+          # on Alpine/musl and on older-glibc distros (no glibc version skew).
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            mode: native
+            run: native
+            test: true
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            mode: native
+            run: native
+            test: true
+          - platform: linux-i686
+            runner: ubuntu-latest
+            target: i686-unknown-linux-musl
+            mode: zig
+            run: qemu-i386
+            test: false
+          - platform: linux-armv7
+            runner: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            mode: zig
+            run: qemu-arm
+            test: false
+          - platform: linux-armv6
+            runner: ubuntu-latest
+            target: arm-unknown-linux-musleabihf
+            mode: zig
+            run: qemu-arm
+            test: false
+          - platform: linux-riscv64
+            runner: ubuntu-latest
+            target: riscv64gc-unknown-linux-musl
+            mode: zig
+            run: qemu-riscv64
+            test: false
+          - platform: linux-ppc64le
+            runner: ubuntu-latest
+            target: powerpc64le-unknown-linux-musl
+            mode: zig
+            run: qemu-ppc64le
+            test: false
+          - platform: darwin-aarch64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            mode: native
+            run: native
+            test: true
+          # Cross-compiled on the Apple Silicon runner instead of pinned to an
+          # Intel image that GitHub is retiring; Rosetta 2 runs the smoke test.
+          - platform: darwin-x86_64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            mode: native
+            run: native
+            test: false
+          - platform: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            mode: native
+            run: native
+            test: true
+          - platform: windows-aarch64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            mode: native
+            run: native
+            test: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.1
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install Rust (${{ matrix.target }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl-tools
+        if: ${{ matrix.mode == 'native' && contains(matrix.target, 'musl') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      # Pinned to the versions the zig legs were verified with; a zig upgrade
+      # changes the libc and linker every one of them uses.
+      - name: Install zig, cargo-zigbuild and qemu-user
+        if: ${{ matrix.mode == 'zig' }}
+        run: |
+          pip install ziglang==0.13.0 cargo-zigbuild==0.23.4
+          sudo apt-get update
+          sudo apt-get install -y qemu-user
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build
+        shell: bash
+        env:
+          # Makes lzma-sys link its bundled liblzma instead of probing the host.
+          LZMA_API_STATIC: "1"
+          MODE: ${{ matrix.mode }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [ "$MODE" = zig ]; then
+            cargo zigbuild --release --target "$TARGET"
+          else
+            cargo build --release --target "$TARGET"
+          fi
+
+      - name: Run tests
+        if: ${{ matrix.test }}
+        shell: bash
+        env:
+          LZMA_API_STATIC: "1"
+          TARGET: ${{ matrix.target }}
+        run: cargo test --target "$TARGET"
+
+      - name: Locate binary
+        id: bin
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          case "$TARGET" in
+            *windows*) BIN="target/$TARGET/release/tsi.exe" ;;
+            *) BIN="target/$TARGET/release/tsi" ;;
+          esac
+          test -f "$BIN"
+          echo "path=$BIN" >> "$GITHUB_OUTPUT"
+
+      # Regression guard for the "single static binary" promise: fail the
+      # job if a Linux artifact isn't actually statically linked musl.
+      - name: Verify static linking (Linux)
+        if: ${{ startsWith(matrix.platform, 'linux-') }}
+        shell: bash
+        env:
+          BIN: ${{ steps.bin.outputs.path }}
+        run: |
+          file "$BIN"
+          # x86_64-musl produces static-PIE, which glibc ldd reports as
+          # "statically linked" rather than "not a dynamic executable".
+          # The property that matters is zero NEEDED entries.
+          if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+            echo "ERROR: $BIN has dynamic library dependencies:" >&2
+            readelf -d "$BIN" | grep NEEDED >&2
+            exit 1
+          fi
+          echo "Confirmed: no dynamic dependencies (NEEDED entries: none)"
+
+      - name: Smoke test
+        shell: bash
+        env:
+          BIN: ${{ steps.bin.outputs.path }}
+          RUNNER: ${{ matrix.run }}
+        run: |
+          if [ "$RUNNER" = native ]; then
+            "$BIN" --version
+            "$BIN" --help > /dev/null
+          else
+            "$RUNNER" "$BIN" --version
+            "$RUNNER" "$BIN" --help > /dev/null
+          fi
+
+      - name: Prepare artifact
+        shell: bash
+        env:
+          BIN: ${{ steps.bin.outputs.path }}
+          PLATFORM: ${{ matrix.platform }}
+        run: cp "$BIN" "tsi-$PLATFORM"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: tsi-${{ matrix.platform }}
+          path: tsi-${{ matrix.platform }}
+          if-no-files-found: error
