@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.toml'
+      - 'build.rs'
       - 'Cargo.lock'
       - 'docker/**'
       - 'tsi-bootstrap.sh'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.toml'
+      - 'build.rs'
       - 'Cargo.lock'
       - 'docker/**'
       - 'tsi-bootstrap.sh'

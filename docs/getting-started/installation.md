@@ -35,6 +35,17 @@ tsi self-update
 This fetches a pre-built binary for your platform if one's available, or falls back to
 building from source with cargo, then replaces the running `tsi` binary in place.
 
+**Platforms with pre-built binaries:**
+
+Every release ships a binary for each of these (Linux ones are fully static, so they run
+on any distro, glibc or musl). Anything else builds from source with cargo.
+
+| OS      | Architectures                                                  |
+|---------|----------------------------------------------------------------|
+| Linux   | `x86_64`, `aarch64`, `i686`, `armv7`, `armv6`, `riscv64`, `ppc64le` |
+| macOS   | `aarch64` (Apple Silicon), `x86_64` (Intel)                     |
+| Windows | `x86_64`, `aarch64`                                             |
+
 **Repair a broken installation:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
