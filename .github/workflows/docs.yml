@@ -31,6 +31,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.0.1
+        with:
+          # The git-revision-date plugin warns on a shallow clone, and
+          # --strict turns that warning into a failed build.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
