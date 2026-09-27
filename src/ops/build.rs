@@ -302,11 +302,18 @@ fn build_env_base(prefix: &Path, isolated: bool) -> Vec<(String, String)> {
         ("LDFLAGS".to_string(), default_ldflags(&lib)),
     ];
 
-    // macOS uses DYLD_LIBRARY_PATH; LD_LIBRARY_PATH is ignored by the Darwin dynamic linker.
+    // macOS: the fallback path, not DYLD_LIBRARY_PATH. DYLD_LIBRARY_PATH is searched
+    // *before* a library's recorded install path, so every host program a build runs
+    // (Homebrew's python, msgfmt, ...) picked up the prefix's same-named libraries
+    // instead of its own and died on missing symbols -- python's pyexpat on the
+    // prefix's older libexpat, msgfmt on glib's stub libintl. The fallback is only
+    // consulted when a library is not where its install name says, which is the case
+    // this is here for. Setting it replaces dyld's default fallback, so that goes
+    // back on the end.
     #[cfg(target_os = "macos")]
     env.push((
-        "DYLD_LIBRARY_PATH".to_string(),
-        lib.to_string_lossy().to_string(),
+        "DYLD_FALLBACK_LIBRARY_PATH".to_string(),
+        format!("{}:/usr/local/lib:/usr/lib", lib.to_string_lossy()),
     ));
     #[cfg(not(target_os = "macos"))]
     env.push((
