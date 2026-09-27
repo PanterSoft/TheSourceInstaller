@@ -145,8 +145,18 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
     Ok(target_dir)
 }
 
+/// Sent with every download. ureq's default ("ureq/<version>") is refused by some
+/// source hosts' bot filters -- freedesktop.org answered it with HTTP 418 while
+/// serving the same tarball to a client that said who it was.
+fn user_agent() -> String {
+    format!(
+        "tsi/{} (+https://github.com/PanterSoft/TheSourceInstaller)",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
 pub fn download_file(url: &str, dest: &Path) -> Result<()> {
-    let agent = ureq::Agent::new();
+    let agent = ureq::AgentBuilder::new().user_agent(&user_agent()).build();
     let response = agent
         .get(url)
         .call()
@@ -662,5 +672,12 @@ mod tests {
             std::fs::read_to_string(dst.join("a/b/deep.txt")).unwrap(),
             "deep"
         );
+    }
+
+    #[test]
+    fn downloads_identify_as_tsi() {
+        let ua = user_agent();
+        assert!(ua.starts_with("tsi/"), "{ua}");
+        assert!(!ua.contains("ureq"), "{ua}");
     }
 }
