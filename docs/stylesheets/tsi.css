@@ -1,0 +1,75 @@
+/*
+ * TSI color identity for the MkDocs Material theme.
+ * Palette and usage rules: docs/brand.md. Every foreground/background pair
+ * below meets WCAG AA (4.5:1) for body text.
+ */
+
+:root {
+  --tsi-forge-red: #c62828;      /* primary: header, buttons, logo */
+  --tsi-forge-red-deep: #8e1b1b; /* dark-mode header, pressed states */
+  --tsi-ember: #ff6b5e;          /* red on dark backgrounds */
+  --tsi-link: #b71c1c;           /* links on light backgrounds */
+  --tsi-ash: #f7f4f3;            /* warm light neutral */
+  --tsi-kiln: #1c1a1a;           /* warm dark neutral */
+}
+
+/* Light scheme */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--tsi-forge-red);
+  --md-primary-fg-color--light: #e53935;
+  --md-primary-fg-color--dark: var(--tsi-forge-red-deep);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color: var(--tsi-forge-red);
+  --md-accent-fg-color--transparent: rgba(198, 40, 40, 0.1);
+  --md-typeset-a-color: var(--tsi-link);
+}
+
+/* Dark scheme: a warm, faintly red-tinted slate instead of Material's blue one */
+[data-md-color-scheme="slate"] {
+  --md-hue: 0;
+  /* Pinned to Kiln: Material's hue-derived slate reads brown at hue 0. */
+  --md-default-bg-color: var(--tsi-kiln);
+  --md-code-bg-color: #272323;
+  --md-primary-fg-color: var(--tsi-forge-red-deep);
+  --md-primary-fg-color--light: var(--tsi-forge-red);
+  --md-primary-fg-color--dark: #5f1111;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color: #ff8a80;
+  --md-accent-fg-color--transparent: rgba(255, 107, 94, 0.12);
+  --md-typeset-a-color: var(--tsi-ember);
+}
+
+/* Palette swatches on the Brand & Colors page */
+.tsi-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.8rem;
+  margin: 1.2em 0;
+}
+
+.tsi-swatch {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+  overflow: hidden;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.tsi-swatch__chip {
+  height: 4rem;
+  background: var(--c);
+}
+
+.tsi-swatch__label {
+  padding: 0.4rem 0.6rem;
+}
+
+.tsi-swatch__label strong {
+  display: block;
+}
+
+.tsi-swatch__label code {
+  font-size: 0.65rem;
+}

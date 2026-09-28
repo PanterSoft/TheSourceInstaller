@@ -64,7 +64,9 @@ The MkDocs configuration is in `mkdocs.yml` at the repository root.
 3. Test locally with `mkdocs serve`
 4. Commit and push - GitHub Actions will build and deploy
 
-## Old Documentation Files
+## Look and Feel
 
-The old standalone Markdown files in this directory have been organized into the MkDocs structure. They are preserved for reference but the new structure should be used going forward.
+The site uses the TSI color identity (Forge Red on warm neutrals), defined in
+`docs/stylesheets/tsi.css`, with the logo and favicon in `docs/assets/`. See
+[Brand & Colors](brand.md) for the palette and the rules for using it.
 

@@ -30,7 +30,7 @@ A distribution-independent source-based package manager that enables building pa
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 ## Quick Start
