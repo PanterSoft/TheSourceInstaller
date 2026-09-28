@@ -1,5 +1,10 @@
 name: Documentation
 
+# Builds the docs on every change to them and deploys to GitHub Pages from
+# main. Deploying from main, not from release tags: the github-pages
+# environment only accepts deployments from the default branch by default, so
+# a deploy job running on a tag ref is rejected before it starts (which is how
+# every tag-triggered Release run failed its docs deploy).
 on:
   push:
     branches: [ main, dev ]
@@ -46,3 +51,33 @@ jobs:
 
       - name: Build documentation
         run: mkdocs build --strict
+
+      - name: Upload Pages artifact
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    name: Deploy documentation
+    needs: build
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deploy at a time; a newer push waits rather than cancelling a
+    # deploy halfway through.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

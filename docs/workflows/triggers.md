@@ -28,7 +28,7 @@ This document explains when each workflow runs and what triggers them.
 
 **File:** `.github/workflows/docs.yml`
 
-**Purpose:** Builds MkDocs documentation so doc issues are caught on PRs before release.
+**Purpose:** Builds MkDocs documentation so doc issues are caught on PRs, and deploys it to GitHub Pages from `main`.
 
 **Triggers:**
 - ✅ **Runs when:**
@@ -38,7 +38,8 @@ This document explains when each workflow runs and what triggers them.
   - `.github/workflows/docs.yml` - The workflow file itself
 
 **Jobs:**
-- `build`: Sets up Python, installs doc dependencies, runs `mkdocs build --strict`.
+- `build`: Sets up Python, installs doc dependencies, runs `mkdocs build --strict`; on `main` it also uploads the site as the Pages artifact.
+- `deploy`: On pushes and manual runs on `main` only, deploys the site to GitHub Pages.
 
 **Manual Trigger:** Yes, via `workflow_dispatch`
 
@@ -92,18 +93,17 @@ This document explains when each workflow runs and what triggers them.
 
 **File:** `.github/workflows/release.yml`
 
-**Purpose:** Builds release binaries and documentation, creates the GitHub Release, and deploys docs to GitHub Pages
+**Purpose:** Builds release binaries and creates the GitHub Release
 
 **Triggers:**
 - **Tag push:** When a tag matching `v*` is pushed (e.g. `v0.2.0`, `v1.0.0`)
+- **Manual:** Via `workflow_dispatch`, naming an existing tag
 
 **Jobs:**
-- `build`: Builds TSI binaries for all platforms (linux, macos, windows; x86_64 and aarch64)
-- `docs`: Builds MkDocs documentation and uploads the site artifact
+- `build`: Builds TSI binaries for every release platform via `build-binaries.yml` (Linux x86_64, aarch64, i686, armv7, armv6, riscv64, ppc64le; macOS and Windows on x86_64 and aarch64)
 - `release`: Creates the GitHub Release with the binary artifacts and generated release notes
-- `deploy-docs`: Deploys the built documentation to GitHub Pages
 
-**Note:** There is no manual trigger. To cut a release (binaries + docs), push a tag.
+**Note:** Documentation is not deployed from here. The `github-pages` environment rejects deployments from tag refs, so the Documentation workflow deploys from `main` instead (see [Documentation Deployment](../DEPLOYMENT.md)).
 
 ## Summary
 
@@ -112,7 +112,7 @@ This document explains when each workflow runs and what triggers them.
 | TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Documentation | ❌ No | ❌ No | ✅ Yes | ❌ No | ❌ No |
 | Package Validation | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Release (binaries + docs) | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| Release (binaries) | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | Discover Versions | ❌ No | ❌ No | ❌ No | ❌ No | ✅ Weekly |
 | Sync External | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
 

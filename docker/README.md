@@ -13,17 +13,21 @@ iterating before you push; they mirror CI but are not required by it.
 `.github/workflows/docker-tests.yml` runs on every push/PR to `main`/`dev`
 that touches `src/**`, `Cargo.*`, `docker/**`, `tsi-bootstrap.sh`, the
 workflow file itself, or the `tsi-packages` submodule pointer (plus
-`workflow_dispatch`). Three jobs, each matrixed over `amd64`
-(`ubuntu-latest`) and `arm64` (`ubuntu-24.04-arm`):
+`workflow_dispatch`). Three jobs, covering every Linux architecture a
+release ships: `x86_64` and `aarch64` natively (`ubuntu-latest` /
+`ubuntu-24.04-arm`), and `i686`, `armv7`, `armv6`, `riscv64` and `ppc64le`
+under qemu-user emulation (`docker run --platform ...`):
 
-1. **`build-binary`** -- builds a static release binary
-   (`x86_64-unknown-linux-musl` / `aarch64-unknown-linux-musl`,
-   `LZMA_API_STATIC=1`), asserts it's actually statically linked (`ldd`
-   reports "not a dynamic executable"), and uploads it as
-   `tsi-static-amd64` / `tsi-static-arm64`.
+1. **`build-binary`** -- calls
+   [`build-binaries.yml`](../.github/workflows/build-binaries.yml), the same
+   matrix `release.yml` ships from: static musl binaries for every Linux
+   architecture (zig cross-compiles the ones without a hosted runner) plus
+   macOS and Windows, each checked for zero `NEEDED` entries and
+   smoke-tested, uploaded as `tsi-<platform>` (e.g. `tsi-linux-riscv64`).
 2. **`container-tests`** -- for each of `alpine:latest`,
-   `debian:stable-slim`, `ubuntu:24.04`, `fedora:latest` (8 legs total:
-   4 distros x 2 arches), downloads the matching static binary and runs
+   `debian:stable-slim`, `ubuntu:24.04`, `fedora:latest` on x86_64 and
+   aarch64, and `alpine` plus (where Debian publishes one) `debian` on the
+   emulated architectures, downloads the matching static binary and runs
    [`docker/e2e-test.sh`](e2e-test.sh) inside a bare container. The script
    installs *only* a C compiler and `make` via the distro's own package
    manager, then drives a full `tsi update` -> `tsi install bzip2` (a real
@@ -33,10 +37,11 @@ workflow file itself, or the `tsi-packages` submodule pointer (plus
    built `tsi` with `cargo` inside the container but never ran a real
    `tsi install`.
 3. **`no-tools-test`** -- runs the static binary in bare `alpine` and
-   `debian` containers with **nothing** installed (no compiler, no
-   package definitions). Proves `tsi --version` / `--help` / `doctor`
-   work with zero runtime dependencies, and that `tsi install zlib`
-   fails gracefully (non-zero exit, no Rust panic) rather than crashing.
+   `debian` containers, on every Linux architecture, with **nothing**
+   installed (no compiler, no package definitions). Proves `tsi --version`
+   / `--help` / `doctor` work with zero runtime dependencies, and that
+   `tsi install zlib` fails gracefully (non-zero exit, no Rust panic)
+   rather than crashing.
 
 Every matrix leg (`fail-fast: false` throughout) can fail independently
 without blocking the others.
