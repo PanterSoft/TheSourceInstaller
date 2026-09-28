@@ -1,15 +1,14 @@
 # Documentation Deployment
 
-The TSI documentation is built with MkDocs and deployed to GitHub Pages as part of the **Release** workflow.
+The TSI documentation is built with MkDocs and deployed to GitHub Pages by the **Documentation** workflow (`.github/workflows/docs.yml`).
 
 ## When Documentation Is Deployed
 
-Documentation is built and deployed **only when a new version tag is pushed** (e.g. `v0.2.0`, `v1.0.0`). The same Release workflow that builds the TSI binaries also builds the docs and deploys them to GitHub Pages.
+- **Pull requests and pushes to `dev`** build the docs with `mkdocs build --strict`, so a broken link or page fails CI, but nothing is deployed.
+- **Pushes to `main`** that touch `docs/**`, `mkdocs.yml` or `requirements-docs.txt` build the docs and deploy them to GitHub Pages.
+- **Manual runs** (Actions → Documentation → Run workflow on `main`) redeploy the current `main` docs.
 
-To update the live documentation:
-
-1. Push a new tag: `git tag v0.2.0 && git push origin v0.2.0`
-2. The Release workflow runs: builds binaries, builds docs, creates the GitHub Release, and deploys docs to Pages.
+Deploys run from `main` rather than from release tags because the `github-pages` environment only accepts deployments from the default branch; a tag-triggered deploy is rejected before it starts. Releases are cut from `main`, so the live docs match the latest release.
 
 ## GitHub Pages Setup
 
@@ -51,6 +50,6 @@ The documentation will be available at `http://127.0.0.1:8000/`
 
 ### Pages Not Updating
 
-- Documentation deploys only on tag push. Ensure you pushed a tag and the Release workflow completed.
+- Documentation deploys only from `main`. Ensure the change is merged to `main`, or run the Documentation workflow manually on `main`.
 - Verify GitHub Pages is enabled in repository settings (Source: GitHub Actions).
-- Check that the Release workflow completed successfully in the Actions tab.
+- Check that the Documentation workflow completed successfully in the Actions tab. A deploy job that fails within seconds with "not allowed to deploy to github-pages" was started from a branch or tag the environment's deployment rules don't allow (Settings → Environments → github-pages).
