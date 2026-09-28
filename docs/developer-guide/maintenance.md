@@ -2,7 +2,9 @@
 
 ## Repairing TSI Installation
 
-If your TSI installation is broken or outdated, you can repair it using the bootstrap installer with the `--repair` option.
+If your TSI installation is broken or outdated, run the install command again: it
+detects the existing installation and repairs/updates it in place. `--repair` does
+the same explicitly.
 
 ### When to Use Repair Mode
 
@@ -78,10 +80,10 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/
 
 **Non-interactive (no confirmation prompt):**
 ```bash
-UNINSTALL=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --uninstall --non-interactive
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | UNINSTALL=1 sh -s -- --uninstall --non-interactive
 ```
 
-This removes the entire installation directory (binary, completions, package database, installed packages, and all data).
+This removes the entire installation directory (binary, completions, package database, installed packages, and all data), and the PATH line the installer added to your shell profile.
 
 ### Full Uninstall (Makefile)
 
@@ -128,11 +130,13 @@ rm -rf /opt/tsi
 
 ### After Uninstalling
 
-After uninstalling, you should also:
+The bootstrap `--uninstall` cleans up your shell profile itself. After any other
+uninstall (`tsi remove`, `make uninstall`, `rm -rf`), you should also:
 
-1. **Remove from PATH**: Edit your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) and remove:
+1. **Remove from PATH**: Edit your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) and
+   remove the line ending in `# added by the TSI installer`:
    ```bash
-   export PATH="$HOME/.tsi/bin:$PATH"
+   export PATH="$HOME/.tsi/bin:$PATH"  # added by the TSI installer
    ```
 
 2. **Remove completion**: Remove completion script sources:

@@ -33,12 +33,11 @@ A distribution-independent source-based package manager that enables building pa
 curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
+Open a new terminal and you're done. Run the same command again to update.
+
 ## Quick Start
 
 ```bash
-# Update package definitions (run once after install)
-tsi update
-
 # Install a package
 tsi install curl
 

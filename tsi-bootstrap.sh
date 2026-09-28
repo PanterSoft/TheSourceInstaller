@@ -1,6 +1,7 @@
 #!/bin/sh
 # TSI One-Line Bootstrap Installer
-# Downloads TSI source and builds the Rust binary
+# Installs the pre-built tsi binary (or builds it with cargo), fetches package
+# definitions and puts tsi on PATH. Running it again updates the installation.
 # Requires: curl or wget, and either a pre-built binary or Rust toolchain (cargo)
 # POSIX-compliant shell script
 
@@ -30,6 +31,10 @@ if [ "$NON_INTERACTIVE" = "true" ] || [ "$NON_INTERACTIVE" = "1" ] || [ "$NON_IN
 else
     NON_INTERACTIVE=false
 fi
+
+# The user's own PATH, before this script adds the prefix to it: tells whether
+# TSI is already reachable from their shells.
+USER_PATH="$PATH"
 
 if [ -d "${PREFIX}/bin" ]; then
     export PATH="${PREFIX}/bin:${PATH}"
@@ -80,6 +85,65 @@ download_file() {
     fi
 }
 
+# Every line the installer writes into a shell profile ends with this, so
+# uninstall can find and remove exactly those lines.
+PATH_MARKER="# added by the TSI installer"
+
+# The startup file of the user's shell, where a PATH line takes effect.
+shell_profile() {
+    case "$(basename "${SHELL:-sh}")" in
+        zsh) echo "${ZDOTDIR:-$HOME}/.zshrc" ;;
+        bash)
+            # macOS Terminal opens login shells, which read .bash_profile.
+            if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+                echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.bashrc"
+            fi
+            ;;
+        fish) echo "$HOME/.config/fish/conf.d/tsi.fish" ;;
+        *) echo "$HOME/.profile" ;;
+    esac
+}
+
+# Puts $1 on PATH for new shells by adding one marked line to the shell
+# profile. Returns 0 when TSI is (or will be) on PATH, 1 when the user has to
+# do it. Skips the edit when $1 is already on PATH, already in the profile, or
+# TSI_NO_MODIFY_PATH is set.
+setup_path() {
+    bin="$1"
+    case ":$USER_PATH:" in *":$bin:"*) return 0 ;; esac
+    case "${TSI_NO_MODIFY_PATH:-}" in 1|true|yes) return 1 ;; esac
+    # Write $HOME rather than the expanded path, so the line reads as usual.
+    case "$bin" in
+        "$HOME"/*) shown="\$HOME${bin#"$HOME"}" ;;
+        *) shown="$bin" ;;
+    esac
+    profile=$(shell_profile)
+    if [ -f "$profile" ] && grep -F "$PATH_MARKER" "$profile" | grep -qF "\"$shown"; then
+        return 0
+    fi
+    mkdir -p "$(dirname "$profile")" 2>/dev/null || true
+    case "$profile" in
+        *.fish) line="fish_add_path \"$shown\"  $PATH_MARKER" ;;
+        *) line="export PATH=\"$shown:\$PATH\"  $PATH_MARKER" ;;
+    esac
+    printf '\n%s\n' "$line" >> "$profile" 2>/dev/null || return 1
+    PATH_PROFILE="$profile"
+    return 0
+}
+
+# Removes the lines setup_path added, from every profile it may have used.
+remove_path_setup() {
+    for f in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+        [ -f "$f" ] && grep -qF "$PATH_MARKER" "$f" || continue
+        { grep -vF "$PATH_MARKER" "$f" || true; } > "$f.tsi-tmp" && cat "$f.tsi-tmp" > "$f"
+        rm -f "$f.tsi-tmp"
+        log_info "Removed TSI from PATH in $f"
+    done
+    rm -f "$HOME/.config/fish/conf.d/tsi.fish"
+}
+
 check_tsi_installed() {
     tsi_bin="${PREFIX}/bin/tsi"
     [ -f "$tsi_bin" ] && [ -x "$tsi_bin" ] && return 0
@@ -117,8 +181,8 @@ run_uninstall() {
     fi
     log_info "Removing $PREFIX_ABS..."
     rm -rf "$PREFIX_ABS"
+    remove_path_setup
     log_info "TSI uninstalled."
-    log_info "Remove from your shell profile: export PATH=\"\$HOME/.tsi/bin:\$PATH\""
 }
 
 detect_arch() {
@@ -159,6 +223,9 @@ main() {
                 echo ""
                 echo "Usage: $0 [options]"
                 echo ""
+                echo "Running it again updates an existing installation."
+                echo "It adds TSI to PATH in your shell profile (TSI_NO_MODIFY_PATH=1 skips that)."
+                echo ""
                 echo "Options:"
                 echo "  --repair          Repair/update existing TSI installation"
                 echo "  --uninstall       Remove TSI completely from the system"
@@ -167,8 +234,9 @@ main() {
                 echo "  --help, -h        Show this help"
                 echo ""
                 echo "Examples:"
-                echo "  PREFIX=~/.tsi curl -fsSL .../tsi-bootstrap.sh | sh"
-                echo "  REPAIR=1 curl -fsSL .../tsi-bootstrap.sh | sh"
+                echo "  curl -fsSL .../tsi-bootstrap.sh | sh"
+                echo "  curl -fsSL .../tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi"
+                echo "  curl -fsSL .../tsi-bootstrap.sh | TSI_NO_MODIFY_PATH=1 sh"
                 echo "  curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall"
                 exit 0
                 ;;
@@ -181,25 +249,15 @@ main() {
         return
     fi
 
+    # Running the installer again is how you update: an existing install is
+    # upgraded in place (same as --repair), keeping packages and data.
+    if [ "$REPAIR_MODE" != true ] && check_tsi_installed; then
+        REPAIR_MODE=true
+    fi
     if [ "$REPAIR_MODE" = true ]; then
-        log_info "TSI Repair/Update Mode"
+        log_info "Updating TSI in $PREFIX"
     else
-        log_info "TSI One-Line Bootstrap Installer"
-        log_info "Installation prefix: $PREFIX"
-        if check_tsi_installed; then
-            if [ "$NON_INTERACTIVE" = true ]; then
-                log_error "TSI already installed. Use REPAIR=1 to update."
-                exit 1
-            fi
-            if [ -t 1 ] && [ -c /dev/tty ] 2>/dev/null; then
-                { printf "[INFO] TSI already installed. Proceed with fresh install? (yes to continue): " > /dev/tty
-                  read -r r < /dev/tty; printf "\n" > /dev/tty; }
-                [ "$r" != "yes" ] && { log_info "Cancelled."; exit 0; }
-            else
-                log_error "TSI already installed. Use REPAIR=1 to update."
-                exit 1
-            fi
-        fi
+        log_info "Installing TSI to $PREFIX"
     fi
 
     mkdir -p "$INSTALL_DIR"
@@ -335,18 +393,30 @@ main() {
         done
         log_info "  Copied $count package definitions"
     else
-        log_info "  None bundled; run 'tsi update' to fetch them"
+        # No bundled definitions (tarball download): fetch them now, so
+        # `tsi install` works right away.
+        if "$PREFIX/bin/tsi" update --prefix "$PREFIX" >/dev/null 2>&1; then
+            log_info "  Fetched the latest package definitions"
+        else
+            log_warn "  Could not fetch package definitions; run 'tsi update' later"
+        fi
     fi
 
+    PATH_PROFILE=""
     log_info ""
-    log_info "TSI installed successfully!"
-    log_info ""
-    log_info "Add to PATH:"
-    log_info "  export PATH=\"$PREFIX/bin:\$PATH\""
-    log_info ""
-    log_info "Then run: tsi update   # fetch latest package definitions"
-    log_info "         tsi install curl   # install a package"
-    log_info ""
+    if setup_path "$PREFIX/bin"; then
+        log_info "TSI installed successfully!"
+        if [ -n "$PATH_PROFILE" ]; then
+            log_info "Added $PREFIX/bin to PATH in $PATH_PROFILE."
+            log_info "Open a new terminal, then try:  tsi install curl"
+        else
+            log_info "Try:  tsi install curl"
+        fi
+    else
+        log_info "TSI installed successfully!"
+        log_info "Add it to your PATH:  export PATH=\"$PREFIX/bin:\$PATH\""
+        log_info "Then try:  tsi install curl"
+    fi
 }
 
 main "$@"
