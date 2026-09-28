@@ -1,3 +1,4 @@
+use super::palette;
 use console::style;
 use std::io::{self, Write};
 
@@ -13,7 +14,12 @@ fn is_tty() -> bool {
 
 pub fn section(msg: impl std::fmt::Display) {
     if is_tty() {
-        let _ = writeln!(io::stderr(), "{} {}", style(ARROW).bold().blue(), msg);
+        let _ = writeln!(
+            io::stderr(),
+            "{} {}",
+            style(ARROW).bold().color256(palette::BRAND),
+            msg
+        );
     } else {
         let _ = writeln!(io::stderr(), "{} {}", ARROW, msg);
     }
@@ -39,9 +45,16 @@ pub fn warning(msg: impl std::fmt::Display) {
     }
 }
 
+/// Errors are bright red and bold, and always carry their marker, so they
+/// can't be mistaken for the (also red) brand color.
 pub fn error(msg: impl std::fmt::Display) {
     if is_tty() {
-        let _ = writeln!(io::stderr(), "{} {}", style(ERROR_MARKER).red(), msg);
+        let _ = writeln!(
+            io::stderr(),
+            "{} {}",
+            style(ERROR_MARKER).red().bright().bold(),
+            msg
+        );
     } else {
         let _ = writeln!(io::stderr(), "{} {}", ERROR_MARKER, msg);
     }
@@ -53,7 +66,12 @@ pub fn info(msg: impl std::fmt::Display) {
 
 pub fn step(msg: impl std::fmt::Display) {
     if is_tty() {
-        let _ = writeln!(io::stderr(), "{} {}", style("->").cyan(), msg);
+        let _ = writeln!(
+            io::stderr(),
+            "{} {}",
+            style("->").color256(palette::BRAND),
+            msg
+        );
     } else {
         let _ = writeln!(io::stderr(), "-> {}", msg);
     }
@@ -62,7 +80,12 @@ pub fn step(msg: impl std::fmt::Display) {
 /// Homebrew-style build step line (e.g. "==> make").
 pub fn build_step(msg: impl std::fmt::Display) {
     if is_tty() {
-        let _ = writeln!(io::stderr(), "{} {}", style(ARROW).bold().blue(), msg);
+        let _ = writeln!(
+            io::stderr(),
+            "{} {}",
+            style(ARROW).bold().color256(palette::BRAND),
+            msg
+        );
     } else {
         let _ = writeln!(io::stderr(), "{} {}", ARROW, msg);
     }

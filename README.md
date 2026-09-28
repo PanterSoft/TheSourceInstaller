@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="TSI" width="96" height="96">
+</p>
+
 # TSI - The Source Installer
 
 A distribution-independent source-based package manager that enables building packages from source with all their dependencies.

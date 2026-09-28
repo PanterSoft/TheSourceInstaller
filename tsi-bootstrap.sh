@@ -35,9 +35,25 @@ if [ -d "${PREFIX}/bin" ]; then
     export PATH="${PREFIX}/bin:${PATH}"
 fi
 
-log_info() { echo "[INFO] $*"; }
-log_warn() { echo "[WARN] $*"; }
-log_error() { echo "[ERROR] $*" >&2; }
+# TSI palette (docs/brand.md): brand Terminal Red for info, yellow for
+# warnings, bright bold red for errors. Only on a terminal, and never when
+# NO_COLOR is set (https://no-color.org).
+C_BRAND='' C_WARN='' C_ERR='' C_RESET=''
+if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    C_BRAND=$(printf '\033[38;5;167m')
+    C_WARN=$(printf '\033[33m')
+    C_RESET=$(printf '\033[0m')
+fi
+if [ -z "${NO_COLOR:-}" ] && [ -t 2 ]; then
+    C_ERR=$(printf '\033[1;91m')
+    C_ERR_RESET=$(printf '\033[0m')
+else
+    C_ERR_RESET=''
+fi
+
+log_info() { printf '%s[INFO]%s %s\n' "$C_BRAND" "$C_RESET" "$*"; }
+log_warn() { printf '%s[WARN]%s %s\n' "$C_WARN" "$C_RESET" "$*"; }
+log_error() { printf '%s[ERROR]%s %s\n' "$C_ERR" "$C_ERR_RESET" "$*" >&2; }
 
 command_exists() {
     if [ -d "${PREFIX}/bin" ] && [ -x "${PREFIX}/bin/$1" ]; then return 0; fi

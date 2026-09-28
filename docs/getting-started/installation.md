@@ -2,26 +2,26 @@
 
 ## One-Line Install (Recommended)
 
-Install TSI with a single command. The installer downloads TSI source and builds the Rust binary (or uses a pre-built binary when available):
+Install TSI with a single command. The installer downloads the pre-built binary for your platform, and only builds from source with cargo when there isn't one:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 Or using `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+wget -qO- https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 The installer will automatically:
-- Download TSI source code (via git clone or tarball)
-- Build TSI using Rust (cargo) or download a pre-built binary
+- Download the pre-built `tsi` binary from the latest GitHub release
+- Fall back to downloading the source and building it with Rust (cargo) on platforms without one
 - Install TSI to `~/.tsi`
 
 **Custom installation location:**
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 **Update an existing installation:**
@@ -48,12 +48,12 @@ on any distro, glibc or musl). Anything else builds from source with cargo.
 
 **Repair a broken installation:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --repair
 ```
 
 Or using environment variable:
 ```bash
-REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 This is useful when the `tsi` binary itself is missing or broken and `tsi self-update` can't run.
@@ -69,8 +69,8 @@ Requires [Rust](https://rustup.rs/) toolchain:
 
 ```bash
 # Clone the repository
-git clone https://github.com/PanterSoft/tsi.git
-cd tsi
+git clone https://github.com/PanterSoft/TheSourceInstaller.git
+cd TheSourceInstaller
 
 # Build
 cargo build --release
