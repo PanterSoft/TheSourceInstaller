@@ -77,6 +77,7 @@ shared by the CLI and the TUI.
 | CLI | Spinners; progress bars | Terminal Red; Terminal Red Deep on Track |
 | CLI | Success `[ok]` / warning `[!!]` | Green / yellow |
 | CLI | Error `[XX]` | Bright red, bold |
+| TUI | ` tsi ` badge at the left of the tab bar | White (231) on Terminal Red, bold |
 | TUI | Focused border, selection, active tab, keys, running spinner | Terminal Red |
 | TUI | Failed operations, destructive actions | Bright red, bold |
 | Installer | `[INFO]` / `[WARN]` / `[ERROR]` | Terminal Red / yellow / bright red, bold |
@@ -87,3 +88,23 @@ terminal: piped output stays plain, and the installer honors
 [`NO_COLOR`](https://no-color.org). xterm-256 indices are used instead of 24-bit
 color because they render the same on every terminal TSI targets, including ones
 without truecolor support.
+
+## In a GUI, or anything new
+
+Every color above is also in a machine-readable file,
+[`docs/assets/brand/tokens.json`](assets/brand/tokens.json), in the
+[W3C Design Tokens](https://tr.designtokens.org/format/) format. It's published with
+this site, so any tool can fetch it from
+`https://pantersoft.github.io/TheSourceInstaller/assets/brand/tokens.json`. A
+future GUI (or a website, installer screen, or icon set) should start from it:
+
+- `brand.*` and `neutral.*` are the raw palette.
+- `theme.light.*` and `theme.dark.*` map it to roles (background, surface, text,
+  primary, link), so a GUI can switch schemes by switching one group.
+- `status.*` holds success, warning and error for light and dark. All pass WCAG AA
+  on their theme's background. Error is red like the brand, so rule 3 applies:
+  pair it with an icon or label.
+- `terminal.*` holds the xterm-256 indices used by the CLI and TUI.
+
+When a color changes, change it in `tokens.json`, `docs/stylesheets/tsi.css` and
+`src/ui/palette.rs` together.

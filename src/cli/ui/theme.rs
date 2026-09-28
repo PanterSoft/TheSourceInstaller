@@ -43,6 +43,15 @@ pub fn warn() -> Style {
     Style::default().fg(WARN)
 }
 
+/// The ` tsi ` badge at the left of the tab bar: white on the brand red, like
+/// the logo.
+pub fn brand_badge() -> Style {
+    Style::default()
+        .fg(Color::Indexed(palette::ON_BRAND))
+        .bg(ACCENT)
+        .add_modifier(Modifier::BOLD)
+}
+
 /// Style for the selected list row.
 pub fn selection() -> Style {
     Style::default().fg(ACCENT).add_modifier(Modifier::REVERSED)

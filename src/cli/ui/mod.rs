@@ -421,7 +421,7 @@ fn render_tab_bar(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Min(0), Constraint::Length(14)])
         .split(area);
 
-    let mut spans = vec![Span::raw(" ")];
+    let mut spans = vec![Span::styled(" tsi ", theme::brand_badge()), Span::raw("  ")];
     for (i, tab) in Tab::all().iter().enumerate() {
         if i > 0 {
             spans.push(Span::raw("  "));
@@ -435,7 +435,7 @@ fn render_tab_bar(f: &mut Frame, app: &App, area: Rect) {
     }
     f.render_widget(Paragraph::new(Line::from(spans)), cols[0]);
 
-    let version = format!("tsi v{} ", env!("CARGO_PKG_VERSION"));
+    let version = format!("v{} ", env!("CARGO_PKG_VERSION"));
     let right =
         Paragraph::new(Line::from(Span::styled(version, theme::dim()))).alignment(Alignment::Right);
     f.render_widget(right, cols[1]);
@@ -739,6 +739,24 @@ mod tests {
         for (w, h) in [(1, 1), (10, 5), (80, 24)] {
             draw(&mut app, w, h);
         }
+    }
+
+    #[test]
+    fn tab_bar_leads_with_the_brand_badge() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut app = app_at(temp.path(), &["curl"]);
+        app.apply_filter();
+
+        let backend = ratatui::backend::TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+
+        let top: String = (0..5).map(|x| buffer[(x, 0)].symbol()).collect();
+        assert_eq!(top, " tsi ");
+        let badge = &buffer[(1, 0)];
+        assert_eq!(badge.bg, theme::ACCENT);
+        assert!(badge.modifier.contains(ratatui::style::Modifier::BOLD));
     }
 
     #[test]
