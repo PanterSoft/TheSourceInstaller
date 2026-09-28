@@ -1,18 +1,21 @@
-//! btop-inspired visual style: rounded thin borders, a restrained palette,
-//! and helpers so every panel in the TUI looks consistent.
+//! btop-inspired visual style: rounded thin borders, the TSI palette, and
+//! helpers so every panel in the TUI looks consistent.
 
+use crate::ui::palette;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders};
 
-/// Accent color for the focused panel border, selection, active tab, keys.
-pub const ACCENT: Color = Color::Cyan;
+/// Brand accent (Terminal Red) for the focused panel border, selection,
+/// active tab, keys.
+pub const ACCENT: Color = Color::Indexed(palette::BRAND);
 /// De-emphasized elements: inactive borders, separators, hints.
 pub const MUTED: Color = Color::DarkGray;
 /// Installed packages / successful operations.
 pub const OK: Color = Color::Green;
-/// Errors and failed operations only.
-pub const ERR: Color = Color::Red;
+/// Errors, failed operations and destructive actions only. Bright red and
+/// bold (see [`err`]) so it reads as distinct from the red brand accent.
+pub const ERR: Color = Color::LightRed;
 /// Destructive-but-confirmable situations, e.g. a removal that strands dependents.
 pub const WARN: Color = Color::Yellow;
 
@@ -33,7 +36,7 @@ pub fn ok() -> Style {
 }
 
 pub fn err() -> Style {
-    Style::default().fg(ERR)
+    Style::default().fg(ERR).add_modifier(Modifier::BOLD)
 }
 
 pub fn warn() -> Style {

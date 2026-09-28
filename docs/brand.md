@@ -43,7 +43,8 @@ the darker, safer choice); Ember is never used on light backgrounds (it fails).
 1. **Red is the brand, not decoration.** It marks identity and primary actions:
    the header, the logo, links, the one primary button. Body text, tables and
    code stay neutral.
-2. **One red per surface.** Forge Red on light, Ember on dark. Don't mix them.
+2. **One red per surface.** Forge Red on light, Ember on dark, Terminal Red in
+   the terminal. Don't mix them.
 3. **Status colors stay semantic.** Success is green, warnings are amber, errors
    are red. Because the brand is also red, an error is never signalled by color
    alone. It always carries its marker (`[XX]`, `✗`) or a label, so a reader
@@ -56,19 +57,33 @@ The palette is applied through Material's `custom` primary/accent colors in
 swaps Material's blue-tinted slate for Kiln, with a neutral warm hue (`--md-hue: 0`)
 for the rest of its greys.
 
-## In the terminal (proposed)
+## In the terminal
 
-The CLI and TUI don't use the brand yet. Today the TUI accent is cyan
-(`src/cli/ui/theme.rs`) and the CLI's `==>` section arrows are bold blue
-(`src/ui/output.rs`). The proposed mapping:
+A terminal can't tell TSI whether its background is light or dark, so the
+terminal uses one red that works on both: **Terminal Red**, xterm-256 color
+`167` (`#D75F5F`), 5.7:1 on black and 3.7:1 on white (enough for the bold
+and non-text uses it has). It is defined once in `src/ui/palette.rs` and
+shared by the CLI and the TUI.
 
-| Role | Today | Proposed |
+<div class="tsi-swatches" markdown>
+<div class="tsi-swatch"><div class="tsi-swatch__chip" style="--c:#d75f5f"></div><div class="tsi-swatch__label"><strong>Terminal Red</strong><code>167 · #D75F5F</code><br>Brand accent in the terminal.</div></div>
+<div class="tsi-swatch"><div class="tsi-swatch__chip" style="--c:#af5f5f"></div><div class="tsi-swatch__label"><strong>Terminal Red Deep</strong><code>131 · #AF5F5F</code><br>Filled part of progress bars.</div></div>
+<div class="tsi-swatch"><div class="tsi-swatch__chip" style="--c:#444444"></div><div class="tsi-swatch__label"><strong>Track</strong><code>238 · #444444</code><br>Unfilled part of progress bars.</div></div>
+</div>
+
+| Where | Role | Color |
 |---|---|---|
-| TUI accent: focused border, selection, active tab, keys | Cyan | Brand red: 256-color index 160 (`#D70000`), falling back to ANSI red |
-| CLI section arrow `==>`, build steps | Bold blue | Bold brand red |
-| Success `[ok]` | Green | Green (unchanged) |
-| Warning `[!!]` | Yellow | Yellow (unchanged) |
-| Error `[XX]` | Red | Red, bold, and always with its marker (rule 3) |
+| CLI | Section and build-step arrows `==>`, step arrows `->` | Terminal Red (bold for `==>`) |
+| CLI | Spinners; progress bars | Terminal Red; Terminal Red Deep on Track |
+| CLI | Success `[ok]` / warning `[!!]` | Green / yellow |
+| CLI | Error `[XX]` | Bright red, bold |
+| TUI | Focused border, selection, active tab, keys, running spinner | Terminal Red |
+| TUI | Failed operations, destructive actions | Bright red, bold |
+| Installer | `[INFO]` / `[WARN]` / `[ERROR]` | Terminal Red / yellow / bright red, bold |
 
-The 256-color index is used instead of 24-bit color because it renders the same
-on every terminal TSI targets, including ones without truecolor support.
+Errors use the terminal's *bright* red in bold, a different and stronger red than
+the brand's, and always keep their marker (rule 3). Color is only emitted to a
+terminal: piped output stays plain, and the installer honors
+[`NO_COLOR`](https://no-color.org). xterm-256 indices are used instead of 24-bit
+color because they render the same on every terminal TSI targets, including ones
+without truecolor support.
