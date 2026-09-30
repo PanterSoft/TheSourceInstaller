@@ -1,10 +1,10 @@
 name: Build Release Binaries
 
-# One matrix for every platform a release ships. release.yml calls this for
-# tagged releases and ci.yml calls it on every change that could break a leg,
-# so a broken architecture shows up on the branch that broke it rather than on
-# release day. It has no push/pull_request trigger of its own: ci.yml is the
-# single entry point, so a change is built once, not once per workflow.
+# One matrix for every platform a release ships. ci.yml calls it on every change
+# that could break a leg, so a broken architecture shows up on the branch that
+# broke it rather than on release day, and the release publishes these very
+# binaries. It has no push/pull_request trigger of its own: ci.yml is the single
+# entry point, so a change is built once, not once per workflow.
 on:
   workflow_call:
     inputs:
@@ -13,7 +13,11 @@ on:
         required: false
         type: string
         default: ''
-  workflow_dispatch:
+      version:
+        description: 'Release version to bake into the binaries (empty: keep Cargo.toml)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -111,6 +115,15 @@ jobs:
         uses: actions/checkout@v5.0.1
         with:
           ref: ${{ inputs.ref }}
+
+      - name: Set release version
+        if: ${{ inputs.version != '' }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          perl -pi -e 'BEGIN { $v = $ENV{VERSION} } s/^version = ".*"/version = "$v"/ && $done++ unless $done' Cargo.toml
+          grep -m1 '^version' Cargo.toml
 
       - name: Install Rust (${{ matrix.target }})
         uses: dtolnay/rust-toolchain@stable
