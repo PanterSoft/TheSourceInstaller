@@ -164,6 +164,19 @@ Packages using the raw `make` build system are built serially regardless;
 hand-written Makefiles too often lack the dependency information `-j` needs. A
 package that is known to be safe can request it in `make_args`.
 
+## Download Retries
+
+A failed source download is retried: five attempts in all, 2, 8, 30 and 60
+seconds apart, which rides out a flaky network or a DNS outage of a minute or
+two. A server that refuses outright — 404, 403 and the like — fails at once,
+since asking again will not change its answer. `TSI_FETCH_ATTEMPTS` sets the
+number of attempts:
+
+```bash
+TSI_FETCH_ATTEMPTS=1 tsi install curl   # fail on the first error
+TSI_FETCH_ATTEMPTS=8 tsi install curl   # be more patient
+```
+
 ## Package Database
 
 TSI maintains a database of installed packages at `~/.tsi/db/`. This tracks:

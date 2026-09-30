@@ -84,8 +84,12 @@ compiler; everything else should be a `cargo test`.
 ## Cross-architecture package validation
 
 **Package builds are CI's job.** `test-build-packages.yml` builds every changed package on
-Linux-x86_64, Linux-aarch64 and macOS-aarch64 per PR, and `validate-all-packages.yml`
-rebuilds the whole catalogue weekly and regenerates `PACKAGES_STATUS.md`. Those results are
+Linux-x86_64, Linux-aarch64, macOS-aarch64 and macOS-x86_64 per PR, and
+`validate-all-packages.yml` rebuilds the whole catalogue weekly on the same four -- every
+platform GitHub has hosted hardware for -- and regenerates `PACKAGES_STATUS.md`. Each slow
+package (gcc, llvm, ...) gets a job of its own, so one long build cannot time out the rest.
+Where a package cannot build on a platform, the reason is kept in
+`scripts/status-notes.tsv` and shown in the table's Notes column. Those results are
 the ones that count; a laptop's are not recorded anywhere.
 
 Locally, smoke-test the definition you are editing and let CI do the rest:
@@ -124,9 +128,9 @@ runner exists so you get the answer in minutes instead of after a push.
 | Workflow | When | What it proves |
 |---|---|---|
 | `package-validation.yml` | push / PR | catalogue schema and invariants, version ordering, the scripts' self-checks, shellcheck, and that changed packages' sources are pinned and reachable |
-| `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64 and macOS-aarch64, and their installed binaries can actually load |
+| `test-build-packages.yml` | push / PR | changed packages really build on Linux-x86_64, Linux-aarch64, macOS-aarch64 and macOS-x86_64, and their installed binaries can actually load; a failing leg ends with why each package failed |
 | `verify-sources.yml` | weekly | every package's default source still downloads and matches its recorded sha256 |
-| `validate-all-packages.yml` | weekly + manual | the whole catalogue on all three platforms, regenerating `PACKAGES_STATUS.md` |
+| `validate-all-packages.yml` | weekly + manual | the whole catalogue on all four platforms, slow packages included, regenerating `PACKAGES_STATUS.md` with the reason for every package that cannot build somewhere |
 
 The behaviour that a full-catalogue run would otherwise be the only witness to is pinned by
 ordinary tests instead, so it is checked on every commit rather than every week: the

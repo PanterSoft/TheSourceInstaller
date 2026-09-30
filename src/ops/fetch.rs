@@ -145,12 +145,27 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
     Ok(target_dir)
 }
 
+/// Sent with every download. ureq's default ("ureq/<version>") is refused by some
+/// source hosts' bot filters -- freedesktop.org answered it with HTTP 418 while
+/// serving the same tarball to a client that said who it was.
+fn user_agent() -> String {
+    format!(
+        "tsi/{} (+https://github.com/PanterSoft/TheSourceInstaller)",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
 pub fn download_file(url: &str, dest: &Path) -> Result<()> {
-    let agent = ureq::Agent::new();
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|e| anyhow::anyhow!("Download failed: {}", e))?;
+    let agent = ureq::AgentBuilder::new().user_agent(&user_agent()).build();
+    let response = agent.get(url).call().map_err(|e| {
+        let permanent = matches!(&e, ureq::Error::Status(code, _) if !retryable_status(*code));
+        let err = anyhow::anyhow!("Download failed: {}", e);
+        if permanent {
+            err.context(PermanentDownloadError)
+        } else {
+            err
+        }
+    })?;
 
     let len = response
         .header("Content-Length")
@@ -176,21 +191,62 @@ pub fn download_file(url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Download `url` to `dest`, retrying up to 3 times on transient failures.
-/// Uses exponential backoff: 1 s after attempt 1, 2 s after attempt 2.
+/// Marks a download failure that retrying cannot fix: the server answered, and
+/// the answer was "no" (404, 403, 410, ...).
+#[derive(Debug)]
+struct PermanentDownloadError;
+
+impl std::fmt::Display for PermanentDownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the server refused the request; retrying will not help")
+    }
+}
+
+/// Whether an HTTP status may succeed on a later attempt: server errors, and
+/// the two client errors that mean "not now" rather than "no".
+fn retryable_status(code: u16) -> bool {
+    !(400..500).contains(&code) || code == 408 || code == 429
+}
+
+/// Seconds to wait after failed attempt `attempt` (0-based).
+///
+/// Long enough to ride out a resolver outage, not just a dropped packet. CI's
+/// Intel macOS runners lose DNS for minutes at a time; with 1 s and 2 s between
+/// three attempts, one such outage failed bison, npth and pango in a single
+/// validation run while their hosts were fine.
+fn retry_delay_secs(attempt: u32) -> u64 {
+    const DELAYS: [u64; 4] = [2, 8, 30, 60];
+    DELAYS[(attempt as usize).min(DELAYS.len() - 1)]
+}
+
+/// How many times to try a download: `TSI_FETCH_ATTEMPTS` when it is a positive
+/// number, 5 otherwise.
+fn fetch_attempts() -> u32 {
+    std::env::var("TSI_FETCH_ATTEMPTS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(5)
+}
+
+/// Download `url` to `dest`, retrying transient failures with backoff
+/// (see `retry_delay_secs`). A refusal from the server fails at once.
 fn download_file_with_retry(url: &str, dest: &Path) -> Result<()> {
-    const MAX_ATTEMPTS: u32 = 3;
-    for attempt in 0..MAX_ATTEMPTS {
+    let max_attempts = fetch_attempts();
+    for attempt in 0..max_attempts {
         match download_file(url, dest) {
             Ok(()) => return Ok(()),
-            Err(e) if attempt + 1 < MAX_ATTEMPTS => {
+            Err(e) if e.downcast_ref::<PermanentDownloadError>().is_some() => return Err(e),
+            Err(e) if attempt + 1 < max_attempts => {
+                let wait = retry_delay_secs(attempt);
                 log::warn!(
-                    "Download attempt {} of {} failed: {}. Retrying…",
+                    "Download attempt {} of {} failed: {}. Retrying in {}s…",
                     attempt + 1,
-                    MAX_ATTEMPTS,
-                    e
+                    max_attempts,
+                    e,
+                    wait
                 );
-                std::thread::sleep(std::time::Duration::from_secs(2u64.pow(attempt)));
+                std::thread::sleep(std::time::Duration::from_secs(wait));
             }
             Err(e) => return Err(e),
         }
@@ -662,5 +718,37 @@ mod tests {
             std::fs::read_to_string(dst.join("a/b/deep.txt")).unwrap(),
             "deep"
         );
+    }
+
+    #[test]
+    fn downloads_identify_as_tsi() {
+        let ua = user_agent();
+        assert!(ua.starts_with("tsi/"), "{ua}");
+        assert!(!ua.contains("ureq"), "{ua}");
+    }
+
+    #[test]
+    fn only_refusals_are_permanent() {
+        for code in [400, 401, 403, 404, 410] {
+            assert!(!retryable_status(code), "{code}");
+        }
+        for code in [408, 429, 500, 502, 503, 504] {
+            assert!(retryable_status(code), "{code}");
+        }
+    }
+
+    #[test]
+    fn retries_wait_long_enough_for_a_dns_outage() {
+        let total: u64 = (0..4).map(retry_delay_secs).sum();
+        assert!(total >= 90, "only {total}s of backoff");
+        assert!(retry_delay_secs(0) < retry_delay_secs(3));
+        assert_eq!(retry_delay_secs(50), retry_delay_secs(3));
+    }
+
+    #[test]
+    fn permanent_marker_survives_as_context() {
+        let e = anyhow::anyhow!("Download failed: 404").context(PermanentDownloadError);
+        assert!(e.downcast_ref::<PermanentDownloadError>().is_some());
+        assert!(format!("{e:#}").contains("404"));
     }
 }

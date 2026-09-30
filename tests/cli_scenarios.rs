@@ -9,6 +9,9 @@ fn tsi(prefix: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_tsi"))
         .args(args)
         .args(["--prefix", prefix.to_str().unwrap()])
+        // Fixtures point at unresolvable hosts on purpose; one attempt is the
+        // answer, not five with a minute and a half of backoff between them.
+        .env("TSI_FETCH_ATTEMPTS", "1")
         .output()
         .unwrap()
 }
