@@ -30,7 +30,7 @@ services:
     command: /bin/sh -c "cd /root/tsi-source && /bin/sh"
 
   # --------------------------------------------------------------------
-  # Four-distro end-to-end tests, mirroring the docker-tests.yml CI
+  # Four-distro end-to-end tests, mirroring the e2e.yml CI
   # workflow: bare upstream images (no custom build), only cc+make
   # installed inside the container, then a real `tsi install bzip2`.
   #

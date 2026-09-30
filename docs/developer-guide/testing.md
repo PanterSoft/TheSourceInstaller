@@ -70,7 +70,7 @@ When you fix a bug that only shows up in one of those states, add the state here
 
 ## Docker e2e
 
-Real source builds across distros live in `docker/` and run in the `docker-tests`
+Real source builds across distros live in `docker/` and run in the `e2e.yml`
 workflow:
 
 ```bash
@@ -119,9 +119,9 @@ runner exists so you get the answer in minutes instead of after a push.
 
 | Workflow | When | What it proves |
 |---|---|---|
-| `test.yml` | push / PR | `cargo build`, `test`, `clippy -D warnings`, `fmt --check` on ubuntu x86_64 and arm64, macOS, and Windows x86_64 and arm64; shellcheck over `tsi-bootstrap.sh` and `docker/*.sh` |
-| `docker-tests.yml` | push / PR | a real source build of bzip2 inside bare containers on every Linux release architecture: Alpine/Debian/Ubuntu/Fedora natively on x86_64 and aarch64, Alpine and Debian under qemu on i686, armv7, armv6 (Alpine only), riscv64 and ppc64le; plus a zero-dependency proof on each of them that the static binary works with no toolchain at all |
-| `build-binaries.yml` | push / PR, and every release | the release binary for every shipped platform builds: Linux x86_64/aarch64 natively and i686/armv7/armv6/riscv64/ppc64le with cargo-zigbuild (static, smoke-tested under qemu-user), macOS aarch64 and x86_64, Windows x86_64 and aarch64. `release.yml` publishes exactly these artifacts |
+| `ci.yml` | push / PR (release on `main`) | lint stage: `clippy -D warnings` and `fmt --check` on Linux, macOS and Windows; actionlint; shellcheck over `tsi-bootstrap.sh` and `docker/*.sh`. Then the build and e2e stages below. On a push to `main` it finally tags and publishes the next minor release; a major release is a manual run with `bump = major` |
+| `e2e.yml` | called by `ci.yml` | a real source build of bzip2 inside bare containers on every Linux release architecture: Alpine/Debian/Ubuntu/Fedora natively on x86_64 and aarch64, Alpine and Debian under qemu on i686, armv7, armv6 (Alpine only), riscv64 and ppc64le; plus a zero-dependency proof on each of them that the static binary works with no toolchain at all |
+| `build-binaries.yml` | called by `ci.yml` | the release binary for every shipped platform builds: Linux x86_64/aarch64 natively and i686/armv7/armv6/riscv64/ppc64le with cargo-zigbuild (static, smoke-tested under qemu-user), macOS aarch64 and x86_64, Windows x86_64 and aarch64. the release publishes exactly these artifacts, and runs `cargo test` on the native platforms |
 
 **In tsi-packages**
 
@@ -139,5 +139,5 @@ the platform gate and `update --local` self-copy guard (`tests/cli_scenarios.rs`
 
 ## CI
 
-`rust-ci.yml` runs fmt, clippy and the test suite on push and PR; `docker-tests.yml` runs
-the e2e matrix. A change is expected to be green on both before merge.
+`ci.yml` runs lint, then the build and test matrix, then the e2e matrix on push and PR.
+A change is expected to be green before merge.

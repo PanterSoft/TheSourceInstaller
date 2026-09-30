@@ -3,7 +3,7 @@ name: CI
 # The single pipeline for every code change, in stages:
 #   1. lint   -- cheap checks that fail in seconds (fmt, clippy, actionlint, shellcheck)
 #   2. build  -- every release platform, with tests and smoke tests
-#                (build-binaries.yml, the same matrix release.yml ships)
+#                (build-binaries.yml, the same matrix the release ships)
 #   3. e2e    -- real installs in distro containers, using the stage-2 binaries
 #                (e2e.yml)
 #   4. release -- main only, once everything above is green: tag and publish
