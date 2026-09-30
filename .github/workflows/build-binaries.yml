@@ -1,9 +1,10 @@
 name: Build Release Binaries
 
 # One matrix for every platform a release ships. release.yml calls this for
-# tagged releases; the push/pull_request triggers run the same matrix on every
-# change that could break a leg, so a broken architecture shows up on the
-# branch that broke it rather than on release day.
+# tagged releases and ci.yml calls it on every change that could break a leg,
+# so a broken architecture shows up on the branch that broke it rather than on
+# release day. It has no push/pull_request trigger of its own: ci.yml is the
+# single entry point, so a change is built once, not once per workflow.
 on:
   workflow_call:
     inputs:
@@ -12,20 +13,6 @@ on:
         required: false
         type: string
         default: ''
-  push:
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - '.github/workflows/build-binaries.yml'
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - '.github/workflows/build-binaries.yml'
   workflow_dispatch:
 
 permissions:

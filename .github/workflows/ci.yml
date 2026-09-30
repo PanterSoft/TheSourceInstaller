@@ -1,0 +1,117 @@
+name: CI
+
+# The single pipeline for every code change, in stages:
+#   1. lint   -- cheap checks that fail in seconds (fmt, clippy, actionlint, shellcheck)
+#   2. build  -- every release platform, with tests and smoke tests
+#                (build-binaries.yml, the same matrix release.yml ships)
+#   3. e2e    -- real installs in distro containers, using the stage-2 binaries
+#                (e2e.yml)
+# Documentation has its own workflow (docs.yml) and release.yml handles tags.
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'tests/**'
+      - '*.sh'
+      - 'docker/**'
+      - 'tsi-packages'
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'tests/**'
+      - '*.sh'
+      - 'docker/**'
+      - 'tsi-packages'
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR supersedes the run in flight.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-lint:
+    name: Clippy + fmt (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # Clippy runs per OS because cfg(windows)/cfg(target_os) code is only
+      # compiled, and so only linted, on its own platform.
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5.0.1
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo fmt --check
+
+  # A workflow that only parses as YAML can still be broken: an unknown context,
+  # a typo'd `needs`, a job referencing an output that does not exist. actionlint
+  # catches those before a push, and shellchecks the `run:` blocks too.
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.0.1
+      - name: Install actionlint
+        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+      - name: Lint workflows
+        # -S warning matches the severity the shell job uses, so the two agree
+        # on what counts as a problem.
+        env:
+          SHELLCHECK_OPTS: -S warning
+        run: ./actionlint -color
+
+  # The bootstrap script is how most users first get TSI, so a syntax or quoting
+  # slip there is a broken install, not a broken build.
+  shell:
+    name: Shellcheck (bootstrap, docker scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.0.1
+      - name: Check shell scripts
+        run: shellcheck -S warning tsi-bootstrap.sh docker/*.sh
+
+      - name: Verify bootstrap script parses under sh and bash
+        run: |
+          sh -n tsi-bootstrap.sh
+          bash -n tsi-bootstrap.sh
+
+      - name: Bootstrap --help works without network or toolchain
+        run: sh tsi-bootstrap.sh --help
+
+  build:
+    name: Build
+    needs: [rust-lint, actionlint, shell]
+    uses: ./.github/workflows/build-binaries.yml
+
+  # A failed leg elsewhere in the build (say, Windows) must not skip every
+  # container test; a missing artifact still fails its own leg. Only skip when
+  # build itself was skipped because a lint stage failed.
+  e2e:
+    name: E2E
+    needs: build
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
+    uses: ./.github/workflows/e2e.yml
