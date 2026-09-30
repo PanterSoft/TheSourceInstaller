@@ -120,6 +120,23 @@ pub fn run(args: InstallArgs) -> Result<()> {
     if let Some((name, version)) = last_pkg {
         ui::output::detail(format!("Last installed: {} {}.", name, version));
     }
+    let bin_dir = prefix.join("install").join("bin");
+    if total_installed > 0 && !on_path(&bin_dir) {
+        ui::output::info(format!(
+            "{} is not on your PATH. Add it to run installed programs:  export PATH=\"{}:$PATH\"",
+            bin_dir.display(),
+            bin_dir.display()
+        ));
+    }
 
     Ok(())
+}
+
+/// True when `dir` is one of the entries of `PATH`.
+fn on_path(dir: &std::path::Path) -> bool {
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let want = canon(dir);
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|p| canon(&p) == want))
+        .unwrap_or(false)
 }

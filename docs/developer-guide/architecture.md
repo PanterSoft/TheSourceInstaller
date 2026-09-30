@@ -109,7 +109,7 @@ src/
 9. **Platform** (`platform/`)
    - `os_name()`: darwin, linux, windows, freebsd, etc.
    - `default_prefix()`: `~/.tsi` (Unix) or `%USERPROFILE%\.tsi` (Windows)
-   - `resolve_prefix()`: User override or binary location detection
+   - `resolve_prefix()`: `--prefix`, `TSI_PREFIX`, binary location (only a real TSI prefix, never a system directory), `/etc/tsi.conf`, then `default_prefix()`
 
 ### Dependency Flow
 

@@ -76,3 +76,59 @@ fn test_release_platform_is_os_dash_arch() {
         "{plat}"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn test_system_dirs_are_never_detected_as_prefix() {
+    for exe in [
+        "/usr/bin/tsi",
+        "/usr/local/bin/tsi",
+        "/bin/tsi",
+        "/opt/bin/tsi",
+    ] {
+        assert_eq!(
+            platform::prefix_for_binary(std::path::Path::new(exe)),
+            None,
+            "{exe}"
+        );
+    }
+    assert!(platform::is_system_dir(std::path::Path::new("/")));
+    assert!(platform::is_system_dir(std::path::Path::new("/usr/")));
+    if let Some(home) = dirs::home_dir() {
+        assert!(platform::is_system_dir(&home));
+        assert_eq!(platform::prefix_for_binary(&home.join("bin/tsi")), None);
+    }
+}
+
+#[test]
+fn test_prefix_for_binary_accepts_a_dedicated_prefix() {
+    let tmp = tempfile::tempdir().unwrap();
+    let prefix = tmp.path().join("tsi");
+    let exe = prefix.join("bin").join("tsi");
+    assert_eq!(platform::prefix_for_binary(&exe), Some(prefix.clone()));
+    assert!(!platform::is_system_dir(&prefix));
+    assert_eq!(platform::prefix_for_binary(&prefix.join("bin/other")), None);
+    assert_eq!(
+        platform::prefix_for_binary(&prefix.join("libexec/tsi")),
+        None
+    );
+}
+
+#[test]
+fn test_mark_prefix_writes_the_marker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let prefix = tmp.path().join("p");
+    platform::mark_prefix(&prefix);
+    assert!(prefix.join(platform::PREFIX_MARKER).is_file());
+}
+
+#[test]
+fn test_parse_system_config() {
+    assert_eq!(
+        platform::parse_system_config("prefix = \"/var/lib/tsi\"\n"),
+        Some(std::path::PathBuf::from("/var/lib/tsi"))
+    );
+    assert_eq!(platform::parse_system_config("prefix = \"\"\n"), None);
+    assert_eq!(platform::parse_system_config("other = 1\n"), None);
+    assert_eq!(platform::parse_system_config("not toml ["), None);
+}

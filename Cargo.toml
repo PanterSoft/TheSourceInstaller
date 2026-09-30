@@ -4,7 +4,7 @@ version = "0.2.2"
 edition = "2021"
 description = "The Source Installer - A cross-platform source-based package manager"
 license = "MIT"
-repository = "https://github.com/PanterSoft/tsi"
+repository = "https://github.com/PanterSoft/TheSourceInstaller"
 
 [lib]
 name = "tsi"

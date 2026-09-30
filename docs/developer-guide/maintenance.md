@@ -63,7 +63,7 @@ If TSI is already installed and on your PATH, you can uninstall it with:
 tsi remove
 ```
 
-You will be asked to confirm. This removes the entire installation prefix (binary, completions, package database, and all installed packages). To skip the prompt (e.g. in scripts), use `--yes`. For a custom prefix, use `--prefix /path/to/tsi`.
+You will be asked to confirm. This removes what TSI created in the prefix (binary, completions, package database, and all installed packages), and the prefix directory itself if nothing else is left in it. It refuses to touch system directories such as `/usr`. To skip the prompt (e.g. in scripts), use `--yes`. For a custom prefix, use `--prefix /path/to/tsi`.
 
 ### Full Uninstall (Bootstrap)
 

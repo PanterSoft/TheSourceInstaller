@@ -161,7 +161,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
 
         self-update)
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--repo --branch --prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--repo --branch --force --prefix" -- ${cur}))
             fi
             return 0
             ;;

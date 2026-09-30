@@ -13,6 +13,18 @@ Many commands support:
 
 - `--prefix PATH` - Use custom installation prefix (default: `~/.tsi` on Unix, `%USERPROFILE%\.tsi` on Windows)
 
+### Prefix Resolution
+
+Without `--prefix`, TSI picks its prefix in this order:
+
+1. The `TSI_PREFIX` environment variable.
+2. The directory the running binary is installed in, when it is `<prefix>/bin/tsi` and
+   `<prefix>` is a TSI prefix (it holds a `.tsi-prefix` marker file). System directories
+   such as `/`, `/usr`, `/usr/local`, `/opt` and your home directory are never used, so a
+   distro-packaged `/usr/bin/tsi` does not make `/usr` the prefix.
+3. `prefix = "/some/dir"` in `/etc/tsi.conf` (TOML), for distro packages.
+4. `~/.tsi` (`%USERPROFILE%\.tsi` on Windows).
+
 ## Output Streams
 
 All human-facing progress and diagnostics go to **stderr**. Machine-readable output
@@ -76,7 +88,7 @@ not a failure.
 
 ### Remove
 
-Uninstall TSI from the system. Removes the installation prefix (binary, completions, package database, and all installed packages). You will be asked to confirm unless `--yes` is used.
+Uninstall TSI from the system. Removes what TSI created in the prefix (binary, completions, package definitions, sources, builds, package database, and all installed packages); the prefix directory itself is removed only if nothing else is left in it. System directories such as `/usr` are refused outright. You will be asked to confirm unless `--yes` is used.
 
 ```bash
 tsi remove [options]
@@ -84,7 +96,7 @@ tsi remove [options]
 
 **Options:**
 
-- `--prefix PATH` - Installation prefix to remove (default: detected from binary location)
+- `--prefix PATH` - Installation prefix to remove (default: see [Prefix Resolution](#prefix-resolution))
 - `--yes` - Skip confirmation prompt
 
 **Examples:**
@@ -200,6 +212,21 @@ tsi update
 tsi update --repo https://github.com/user/packages.git
 tsi update --local ./packages
 ```
+
+### Self-Update
+
+Update the TSI binary itself. TSI first checks the latest GitHub release and stops if the running version is already up to date. Otherwise it downloads the pre-built binary for this platform from that release, and builds from source (needs git or a GitHub URL, plus cargo) only if there is none.
+
+```bash
+tsi self-update [options]
+```
+
+**Options:**
+
+- `--repo URL` - Repository to update from (default: `https://github.com/PanterSoft/TheSourceInstaller`); used for the release check, the pre-built binary and the source build
+- `--branch NAME` - Branch to build from source (default: `main`)
+- `--force` - Update even if the running version is the latest release
+- `--prefix PATH` - Installation prefix
 
 ### Doctor
 
