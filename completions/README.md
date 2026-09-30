@@ -72,7 +72,7 @@ autoload -U compinit && compinit
 - `tsi update --<TAB>` - Shows options: `--repo`, `--local`, `--prefix`
 - `tsi update --local <TAB>` - Completes directory paths
 - `tsi update --prefix <TAB>` - Completes directory paths
-- `tsi self-update --<TAB>` - Shows options: `--repo`, `--branch`, `--prefix`
+- `tsi self-update --<TAB>` - Shows options: `--repo`, `--branch`, `--force`, `--prefix`
 - `tsi uninstall --prefix <TAB>` - Completes directory paths
 - `tsi doctor --prefix <TAB>` - Completes directory paths
 

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use std::path::{Path, PathBuf};
 
-const DEFAULT_REPO: &str = "https://github.com/PanterSoft/tsi-packages.git";
+use crate::repos::PACKAGES_REPO as DEFAULT_REPO;
 
 fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
     // std::fs::copy truncates the destination before reading the source, so
@@ -49,18 +49,9 @@ pub(crate) fn is_git_available() -> bool {
 /// form `https://github.com/OWNER/REPO` or `https://github.com/OWNER/REPO.git`.
 /// Returns `None` if `repo` doesn't look like a plain GitHub repository URL.
 fn github_tarball_url(repo: &str) -> Option<String> {
-    let rest = repo
-        .strip_prefix("https://github.com/")
-        .or_else(|| repo.strip_prefix("http://github.com/"))?;
-    let rest = rest.trim_end_matches('/');
-    let rest = rest.strip_suffix(".git").unwrap_or(rest);
-
-    let (owner, name) = rest.split_once('/')?;
-    if owner.is_empty() || name.is_empty() || name.contains('/') {
-        return None;
-    }
+    let slug = crate::repos::github_slug(repo)?;
     Some(format!(
-        "https://github.com/{owner}/{name}/archive/refs/heads/main.tar.gz"
+        "https://github.com/{slug}/archive/refs/heads/main.tar.gz"
     ))
 }
 

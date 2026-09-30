@@ -150,8 +150,9 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
 /// serving the same tarball to a client that said who it was.
 fn user_agent() -> String {
     format!(
-        "tsi/{} (+https://github.com/PanterSoft/TheSourceInstaller)",
-        env!("CARGO_PKG_VERSION")
+        "tsi/{} (+{})",
+        env!("CARGO_PKG_VERSION"),
+        crate::repos::TSI_REPO
     )
 }
 

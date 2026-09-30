@@ -81,6 +81,7 @@ _tsi() {
                     _arguments \
                         "--repo[Repository URL]:url:_urls" \
                         "--branch[Branch]" \
+                        "--force[Update even if already up to date]" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
                 doctor|list)

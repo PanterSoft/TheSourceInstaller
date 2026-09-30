@@ -213,6 +213,21 @@ tsi update --repo https://github.com/user/packages.git
 tsi update --local ./packages
 ```
 
+### Self-Update
+
+Update the TSI binary itself. TSI first checks the latest GitHub release and stops if the running version is already up to date. Otherwise it downloads the pre-built binary for this platform from that release, and builds from source (needs git or a GitHub URL, plus cargo) only if there is none.
+
+```bash
+tsi self-update [options]
+```
+
+**Options:**
+
+- `--repo URL` - Repository to update from (default: `https://github.com/PanterSoft/TheSourceInstaller`); used for the release check, the pre-built binary and the source build
+- `--branch NAME` - Branch to build from source (default: `main`)
+- `--force` - Update even if the running version is the latest release
+- `--prefix PATH` - Installation prefix
+
 ### Doctor
 
 Check your system for potential problems.
