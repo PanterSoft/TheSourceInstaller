@@ -4,14 +4,14 @@ Docker-based tests for TSI: from "does the binary even run on a bare system"
 up to "does `tsi install <pkg>` actually build real software from source
 with nothing but a C compiler and make."
 
-**CI (`.github/workflows/docker-tests.yml`) is the source of truth.** The
+**CI (`.github/workflows/e2e.yml`, run by `ci.yml`) is the source of truth.** The
 scripts and compose services in this directory are a local convenience for
 iterating before you push; they mirror CI but are not required by it.
 
 ## What CI does
 
-`.github/workflows/docker-tests.yml` runs on every push/PR to `main`/`dev`
-that touches `src/**`, `Cargo.*`, `docker/**`, `tsi-bootstrap.sh`, the
+`.github/workflows/e2e.yml` runs as a stage of `ci.yml`, on every push/PR
+to `main`/`dev` that touches `src/**`, `Cargo.*`, `docker/**`, `tsi-bootstrap.sh`, the
 workflow file itself, or the `tsi-packages` submodule pointer (plus
 `workflow_dispatch`). Three jobs, covering every Linux architecture a
 release ships: `x86_64` and `aarch64` natively (`ubuntu-latest` /
@@ -20,7 +20,7 @@ under qemu-user emulation (`docker run --platform ...`):
 
 1. **`build-binary`** -- calls
    [`build-binaries.yml`](../.github/workflows/build-binaries.yml), the same
-   matrix `release.yml` ships from: static musl binaries for every Linux
+   matrix the release ships from: static musl binaries for every Linux
    architecture (zig cross-compiles the ones without a hosted runner) plus
    macOS and Windows, each checked for zero `NEEDED` entries and
    smoke-tested, uploaded as `tsi-<platform>` (e.g. `tsi-linux-riscv64`).
@@ -155,11 +155,11 @@ installs cc+make itself at runtime.
 
 ## Continuous Integration
 
-- **`.github/workflows/docker-tests.yml`** -- the workflow described
+- **`.github/workflows/e2e.yml`** -- the workflow described
   above; this is the one that matters.
-- **`.github/workflows/test.yml`** / **`rust-ci.yml`** -- plain
-  `cargo build`/`test`/`clippy`/`fmt` across platforms, unrelated to
-  Docker.
+- **`.github/workflows/ci.yml`** -- the pipeline that runs it: lint
+  (`clippy`/`fmt`/shellcheck), the cross-platform build and tests, this
+  workflow, and the release.
 
 ## Troubleshooting
 
@@ -191,7 +191,7 @@ container.
 ## Adding a New Distro to the E2E Matrix
 
 1. Add the image to the `container-tests` and (optionally) `no-tools-test`
-   matrices in `.github/workflows/docker-tests.yml`.
+   matrices in `.github/workflows/e2e.yml`.
 2. Add a matching `e2e-<name>` service to `docker-compose.yml` (image +
    `TSI_BIN=/work/target/release/tsi` + `/work` volume + the same
    `e2e-test.sh` command -- no new script needed, `e2e-test.sh` already

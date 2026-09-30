@@ -2,27 +2,23 @@
 
 This document explains when each workflow runs and what triggers them.
 
-## TSI Tests Workflow
+## CI and Release Workflow
 
-**File:** `.github/workflows/test.yml`
+**File:** `.github/workflows/ci.yml`
 
-**Purpose:** Tests the TSI source code (Rust implementation, builds, linting)
+**Purpose:** The single pipeline for source changes: lint, build, end-to-end tests, and release.
 
 **Triggers:**
-- ✅ **Runs when:**
-  - `src/**` - Source code files
-  - `Cargo.toml` - Build configuration
-  - `packages/**` - Package files
-  - `.github/workflows/test.yml` - The workflow file itself
+- Push to `main`/`dev` or a pull request touching `src/**`, `Cargo.toml`, `Cargo.lock`, `build.rs`, `tests/**`, `*.sh`, `docker/**`, `tsi-packages` or `.github/workflows/**`
+- **Manual:** `workflow_dispatch` with `bump` = `none` (just run CI) or `major` (release, see below)
 
-- ❌ **Does NOT run when:**
-  - Documentation changes (`docs/**`, `README.md`)
-  - Only other workflow files change
+**Stages:**
+1. **Lint:** clippy and fmt (Linux, macOS, Windows), actionlint, shellcheck
+2. **Build:** every release platform via the reusable `build-binaries.yml` (Linux x86_64, aarch64, i686, armv7, armv6, riscv64, ppc64le; macOS and Windows on x86_64 and aarch64), with tests and smoke tests
+3. **E2E:** real installs in distro containers via the reusable `e2e.yml`, using the stage-2 binaries
+4. **Release:** `main` only, after everything above is green. Tags and publishes the binaries that were just built.
 
-**Jobs:**
-- `test`: Calls the reusable [Rust CI](https://github.com/PanterSoft/TheSourceInstaller/blob/main/.github/workflows/rust-ci.yml) workflow (matrix: ubuntu-latest, macos-latest, windows-latest); runs build, test, clippy, fmt with Cargo caching.
-
-**Manual Trigger:** Yes, can be triggered manually via `workflow_dispatch`
+**Versioning:** every push to `main` releases the next **minor** version (`v0.2.2` becomes `v0.3.0`). A **major** release is manual: run the CI workflow on `main` with `bump = major`. The latest `v*` git tag is the source of truth; the build overrides the version in `Cargo.toml` with the new one. Pull requests and `dev` never release. Runs on `main` queue rather than cancel each other.
 
 ## Documentation Workflow
 
@@ -89,30 +85,13 @@ This document explains when each workflow runs and what triggers them.
 - **Manual:** Via `workflow_dispatch`
 - **Webhook:** Via `repository_dispatch` (for external triggers)
 
-## Release Workflow
-
-**File:** `.github/workflows/release.yml`
-
-**Purpose:** Builds release binaries and creates the GitHub Release
-
-**Triggers:**
-- **Tag push:** When a tag matching `v*` is pushed (e.g. `v0.2.0`, `v1.0.0`)
-- **Manual:** Via `workflow_dispatch`, naming an existing tag
-
-**Jobs:**
-- `build`: Builds TSI binaries for every release platform via `build-binaries.yml` (Linux x86_64, aarch64, i686, armv7, armv6, riscv64, ppc64le; macOS and Windows on x86_64 and aarch64)
-- `release`: Creates the GitHub Release with the binary artifacts and generated release notes
-
-**Note:** Documentation is not deployed from here. The `github-pages` environment rejects deployments from tag refs, so the Documentation workflow deploys from `main` instead (see [Documentation Deployment](../DEPLOYMENT.md)).
-
 ## Summary
 
 | Workflow | Triggers on Source Code | Triggers on Packages | Triggers on Docs | Triggers on Tag | Scheduled |
 |----------|-------------------------|---------------------|------------------|-----------------|-----------|
-| TSI Tests | ✅ Yes | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| CI + Release | ✅ Yes | ❌ No | ❌ No | ❌ No | ❌ No |
 | Documentation | ❌ No | ❌ No | ✅ Yes | ❌ No | ❌ No |
 | Package Validation | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Release (binaries) | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | Discover Versions | ❌ No | ❌ No | ❌ No | ❌ No | ✅ Weekly |
 | Sync External | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
 

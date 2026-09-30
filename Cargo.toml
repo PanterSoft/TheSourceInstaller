@@ -26,7 +26,7 @@ flate2 = "1.0"
 # "static" forces lzma-sys/bzip2-sys to compile the bundled C sources and
 # link them statically, instead of possibly picking up a system liblzma/libbz2
 # via pkg-config. This is required for fully static musl release binaries
-# (see .github/workflows/release.yml) and is a no-op-safe superset of dynamic
+# (see .github/workflows/build-binaries.yml) and is a no-op-safe superset of dynamic
 # linking on macOS/Windows (just always builds the vendored C sources).
 xz2 = { version = "0.1", features = ["static"] }
 bzip2 = { version = "0.4", features = ["static"] }

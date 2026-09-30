@@ -6,7 +6,11 @@ name: CI
 #                (build-binaries.yml, the same matrix release.yml ships)
 #   3. e2e    -- real installs in distro containers, using the stage-2 binaries
 #                (e2e.yml)
-# Documentation has its own workflow (docs.yml) and release.yml handles tags.
+#   4. release -- main only, once everything above is green: tag and publish
+#                the very binaries that were just built and tested.
+# Every push to main releases the next MINOR version (v0.2.2 -> v0.3.0). A MAJOR
+# release is manual: Actions -> CI -> Run workflow on main with bump = major.
+# Documentation has its own workflow (docs.yml).
 on:
   push:
     branches: [ main, dev ]
@@ -35,14 +39,21 @@ on:
       - '.github/workflows/**'
       - '.github/actionlint.yaml'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Release a new version from main. "major" bumps the major version; "none" only runs CI.'
+        type: choice
+        options: [ none, major ]
+        default: none
 
 permissions:
   contents: read
 
-# A newer push to the same branch/PR supersedes the run in flight.
+# A newer push to a PR supersedes the run in flight. Runs on main queue instead:
+# cancelling one halfway through a release would leave a tag without assets.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust-lint:
@@ -102,10 +113,55 @@ jobs:
       - name: Bootstrap --help works without network or toolchain
         run: sh tsi-bootstrap.sh --help
 
+  # Decides the version this run would release, or nothing (empty) when it is
+  # not a release run. Computed up front because the version is baked into the
+  # binaries (`tsi --version`, `tsi self-update`), so it must exist before the
+  # build. Cargo.toml in the repo is not the source of truth: the latest git tag
+  # is, and the build overrides Cargo.toml with the next version.
+  version:
+    name: Next version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5.0.1
+        with:
+          fetch-depth: 0
+      - id: next
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          bump=""
+          if [ "$REF" = refs/heads/main ]; then
+            if [ "$EVENT" = push ]; then bump=minor; fi
+            if [ "$EVENT" = workflow_dispatch ] && [ "$BUMP" = major ]; then bump=major; fi
+          fi
+          if [ -z "$bump" ]; then
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "Not a release run."
+            exit 0
+          fi
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          latest=${latest#v}
+          if [ -z "$latest" ]; then
+            latest=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          fi
+          IFS=. read -r major minor _ <<< "$latest"
+          case "$bump" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="$major.$((minor + 1)).0" ;;
+          esac
+          echo "Latest is ${latest}; releasing ${next} (${bump})."
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build
-    needs: [rust-lint, actionlint, shell]
+    needs: [rust-lint, actionlint, shell, version]
     uses: ./.github/workflows/build-binaries.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   # A failed leg elsewhere in the build (say, Windows) must not skip every
   # container test; a missing artifact still fails its own leg. Only skip when
@@ -115,3 +171,27 @@ jobs:
     needs: build
     if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     uses: ./.github/workflows/e2e.yml
+
+  release:
+    name: Release ${{ needs.version.outputs.version }}
+    needs: [version, build, e2e]
+    if: ${{ needs.version.outputs.version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7.0.0
+        with:
+          pattern: tsi-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: tsi-*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
