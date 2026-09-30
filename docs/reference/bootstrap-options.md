@@ -1,11 +1,16 @@
 # Bootstrap Options
 
-The TSI bootstrap installer (`tsi-bootstrap.sh`) supports several options for customizing the installation.
+The TSI bootstrap installer (`tsi-bootstrap.sh`) needs no options: it installs to
+`~/.tsi`, puts `~/.tsi/bin` on your PATH, and running it again updates the
+installation. The options below are for the cases that need something else.
+
+Environment variables go on the `sh` side of the pipe (`curl … | PREFIX=/opt/tsi sh`):
+put before `curl`, they would only reach `curl`.
 
 ## Usage
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- [options]
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- [options]
 ```
 
 Or download and run locally:
@@ -21,7 +26,7 @@ Or download and run locally:
 Remove TSI completely from the system. Deletes the entire installation prefix (binary, completions, package database, installed packages, and all data).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --uninstall
 ```
 
 **Custom prefix:**
@@ -38,7 +43,7 @@ curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall --prefix /opt/tsi
 Repair or update an existing TSI installation.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --repair
 ```
 
 **What it does:**
@@ -58,13 +63,13 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.s
 Install TSI to a custom location.
 
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | PREFIX=/opt/tsi sh
 ```
 
 Or:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi
 ```
 
 **Default:** `$HOME/.tsi`
@@ -79,7 +84,7 @@ curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.s
 Show help message.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --help
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --help
 ```
 
 ## Environment Variables
@@ -91,15 +96,15 @@ You can also use environment variables to configure the installer:
 Installation prefix (same as `--prefix` option).
 
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | PREFIX=/opt/tsi sh
 ```
 
 ### `TSI_REPO`
 
-Custom repository URL (default: `https://github.com/PanterSoft/tsi.git`).
+Custom repository URL (default: `https://github.com/PanterSoft/TheSourceInstaller.git`).
 
 ```bash
-TSI_REPO=https://github.com/user/fork.git curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | TSI_REPO=https://github.com/user/fork.git sh
 ```
 
 ### `TSI_BRANCH`
@@ -107,7 +112,7 @@ TSI_REPO=https://github.com/user/fork.git curl -fsSL https://raw.githubuserconte
 Branch to use from repository (default: `main`).
 
 ```bash
-TSI_BRANCH=develop curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | TSI_BRANCH=develop sh
 ```
 
 ### `UNINSTALL`
@@ -115,7 +120,16 @@ TSI_BRANCH=develop curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/m
 Set to `1`, `true`, or `yes` to enable uninstall mode (same as `--uninstall`). Use with `--non-interactive` for scripted uninstall.
 
 ```bash
-UNINSTALL=1 curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall --non-interactive
+curl -fsSL .../tsi-bootstrap.sh | UNINSTALL=1 sh -s -- --uninstall --non-interactive
+```
+
+### `TSI_NO_MODIFY_PATH`
+
+Set to `1`, `true`, or `yes` to keep the installer from editing your shell profile.
+You then add `$PREFIX/bin` to PATH yourself.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | TSI_NO_MODIFY_PATH=1 sh
 ```
 
 ### `INSTALL_DIR`
@@ -123,7 +137,7 @@ UNINSTALL=1 curl -fsSL .../tsi-bootstrap.sh | sh -s -- --uninstall --non-interac
 Temporary directory for downloading and building source (default: `$HOME/tsi-install`).
 
 ```bash
-INSTALL_DIR=/tmp/tsi-build curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | INSTALL_DIR=/tmp/tsi-build sh
 ```
 
 ## Examples
@@ -131,52 +145,53 @@ INSTALL_DIR=/tmp/tsi-build curl -fsSL https://raw.githubusercontent.com/PanterSo
 ### Standard Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
 ### Custom Prefix
 
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | PREFIX=/opt/tsi sh
 ```
 
 ### Repair Existing Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --repair
 ```
 
 ### Uninstall TSI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --uninstall
 ```
 
 ### Install from Fork
 
 ```bash
-TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=feature curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | TSI_REPO=https://github.com/user/fork.git TSI_BRANCH=feature sh
 ```
 
 ### Combine Options
 
 ```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | PREFIX=/opt/tsi sh -s -- --repair
 ```
 
-## After Installation
+## PATH
 
-After installation, add TSI to your PATH:
+Unless `$PREFIX/bin` is already on your PATH or `TSI_NO_MODIFY_PATH` is set, the
+installer appends one line to your shell's startup file:
 
 ```bash
-export PATH="$PREFIX/bin:$PATH"
+export PATH="$HOME/.tsi/bin:$PATH"  # added by the TSI installer
 ```
 
-Or add to your shell profile:
-
-```bash
-echo "export PATH=\"$PREFIX/bin:\$PATH\"" >> ~/.bashrc
-```
+It picks the file from `$SHELL`: `~/.zshrc` (or `$ZDOTDIR/.zshrc`) for zsh,
+`~/.bashrc` for bash (`~/.bash_profile` on macOS), `~/.config/fish/conf.d/tsi.fish`
+for fish (`fish_add_path`), and `~/.profile` otherwise. Running the installer again
+doesn't add a second line, and `--uninstall` removes every line carrying the
+`# added by the TSI installer` marker.
 
 ## Troubleshooting
 

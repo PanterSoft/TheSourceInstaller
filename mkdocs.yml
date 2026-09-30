@@ -1,22 +1,26 @@
 site_name: TSI Documentation
 site_description: The Source Installer - Distribution-independent source-based package manager
 site_url: https://pantersoft.github.io/TheSourceInstaller/
-repo_url: https://github.com/PanterSoft/tsi
-repo_name: PanterSoft/tsi
+repo_url: https://github.com/PanterSoft/TheSourceInstaller
+repo_name: PanterSoft/TheSourceInstaller
 edit_uri: edit/main/docs/
 
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  # "custom" hands the colors to docs/stylesheets/tsi.css (Forge Red palette,
+  # see docs/brand.md).
   palette:
     - scheme: default
-      primary: blue
-      accent: blue
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: blue
-      accent: blue
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -76,6 +80,10 @@ nav:
     - Basic Packages: Basic_Packages.md
     - Scripts: reference/scripts.md
     - Bootstrap Options: reference/bootstrap-options.md
+    - Brand & Colors: brand.md
+
+extra_css:
+  - stylesheets/tsi.css
 
 plugins:
   - search

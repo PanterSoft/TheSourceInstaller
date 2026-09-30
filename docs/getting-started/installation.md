@@ -1,41 +1,44 @@
 # Installation
 
-## One-Line Install (Recommended)
-
-Install TSI with a single command. The installer downloads TSI source and builds the Rust binary (or uses a pre-built binary when available):
+## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh
 ```
 
-Or using `wget`:
+That's all. Open a new terminal and `tsi` is ready. The installer:
+
+- downloads the pre-built `tsi` binary for your platform (or builds it with cargo
+  where there isn't one),
+- installs it to `~/.tsi` along with the package definitions,
+- adds `~/.tsi/bin` to your PATH with one marked line in your shell profile
+  (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile` on macOS, fish's `conf.d`, or
+  `~/.profile`).
+
+No curl? Use `wget -qO- <same URL> | sh`.
+
+## Update
+
+Run the same command again. An existing installation is updated in place and keeps
+your packages. From a working install, `tsi self-update` does the same.
+
+## Options
+
+Rarely needed; see [Bootstrap Options](../reference/bootstrap-options.md) for all of
+them.
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
+# Install somewhere else
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --prefix /opt/tsi
+
+# Leave your shell profile alone (then add $PREFIX/bin to PATH yourself)
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | TSI_NO_MODIFY_PATH=1 sh
+
+# Uninstall: removes ~/.tsi and the PATH line
+curl -fsSL https://raw.githubusercontent.com/PanterSoft/TheSourceInstaller/main/tsi-bootstrap.sh | sh -s -- --uninstall
 ```
 
-The installer will automatically:
-- Download TSI source code (via git clone or tarball)
-- Build TSI using Rust (cargo) or download a pre-built binary
-- Install TSI to `~/.tsi`
-
-**Custom installation location:**
-```bash
-PREFIX=/opt/tsi curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
-```
-
-**Update an existing installation:**
-
-From an already-installed TSI, just run:
-
-```bash
-tsi self-update
-```
-
-This fetches a pre-built binary for your platform if one's available, or falls back to
-building from source with cargo, then replaces the running `tsi` binary in place.
-
-**Platforms with pre-built binaries:**
+## Platforms with pre-built binaries
 
 Every release ships a binary for each of these (Linux ones are fully static, so they run
 on any distro, glibc or musl). Anything else builds from source with cargo.
@@ -46,31 +49,14 @@ on any distro, glibc or musl). Anything else builds from source with cargo.
 | macOS   | `aarch64` (Apple Silicon), `x86_64` (Intel)                     |
 | Windows | `x86_64`, `aarch64`                                             |
 
-**Repair a broken installation:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh -s -- --repair
-```
-
-Or using environment variable:
-```bash
-REPAIR=1 curl -fsSL https://raw.githubusercontent.com/PanterSoft/tsi/main/tsi-bootstrap.sh | sh
-```
-
-This is useful when the `tsi` binary itself is missing or broken and `tsi self-update` can't run.
-
-After installation, add to your PATH:
-```bash
-export PATH="$HOME/.tsi/bin:$PATH"
-```
-
 ## Manual Build (from source)
 
 Requires [Rust](https://rustup.rs/) toolchain:
 
 ```bash
 # Clone the repository
-git clone https://github.com/PanterSoft/tsi.git
-cd tsi
+git clone https://github.com/PanterSoft/TheSourceInstaller.git
+cd TheSourceInstaller
 
 # Build
 cargo build --release
@@ -98,17 +84,13 @@ chmod +x ~/.tsi/bin/tsi
 
 TSI uses built-in HTTP and archive extraction — no system curl, wget, or tar required for downloads.
 
-## Add to PATH
+## PATH on Windows or after a manual build
 
-After installation, add TSI to your PATH:
+The installer sets up PATH for you. If you built TSI by hand, or use Windows outside
+Git Bash/MSYS2, add the `bin` directory yourself:
 
 ```bash
-# For bash/zsh (Unix)
-export PATH="$HOME/.tsi/bin:$PATH"
-
-# Or add to your shell profile
-echo 'export PATH="$HOME/.tsi/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+export PATH="$HOME/.tsi/bin:$PATH"   # add to your shell profile to keep it
 ```
 
 **Windows (PowerShell):**

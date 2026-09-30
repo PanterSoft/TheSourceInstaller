@@ -39,10 +39,10 @@ tsi update --local /path/to/packages          # Update from local directory
 
 ## Example: Installing curl
 
-```bash
-# Update package repository
-tsi update
+The installer already fetched the package definitions, so you can install right away.
+Run `tsi update` later to get newer ones.
 
+```bash
 # Install curl (will automatically install dependencies: openssl, zlib)
 tsi install curl
 

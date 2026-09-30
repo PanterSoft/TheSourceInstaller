@@ -11,7 +11,7 @@ The official package repository ([PanterSoft/tsi-packages](https://github.com/Pa
 First time clone (recommended):
 
 ```bash
-git clone --recurse-submodules https://github.com/PanterSoft/tsi.git
+git clone --recurse-submodules https://github.com/PanterSoft/TheSourceInstaller.git
 ```
 
 If you already cloned without submodules:
