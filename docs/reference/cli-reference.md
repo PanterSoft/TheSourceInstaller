@@ -13,6 +13,18 @@ Many commands support:
 
 - `--prefix PATH` - Use custom installation prefix (default: `~/.tsi` on Unix, `%USERPROFILE%\.tsi` on Windows)
 
+### Prefix Resolution
+
+Without `--prefix`, TSI picks its prefix in this order:
+
+1. The `TSI_PREFIX` environment variable.
+2. The directory the running binary is installed in, when it is `<prefix>/bin/tsi` and
+   `<prefix>` is a TSI prefix (it holds a `.tsi-prefix` marker file). System directories
+   such as `/`, `/usr`, `/usr/local`, `/opt` and your home directory are never used, so a
+   distro-packaged `/usr/bin/tsi` does not make `/usr` the prefix.
+3. `prefix = "/some/dir"` in `/etc/tsi.conf` (TOML), for distro packages.
+4. `~/.tsi` (`%USERPROFILE%\.tsi` on Windows).
+
 ## Output Streams
 
 All human-facing progress and diagnostics go to **stderr**. Machine-readable output
@@ -76,7 +88,7 @@ not a failure.
 
 ### Remove
 
-Uninstall TSI from the system. Removes the installation prefix (binary, completions, package database, and all installed packages). You will be asked to confirm unless `--yes` is used.
+Uninstall TSI from the system. Removes what TSI created in the prefix (binary, completions, package definitions, sources, builds, package database, and all installed packages); the prefix directory itself is removed only if nothing else is left in it. System directories such as `/usr` are refused outright. You will be asked to confirm unless `--yes` is used.
 
 ```bash
 tsi remove [options]
@@ -84,7 +96,7 @@ tsi remove [options]
 
 **Options:**
 
-- `--prefix PATH` - Installation prefix to remove (default: detected from binary location)
+- `--prefix PATH` - Installation prefix to remove (default: see [Prefix Resolution](#prefix-resolution))
 - `--yes` - Skip confirmation prompt
 
 **Examples:**

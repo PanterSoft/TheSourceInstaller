@@ -165,6 +165,15 @@ run_uninstall() {
         log_error "No TSI installation found at $PREFIX_ABS"
         exit 1
     fi
+    # Strip trailing slashes so "/usr/" matches "/usr" below.
+    while [ "${#PREFIX_ABS}" -gt 1 ] && [ "${PREFIX_ABS%/}" != "$PREFIX_ABS" ]; do
+        PREFIX_ABS="${PREFIX_ABS%/}"
+    done
+    case "$PREFIX_ABS" in
+        /|/usr|/usr/local|/opt|/bin|/sbin|/lib|/lib64|/etc|/var|/var/lib|/home|/root|/tmp|/srv|/Users|/Applications|/Library|/System|/opt/homebrew|"$HOME")
+            log_error "$PREFIX_ABS is a system directory, not a TSI prefix. Refusing to remove."
+            exit 1 ;;
+    esac
     if [ ! -f "$PREFIX_ABS/bin/tsi" ] && [ ! -f "$PREFIX_ABS/bin/tsi.exe" ]; then
         log_error "No TSI binary under $PREFIX_ABS. Refusing to remove (not a TSI install?)."
         exit 1
@@ -179,8 +188,18 @@ run_uninstall() {
             exit 1
         fi
     fi
-    log_info "Removing $PREFIX_ABS..."
-    rm -rf "$PREFIX_ABS"
+    log_info "Removing TSI from $PREFIX_ABS..."
+    # Only what TSI created; the prefix itself goes only if that leaves it empty.
+    for d in packages sources build db install tmp-repo-update tmp-self-update; do
+        rm -rf "${PREFIX_ABS:?}/$d"
+    done
+    rm -f "$PREFIX_ABS/bin/tsi" "$PREFIX_ABS/bin/tsi.exe" \
+        "$PREFIX_ABS/share/completions/tsi.bash" "$PREFIX_ABS/share/completions/tsi.zsh" \
+        "$PREFIX_ABS/tsi.toml" "$PREFIX_ABS/.tsi-install.lock" "$PREFIX_ABS/.tsi-prefix"
+    for d in share/completions share bin; do
+        rmdir "$PREFIX_ABS/$d" 2>/dev/null || true
+    done
+    rmdir "$PREFIX_ABS" 2>/dev/null || log_info "Kept $PREFIX_ABS: it holds files TSI did not create."
     remove_path_setup
     log_info "TSI uninstalled."
 }
@@ -369,6 +388,8 @@ main() {
 
     log_info "Installing TSI to $PREFIX..."
     mkdir -p "$PREFIX/bin"
+    # Marks the directory as a TSI prefix, so tsi knows where its data lives.
+    [ -f "$PREFIX/.tsi-prefix" ] || echo "This directory is a TSI (The Source Installer) prefix." > "$PREFIX/.tsi-prefix"
     cp "$TSI_BINARY" "$PREFIX/bin/tsi"
     chmod +x "$PREFIX/bin/tsi"
 

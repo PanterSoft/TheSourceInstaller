@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 mod unix;
@@ -99,11 +99,29 @@ pub fn default_prefix() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".tsi"))
 }
 
+/// File that marks a directory as a TSI prefix. `tsi-bootstrap.sh` and the first
+/// command that writes to a prefix create it.
+pub const PREFIX_MARKER: &str = ".tsi-prefix";
+
+/// System-wide config that can point TSI at its data directory, e.g. for a distro
+/// package that ships the binary as `/usr/bin/tsi`.
+#[cfg(unix)]
+pub const SYSTEM_CONFIG: &str = "/etc/tsi.conf";
+
+/// Where TSI keeps its data, in order of precedence: `--prefix`, the `TSI_PREFIX`
+/// environment variable, the prefix the running binary sits in (`<prefix>/bin/tsi`,
+/// only when that is a real TSI prefix), `prefix` in `/etc/tsi.conf`, `~/.tsi`.
 pub fn resolve_prefix(user_prefix: Option<&str>) -> PathBuf {
     if let Some(p) = user_prefix {
         return PathBuf::from(p);
     }
+    if let Some(p) = std::env::var_os("TSI_PREFIX").filter(|p| !p.is_empty()) {
+        return PathBuf::from(p);
+    }
     if let Some(p) = detect_prefix_from_binary() {
+        return p;
+    }
+    if let Some(p) = prefix_from_system_config() {
         return p;
     }
     default_prefix()
@@ -111,17 +129,143 @@ pub fn resolve_prefix(user_prefix: Option<&str>) -> PathBuf {
 
 fn detect_prefix_from_binary() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let exe_str = exe.to_string_lossy();
-    let bin_tsi = if cfg!(windows) {
-        r"\bin\tsi.exe"
-    } else {
-        "/bin/tsi"
-    };
-    if let Some(pos) = exe_str.find(bin_tsi) {
-        let prefix = exe_str[..pos].to_string();
-        if !prefix.is_empty() {
-            return Some(PathBuf::from(prefix));
+    prefix_for_binary(&exe)
+}
+
+/// The prefix a binary at `exe` belongs to: the parent of its `bin/` directory,
+/// provided that directory is a TSI prefix. A directory with the marker file always
+/// is; one without it (installs from before the marker existed) is accepted unless
+/// it is a system directory, so `/usr/bin/tsi` never makes `/usr` the prefix.
+pub fn prefix_for_binary(exe: &Path) -> Option<PathBuf> {
+    let file = exe.file_name()?.to_str()?;
+    if file != "tsi" && file != "tsi.exe" {
+        return None;
+    }
+    let bin = exe.parent()?;
+    if bin.file_name()? != "bin" {
+        return None;
+    }
+    let prefix = bin.parent()?;
+    if prefix.as_os_str().is_empty() {
+        return None;
+    }
+    if prefix.join(PREFIX_MARKER).is_file() {
+        return Some(prefix.to_path_buf());
+    }
+    if is_system_dir(prefix) {
+        return None;
+    }
+    Some(prefix.to_path_buf())
+}
+
+#[cfg(unix)]
+fn prefix_from_system_config() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(SYSTEM_CONFIG).ok()?;
+    parse_system_config(&text)
+}
+
+#[cfg(not(unix))]
+fn prefix_from_system_config() -> Option<PathBuf> {
+    None
+}
+
+/// Reads `prefix = "/some/dir"` from the TOML text of `/etc/tsi.conf`.
+pub fn parse_system_config(text: &str) -> Option<PathBuf> {
+    #[derive(serde::Deserialize)]
+    struct SystemConfig {
+        prefix: Option<String>,
+    }
+    let cfg: SystemConfig = toml::from_str(text).ok()?;
+    cfg.prefix.filter(|p| !p.is_empty()).map(PathBuf::from)
+}
+
+/// True for directories that are never a TSI prefix: the filesystem root, the
+/// standard system hierarchies and the user's home directory. TSI refuses to
+/// detect one of these as its prefix or to remove one.
+pub fn is_system_dir(path: &Path) -> bool {
+    let path = normalize(path);
+    if path.parent().is_none() {
+        return true; // `/`, `C:\`
+    }
+    if let Some(home) = dirs::home_dir() {
+        if path == normalize(&home) {
+            return true;
         }
     }
-    None
+    #[cfg(unix)]
+    const SYSTEM: &[&str] = &[
+        "/usr",
+        "/usr/local",
+        "/opt",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/etc",
+        "/var",
+        "/var/lib",
+        "/home",
+        "/root",
+        "/tmp",
+        "/srv",
+        "/boot",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/run",
+        "/mnt",
+        "/media",
+        "/snap",
+        "/nix",
+        "/Applications",
+        "/Library",
+        "/System",
+        "/Users",
+        "/private",
+        "/opt/homebrew",
+        "/usr/pkg",
+    ];
+    #[cfg(not(unix))]
+    const SYSTEM: &[&str] = &[];
+    if SYSTEM
+        .iter()
+        .any(|s| path == Path::new(s) || path == normalize(Path::new(s)))
+    {
+        return true;
+    }
+    #[cfg(windows)]
+    for var in [
+        "SystemRoot",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+    ] {
+        if let Some(dir) = std::env::var_os(var) {
+            if path == normalize(Path::new(&dir)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Resolves symlinks when the path exists (so `/usr/../usr` or a symlinked home
+/// compare equal), and otherwise drops trailing separators and `.` components.
+fn normalize(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.components().collect())
+}
+
+/// Writes the prefix marker file, creating the prefix if needed. Errors are
+/// ignored: the marker only helps detection.
+pub fn mark_prefix(prefix: &Path) {
+    let marker = prefix.join(PREFIX_MARKER);
+    if marker.exists() {
+        return;
+    }
+    if std::fs::create_dir_all(prefix).is_ok() {
+        let _ = std::fs::write(
+            &marker,
+            "This directory is a TSI (The Source Installer) prefix.\n",
+        );
+    }
 }

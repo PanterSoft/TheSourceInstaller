@@ -127,6 +127,7 @@ pub fn run(args: UpdateArgs) -> Result<()> {
     let prefix = platform::resolve_prefix(args.prefix.as_deref());
     let packages_dir = prefix.join("packages");
     std::fs::create_dir_all(&packages_dir)?;
+    platform::mark_prefix(&prefix);
 
     if let Some(local) = &args.local {
         ui::output::section("Copying packages from local path...");

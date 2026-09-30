@@ -17,6 +17,7 @@ pub struct InstallLockGuard {
 /// with a clear message instead of blocking.
 pub fn acquire_install_lock(prefix: &Path) -> Result<InstallLockGuard> {
     std::fs::create_dir_all(prefix).context("Create prefix dir for lock")?;
+    crate::platform::mark_prefix(prefix);
     let lock_path = prefix.join(LOCK_FILE_NAME);
     let file = OpenOptions::new()
         .create(true)
