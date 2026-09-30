@@ -61,7 +61,7 @@ test:
 	@echo "Running tests..."
 	cargo test
 
-# Same gates as .github/workflows/rust-ci.yml — run this before pushing.
+# Same gates as the rust-lint job in .github/workflows/ci.yml — run this before pushing.
 check: fmt lint test
 
 # Smoke-test one or two packages in Linux containers (needs docker).

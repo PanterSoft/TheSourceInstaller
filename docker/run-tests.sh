@@ -145,7 +145,7 @@ for scenario in "${SCENARIOS[@]}"; do
 done
 
 # --------------------------------------------------------------------
-# Four-distro end-to-end tests (mirrors .github/workflows/docker-tests.yml
+# Four-distro end-to-end tests (mirrors .github/workflows/e2e.yml
 # container-tests job): bare upstream images, only cc+make installed
 # inside the container, then a real `tsi install bzip2`.
 #

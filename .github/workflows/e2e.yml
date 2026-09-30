@@ -1,44 +1,15 @@
 name: Docker E2E Tests
 
+# Called by ci.yml after build-binaries.yml has produced the tsi-<platform>
+# artifacts in the same run; the container jobs consume those instead of
+# rebuilding.
 on:
-  push:
-    branches: [main, dev]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'build.rs'
-      - 'Cargo.lock'
-      - 'docker/**'
-      - 'tsi-bootstrap.sh'
-      - '.github/workflows/docker-tests.yml'
-      - '.github/workflows/build-binaries.yml'
-      - 'tsi-packages'
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'build.rs'
-      - 'Cargo.lock'
-      - 'docker/**'
-      - 'tsi-bootstrap.sh'
-      - '.github/workflows/docker-tests.yml'
-      - '.github/workflows/build-binaries.yml'
-      - 'tsi-packages'
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
-  # Builds every release platform with the same matrix release.yml ships
-  # (build-binaries.yml): all Linux musl legs -- x86_64, aarch64, i686, armv7,
-  # armv6, riscv64, ppc64le -- plus macOS and Windows. The container jobs below
-  # consume the Linux artifacts instead of rebuilding them.
-  build-binary:
-    name: Build
-    uses: ./.github/workflows/build-binaries.yml
-
   # Real end-to-end install: only a C compiler + make are installed inside
   # each bare distro container, then tsi builds a real package (bzip2) from
   # source. This is the core reliability gap the old test-install.sh never
@@ -51,10 +22,6 @@ jobs:
   # cover alpine (musl) and, where published, debian (glibc).
   container-tests:
     name: E2E install (${{ matrix.distro }}, ${{ matrix.platform }})
-    needs: build-binary
-    # A failed leg elsewhere in the build (say, Windows) must not skip every
-    # container test; a missing artifact still fails its own leg below.
-    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -121,8 +88,6 @@ jobs:
   # Cheap even under emulation, so it covers every Linux architecture.
   no-tools-test:
     name: Zero-dependency test (${{ matrix.distro }}, ${{ matrix.platform }})
-    needs: build-binary
-    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
