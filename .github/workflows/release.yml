@@ -217,11 +217,19 @@ jobs:
           pattern: tsi-*
           merge-multiple: true
 
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          sha256sum tsi-* > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          files: tsi-*
+          files: |
+            tsi-*
+            SHA256SUMS
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

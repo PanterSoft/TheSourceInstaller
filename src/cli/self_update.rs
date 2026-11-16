@@ -23,6 +23,13 @@ pub struct SelfUpdateArgs {
 /// executing the old file keeps its inode open, so overwriting it in place is safe. Windows
 /// refuses to overwrite an executable that's running, so there we move the old one aside first.
 fn replace_binary(new_bin: &Path, target: &Path) -> Result<()> {
+    // `new_bin` lives in the prefix, which may be on another filesystem than `target`, and
+    // rename() fails across devices. Stage a copy next to the target so the final rename is
+    // always same-directory.
+    let staged = target.with_extension("new");
+    let _ = std::fs::remove_file(&staged);
+    std::fs::copy(new_bin, &staged).context("Stage updated binary next to the installed one")?;
+    let new_bin = staged.as_path();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -40,17 +47,51 @@ fn replace_binary(new_bin: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Why a downloaded release asset failed verification against `SHA256SUMS`.
+fn check_sums(sums: &str, asset: &str, actual_hex: &str) -> Result<()> {
+    let expected = sums.lines().find_map(|line| {
+        let (hash, name) = line.trim().split_once(char::is_whitespace)?;
+        let name = name.trim().trim_start_matches('*');
+        (name == asset).then(|| hash.to_ascii_lowercase())
+    });
+    match expected {
+        None => anyhow::bail!("SHA256SUMS has no entry for {asset}; refusing to install"),
+        Some(h) if h == actual_hex.to_ascii_lowercase() => Ok(()),
+        Some(h) => anyhow::bail!(
+            "checksum mismatch for {asset}: SHA256SUMS says {h}, downloaded file is {actual_hex}"
+        ),
+    }
+}
+
+/// Downloads `SHA256SUMS` from the latest release and verifies `bin` against it.
+fn verify_download(bin: &Path, asset: &str, tmp: &Path) -> Result<()> {
+    let sums_path = tmp.join("SHA256SUMS");
+    let url = "https://github.com/PanterSoft/tsi/releases/latest/download/SHA256SUMS";
+    crate::ops::fetch::download_file(url, &sums_path)
+        .context("SHA256SUMS is missing from the release; refusing to install")?;
+    let sums = std::fs::read_to_string(&sums_path).context("Read SHA256SUMS")?;
+    let actual = crate::util::sha256::sha256_file(bin).context("Hash downloaded binary")?;
+    check_sums(&sums, asset, &actual)
+}
+
 /// Tries to download a pre-built binary for this platform from the latest GitHub release.
-/// Returns `None` (not an error) if no matching release asset exists.
-fn try_prebuilt(tmp: &Path) -> Option<PathBuf> {
-    let plat = format!("{}-{}", platform::os_name(), platform::arch_name());
-    let url = format!("https://github.com/PanterSoft/tsi/releases/latest/download/tsi-{plat}");
+/// Returns `Ok(None)` if no matching release asset exists. A binary that fails checksum
+/// verification is deleted and reported as an error (no fallback to a source build).
+fn try_prebuilt(tmp: &Path) -> Result<Option<PathBuf>> {
+    let asset = format!("tsi-{}-{}", platform::os_name(), platform::arch_name());
+    let url = format!("https://github.com/PanterSoft/tsi/releases/latest/download/{asset}");
     let dest = tmp.join("tsi-new");
     match crate::ops::fetch::download_file(&url, &dest) {
-        Ok(()) if dest.metadata().is_ok_and(|m| m.len() > 0) => Some(dest),
+        Ok(()) if dest.metadata().is_ok_and(|m| m.len() > 0) => {
+            if let Err(e) = verify_download(&dest, &asset, tmp) {
+                let _ = std::fs::remove_file(&dest);
+                return Err(e);
+            }
+            Ok(Some(dest))
+        }
         _ => {
             let _ = std::fs::remove_file(&dest);
-            None
+            Ok(None)
         }
     }
 }
@@ -129,7 +170,7 @@ pub fn run(args: SelfUpdateArgs) -> Result<()> {
     std::fs::create_dir_all(&tmp).context("Create tmp dir")?;
 
     ui::output::section("Checking for a pre-built binary...");
-    let new_bin = match try_prebuilt(&tmp) {
+    let new_bin = match try_prebuilt(&tmp)? {
         Some(p) => p,
         None => {
             ui::output::detail("No pre-built binary available; building from source");
@@ -143,4 +184,35 @@ pub fn run(args: SelfUpdateArgs) -> Result<()> {
     let _ = std::fs::remove_dir_all(&tmp);
     ui::output::detail(format!("TSI updated: {}", exe.display()));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_sums;
+
+    const H: &str = "aaaa";
+
+    #[test]
+    fn match_ok() {
+        let sums = format!("{H}  tsi-linux-x86_64\nbbbb  tsi-darwin-aarch64\n");
+        assert!(check_sums(&sums, "tsi-linux-x86_64", H).is_ok());
+    }
+
+    #[test]
+    fn mismatch() {
+        let e = check_sums("bbbb  tsi-linux-x86_64\n", "tsi-linux-x86_64", H).unwrap_err();
+        assert!(e.to_string().contains("mismatch"));
+    }
+
+    #[test]
+    fn not_listed() {
+        let e = check_sums(&format!("{H}  tsi-other\n"), "tsi-linux-x86_64", H).unwrap_err();
+        assert!(e.to_string().contains("no entry"));
+    }
+
+    #[test]
+    fn crlf_and_whitespace() {
+        let sums = format!("  {H}   tsi-linux-x86_64  \r\nbbbb  x\r\n");
+        assert!(check_sums(&sums, "tsi-linux-x86_64", H).is_ok());
+    }
 }
