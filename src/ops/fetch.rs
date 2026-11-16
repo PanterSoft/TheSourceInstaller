@@ -145,7 +145,24 @@ fn fetch_archive(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::pat
     Ok(target_dir)
 }
 
+/// Downloads to `<dest>.part` and renames onto `dest` only once the body was read
+/// completely, so a file at `dest` is always a complete download.
 pub fn download_file(url: &str, dest: &Path) -> Result<()> {
+    let mut part_name = dest.as_os_str().to_owned();
+    part_name.push(".part");
+    let part = std::path::PathBuf::from(part_name);
+    // A leftover from an interrupted run must not survive into this attempt.
+    let _ = std::fs::remove_file(&part);
+    let result = download_to(url, &part).and_then(|()| {
+        std::fs::rename(&part, dest).context("Failed to move finished download into place")
+    });
+    if result.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    result
+}
+
+fn download_to(url: &str, dest: &Path) -> Result<()> {
     let agent = ureq::Agent::new();
     let response = agent
         .get(url)
@@ -172,6 +189,9 @@ pub fn download_file(url: &str, dest: &Path) -> Result<()> {
         if len > 0 && downloaded % (1024 * 1024) < 8192 {
             log::debug!("Downloaded {} / {} bytes", downloaded, len);
         }
+    }
+    if len > 0 && downloaded != len {
+        anyhow::bail!("Download truncated: got {} of {} bytes", downloaded, len);
     }
     Ok(())
 }
@@ -334,14 +354,39 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
             // Cache hit: still make sure submodules are synced, since packages fetched by an
             // older tsi version (or cloned before this check existed) may not have them.
             // This is a no-op if submodules are already initialized.
-            let _ = std::process::Command::new("git")
-                .args(["submodule", "update", "--init", "--recursive"])
-                .current_dir(&clone_dir)
-                .status();
+            update_submodules(&clone_dir)?;
             return Ok(clone_dir);
         }
     }
 
+    // Build in a temporary sibling and rename when every step succeeded, so `clone_dir`
+    // (what the cache-hit branch accepts) only ever holds a finished clone.
+    let tmp_dir = dest_dir.join(format!(".clone-{}-{}", pkg.name, pkg.version));
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir).context("Remove stale clone scratch dir")?;
+    }
+    if let Err(e) = clone_into(pkg, url, &tmp_dir) {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(e);
+    }
+    std::fs::rename(&tmp_dir, &clone_dir).context("Move finished clone into place")?;
+
+    Ok(clone_dir)
+}
+
+fn update_submodules(dir: &Path) -> Result<()> {
+    let status = std::process::Command::new("git")
+        .args(["submodule", "update", "--init", "--recursive"])
+        .current_dir(dir)
+        .status()
+        .context("git submodule update")?;
+    if !status.success() {
+        return Err(anyhow::anyhow!("git submodule update failed"));
+    }
+    Ok(())
+}
+
+fn clone_into(pkg: &Package, url: &str, clone_dir: &Path) -> Result<()> {
     let mut cmd = std::process::Command::new("git");
     cmd.arg("clone");
     // Use a shallow clone when no specific commit is pinned — safe for branch/tag fetches
@@ -354,7 +399,7 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
     } else if let Some(ref tag) = pkg.source.tag {
         cmd.args(["--branch", tag]);
     }
-    cmd.arg(url).arg(&clone_dir);
+    cmd.arg(url).arg(clone_dir);
 
     let status = cmd.status().context("Failed to run git clone")?;
     if !status.success() {
@@ -364,7 +409,7 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
     if let Some(ref commit) = pkg.source.commit {
         let status = std::process::Command::new("git")
             .args(["checkout", commit])
-            .current_dir(&clone_dir)
+            .current_dir(clone_dir)
             .status()
             .context("git checkout")?;
         if !status.success() {
@@ -373,16 +418,7 @@ fn fetch_git(pkg: &Package, dest_dir: &Path, force: bool) -> Result<std::path::P
     }
 
     // GitHub (and similar) archive tarballs omit submodules; clone-based packages often need them.
-    let sub_status = std::process::Command::new("git")
-        .args(["submodule", "update", "--init", "--recursive"])
-        .current_dir(&clone_dir)
-        .status()
-        .context("git submodule update")?;
-    if !sub_status.success() {
-        return Err(anyhow::anyhow!("git submodule update failed"));
-    }
-
-    Ok(clone_dir)
+    update_submodules(clone_dir)
 }
 
 fn fetch_local(pkg: &Package, dest_dir: &Path) -> Result<std::path::PathBuf> {
@@ -662,5 +698,57 @@ mod tests {
             std::fs::read_to_string(dst.join("a/b/deep.txt")).unwrap(),
             "deep"
         );
+    }
+
+    #[test]
+    fn truncated_download_leaves_nothing_at_the_final_path() {
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(2) {
+                let mut s = stream.unwrap();
+                let mut req = [0u8; 1024];
+                let _ = std::io::Read::read(&mut s, &mut req);
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort");
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("p-1.tar.gz");
+        std::fs::write(dir.path().join("p-1.tar.gz.part"), "stale").unwrap();
+        assert!(download_file(&format!("http://127.0.0.1:{port}/x"), &dest).is_err());
+        assert!(!dest.exists());
+        assert!(!dir.path().join("p-1.tar.gz.part").exists());
+    }
+
+    #[test]
+    fn failed_git_checkout_leaves_no_clone_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        let git = |args: &[&str], cwd: &Path| {
+            let ok = std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .current_dir(cwd)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            assert!(ok, "git {args:?}");
+        };
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&["init", "-q"], &repo);
+        std::fs::write(repo.join("f"), "x").unwrap();
+        git(&["add", "f"], &repo);
+        git(&["commit", "-q", "-m", "c"], &repo);
+
+        let json = format!(
+            r#"{{"name":"p","version":"1.0","source":{{"type":"git","url":"{}","commit":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}}}}"#,
+            repo.display()
+        );
+        let pkg = crate::core::package::parse_package_file(&json).unwrap()[0].clone();
+        let dest = dir.path().join("sources");
+        assert!(fetch(&pkg, &dest, false).is_err());
+        assert!(!dest.join("p-1.0").exists());
+        assert!(!dest.join(".clone-p-1.0").exists());
     }
 }
