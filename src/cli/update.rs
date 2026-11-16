@@ -17,13 +17,24 @@ fn copy_package_jsons(from_dir: &Path, packages_dir: &Path) -> Result<()> {
             packages_dir.display()
         );
     }
+    let mut copied = 0usize;
     for entry in std::fs::read_dir(from_dir).context("Read package source dir")? {
         let entry = entry?;
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "json") {
             let dest = packages_dir.join(entry.file_name());
             std::fs::copy(&path, &dest).context("Copy package file")?;
+            copied += 1;
         }
+    }
+    // Pointing --local at a repository root instead of its packages/ directory
+    // used to report success over an empty registry.
+    if copied == 0 {
+        anyhow::bail!(
+            "No package definitions (*.json) found in {}; \
+             point at the directory that holds them (usually <repo>/packages).",
+            from_dir.display()
+        );
     }
     Ok(())
 }
