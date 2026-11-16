@@ -35,9 +35,26 @@ pub fn build(
             );
         }
         let patch_str = patch_path.to_string_lossy().to_string();
+        // The fetched tree is cached, so after a failed build it is already
+        // patched. A reverse dry run that succeeds means the patch is applied.
+        let already_applied = Command::new("patch")
+            .args(["-p1", "-R", "--dry-run", "-i", &patch_str])
+            .current_dir(source_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if already_applied {
+            ui::output::detail(format!("Patch already applied: {}", patch));
+            continue;
+        }
         let step_name = format!("patch -p1 -i {}", patch_str);
         let mut cmd = Command::new("patch");
-        cmd.args(["-p1", "-i", &patch_str]).current_dir(source_dir);
+        cmd.args(["-p1", "-i", &patch_str])
+            .current_dir(source_dir)
+            .stdin(Stdio::null());
         run_cmd(&mut cmd, env_ref, &step_name, verbose)?;
     }
 
@@ -404,6 +421,16 @@ fn xcrun_find(tool: &str) -> String {
     format!("/usr/bin/{}", tool)
 }
 
+/// Short label for a build command; cuts on a character boundary.
+fn command_step_name(expanded: &str) -> String {
+    if expanded.len() <= 60 {
+        expanded.to_string()
+    } else {
+        let head: String = expanded.chars().take(50).collect();
+        format!("sh -c \"{}...\"", head)
+    }
+}
+
 fn run_cmd(
     cmd: &mut Command,
     env: &[(String, String)],
@@ -737,6 +764,7 @@ fn build_meson(
     setup_args.extend(
         pkg.configure_args
             .iter()
+            .chain(pkg.meson_args.iter())
             .map(|a| expand_build_vars(a, deps_prefix_str.as_ref())),
     );
     run_cmd(
@@ -841,11 +869,7 @@ fn build_custom(
     let flag = if cfg!(windows) { "/C" } else { "-c" };
     for cmd_str in &pkg.build_commands {
         let expanded = expand_build_vars(cmd_str, install_path);
-        let step_name = if expanded.len() <= 60 {
-            expanded.clone()
-        } else {
-            format!("sh -c \"{}...\"", &expanded[..50.min(expanded.len())])
-        };
+        let step_name = command_step_name(&expanded);
         let mut cmd = Command::new(shell);
         cmd.arg(flag)
             .arg(&expanded)
@@ -858,6 +882,13 @@ fn build_custom(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn step_name_does_not_split_multibyte_chars() {
+        let cmd = format!("{}{}", "a".repeat(49), "é".repeat(20));
+        let name = super::command_step_name(&cmd);
+        assert!(name.starts_with("sh -c \""));
+    }
+
     use super::*;
 
     #[test]

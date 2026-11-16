@@ -84,3 +84,16 @@ fn test_platforms_matches_bare_os_and_os_arch() {
     assert!(!mk(&format!(r#"["{}-nosucharch"]"#, host_os)).supports_host());
     assert!(!mk(r#"["nosuchos"]"#).supports_host());
 }
+
+#[test]
+fn test_meson_args_are_parsed() {
+    let json = r#"{
+        "name": "p",
+        "version": "1",
+        "source": { "type": "tarball", "url": "https://example.com/x.tar.gz" },
+        "build_system": "meson",
+        "meson_args": ["--buildtype=release"]
+    }"#;
+    let pkg = &parse_package_file(json).unwrap()[0];
+    assert_eq!(pkg.meson_args, vec!["--buildtype=release"]);
+}

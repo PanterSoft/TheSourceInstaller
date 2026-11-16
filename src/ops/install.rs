@@ -69,6 +69,15 @@ pub fn install_package(
         std::fs::remove_dir_all(&build_dir).context("Remove build dir for --force")?;
     }
 
+    // Start from an empty install dir so leftovers of a failed run cannot pass
+    // the "installed no files" check or mix into this install. A recorded,
+    // working install of this same version is only wiped on --force, since
+    // symlinks in the shared prefix point into it.
+    let recorded = db.get(&pkg.name).is_some_and(|i| i.version == pkg.version);
+    if (force || !recorded) && install_dir.exists() {
+        std::fs::remove_dir_all(&install_dir).context("Clean stale install dir")?;
+    }
+
     build::build(
         pkg,
         &source_dir,

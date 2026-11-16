@@ -38,6 +38,8 @@ pub struct PackageVersion {
     #[serde(default)]
     pub cmake_args: Vec<String>,
     #[serde(default)]
+    pub meson_args: Vec<String>,
+    #[serde(default)]
     pub make_args: Vec<String>,
     #[serde(default)]
     pub build_commands: Vec<String>,
@@ -118,6 +120,7 @@ pub struct Package {
     pub build_system: String,
     pub configure_args: Vec<String>,
     pub cmake_args: Vec<String>,
+    pub meson_args: Vec<String>,
     pub make_args: Vec<String>,
     pub build_commands: Vec<String>,
     pub env: HashMap<String, String>,
@@ -143,6 +146,7 @@ impl Package {
             build_system: v.build_system.clone(),
             configure_args,
             cmake_args,
+            meson_args: v.meson_args.clone(),
             make_args,
             build_commands: v.build_commands.clone(),
             env,
