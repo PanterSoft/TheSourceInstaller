@@ -142,7 +142,7 @@ main() {
                 echo "  --repair          Repair/update existing TSI installation"
                 echo "  --uninstall       Remove TSI completely from the system"
                 echo "  --prefix PATH     Installation prefix (default: ~/.tsi)"
-                echo "  --non-interactive Run without prompts"
+                echo "  --non-interactive, --yes, -y  Run without prompts"
                 echo "  --help, -h        Show this help"
                 echo ""
                 echo "Examples:"

@@ -5,8 +5,6 @@ use anyhow::Result;
 use clap::Args;
 #[derive(Args)]
 pub struct ListArgs {
-    #[arg(long)]
-    pub versions: bool,
     /// Emit the installed set as JSON (for scripts and CI)
     #[arg(long)]
     pub json: bool,

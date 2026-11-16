@@ -140,6 +140,35 @@ tsi list --json | jq -r '.[] | select(.dependencies | index("zlib")) | .name'
 Each JSON record carries `name`, `version`, `install_path`, `installed_at` (Unix seconds),
 and `dependencies`.
 
+### Self-Update
+
+Update the TSI binary itself to the latest version.
+
+```bash
+tsi self-update [options]
+```
+
+TSI first tries to download a pre-built binary for your platform from the latest GitHub
+release. If none exists, it fetches the source and builds it with `cargo build --release`,
+which needs Rust/cargo installed. The running binary is then replaced.
+
+The pre-built download is verified against the release's `SHA256SUMS` file before anything
+is replaced; releases without that file, or with a mismatching or missing entry, are refused.
+
+**Options:**
+
+- `--repo URL` - Git repository to build from when no pre-built binary exists (default: `https://github.com/PanterSoft/tsi.git`)
+- `--branch NAME` - Branch to build from (default: `main`)
+- `--prefix PATH` - Installation prefix
+
+**Examples:**
+
+```bash
+tsi self-update
+tsi self-update --branch develop
+tsi self-update --repo https://github.com/you/tsi.git --branch my-fix
+```
+
 ### Search
 
 Search available packages.
@@ -226,6 +255,30 @@ Doctor checks for:
 - Package definitions
 - Install prefix writability
 - git (for some packages)
+
+### Bootstrap
+
+Install or repair the TSI bootstrap toolchain: the core packages TSI needs, installed
+from the package definitions in the prefix. Packages that are already installed are
+skipped, and the command reports when the toolchain is already complete.
+
+```bash
+tsi bootstrap [options]
+```
+
+**Options:**
+
+- `--prefix PATH` - Installation prefix
+- `--verbose` - Show full build output (default: compact, one line per step)
+
+**Examples:**
+
+```bash
+tsi bootstrap
+tsi bootstrap --verbose
+```
+
+Requires package definitions in the prefix — run `tsi update` first.
 
 ### UI
 

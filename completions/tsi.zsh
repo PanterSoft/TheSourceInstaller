@@ -36,6 +36,8 @@ _tsi() {
                 "self-update:Update the TSI binary itself"
                 "doctor:Check system health"
                 "remove:Uninstall TSI from the system"
+                "bootstrap:Install or repair the TSI bootstrap toolchain"
+                "ui:Launch the interactive terminal UI"
                 "--help:Show help"
                 "--version:Show version"
             )
@@ -52,6 +54,7 @@ _tsi() {
                     ;;
                 uninstall)
                     _arguments \
+                        "--force[Remove even if other installed packages depend on it]" \
                         "--prefix[Installation prefix]:directory:_files -/" \
                         "*:package:->installed_packages"
                     ;;
@@ -83,7 +86,17 @@ _tsi() {
                         "--branch[Branch]" \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;
-                doctor|list)
+                list)
+                    _arguments \
+                        "--json[Emit the installed set as JSON (for scripts and CI)]" \
+                        "--prefix[Installation prefix]:directory:_files -/"
+                    ;;
+                bootstrap)
+                    _arguments \
+                        "--prefix[Installation prefix]:directory:_files -/" \
+                        "--verbose[Show full build output]"
+                    ;;
+                doctor|ui)
                     _arguments \
                         "--prefix[Installation prefix]:directory:_files -/"
                     ;;

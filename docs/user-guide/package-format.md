@@ -94,6 +94,25 @@ Or with a specific tag or commit:
 }
 ```
 
+### Pinning and Verification
+
+- `commit`: a git commit to check out after cloning (`type: "git"`). When set, TSI
+  makes a full clone instead of a shallow one, so the commit is reachable.
+- `sha256`: the expected SHA-256 of the archive, as lowercase hex (`type: "tarball"` or
+  `"zip"`). TSI verifies the downloaded or cached archive before extracting it. On a
+  mismatch it downloads the archive once more, and fails if the checksum still does not
+  match.
+
+```json
+{
+  "source": {
+    "type": "tarball",
+    "url": "https://example.com/releases/package-1.0.0.tar.gz",
+    "sha256": "0123456789abcdef..."
+  }
+}
+```
+
 ### Zip Archive
 
 ```json

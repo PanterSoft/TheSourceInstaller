@@ -10,7 +10,7 @@ _tsi_versions() {
     local repo_dir="$1" pkg_name="$2"
     [ -z "$repo_dir" ] || [ -z "$pkg_name" ] && return
     local versions=""
-    for f in "$repo_dir"/*.json 2>/dev/null; do
+    for f in "$repo_dir"/*.json; do
         [ -f "$f" ] || continue
         if grep -q "\"name\"[[:space:]]*:[[:space:]]*\"${pkg_name}\"" "$f" 2>/dev/null; then
             local v
@@ -30,7 +30,7 @@ _tsi() {
     cword=$COMP_CWORD
 
     # All TSI commands
-    local commands="install uninstall upgrade list search info update self-update doctor remove --help --version -h -v"
+    local commands="install uninstall upgrade list search info update self-update doctor remove bootstrap ui --help --version -h -v"
 
     # Handle command-specific completions
     case ${prev} in
@@ -103,7 +103,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
 
         uninstall)
             if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--force --prefix" -- ${cur}))
             else
                 local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
                 if [ -n "$installed" ]; then
@@ -166,6 +166,13 @@ print(' '.join(sorted(set(versions), reverse=True)))
             return 0
             ;;
 
+        bootstrap)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--prefix --verbose" -- ${cur}))
+            fi
+            return 0
+            ;;
+
         upgrade)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--prefix --verbose" -- ${cur}))
@@ -176,7 +183,14 @@ print(' '.join(sorted(set(versions), reverse=True)))
             return 0
             ;;
 
-        search|doctor|list)
+        list)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "--json --prefix" -- ${cur}))
+            fi
+            return 0
+            ;;
+
+        search|doctor|ui)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
             fi
@@ -251,7 +265,7 @@ print(' '.join(sorted(set(versions), reverse=True)))
                 COMPREPLY=($(compgen -d -- ${cur}))
                 return 0
             elif [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "--prefix" -- ${cur}))
+                COMPREPLY=($(compgen -W "--force --prefix" -- ${cur}))
                 return 0
             else
                 local installed=$(tsi list 2>/dev/null | grep -E "^  " | awk '{print $1}' | sed 's/://' 2>/dev/null)
