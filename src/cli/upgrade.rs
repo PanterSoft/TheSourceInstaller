@@ -46,8 +46,12 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                         name, installed.version, latest.version
                     ));
                     let mut db_mut = Database::new(&db_dir)?;
-                    crate::ops::uninstall::uninstall_package(name, &prefix, &mut db_mut)?;
-                    let installed_set = db_mut.installed_set();
+                    // Install dirs are versioned (name-version), so the new version builds
+                    // beside the old one. The old one is removed only once the new one is
+                    // linked and recorded; a failed build leaves it installed and linked.
+                    let old_install_path = std::path::PathBuf::from(&installed.install_path);
+                    let mut installed_set = db_mut.installed_set();
+                    installed_set.remove(name);
                     let packages = resolver::resolve(
                         &registry,
                         &format!("{}@{}", name, latest.version),
@@ -69,6 +73,7 @@ pub fn run(args: UpgradeArgs) -> Result<()> {
                             args.verbose,
                         )?;
                     }
+                    crate::ops::uninstall::remove_old_install(&old_install_path, &prefix)?;
                 } else {
                     ui::output::detail(format!(
                         "{} {} is already up to date",

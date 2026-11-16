@@ -35,8 +35,23 @@ pub fn run(args: InstallArgs) -> Result<()> {
 
     for spec in &args.packages {
         let mut installed = db.installed_set();
+        let (root_name, root_version) = crate::core::package::parse_package_spec(spec);
+        // Explicit version differing from the installed one: build the requested
+        // version beside it and remove the old one only after success (like upgrade).
+        let mut replace_old: Option<std::path::PathBuf> = None;
+        if let Some(old) = db.get(&root_name) {
+            if replaces_installed(root_version.as_deref(), &old.version) {
+                ui::output::section(format!(
+                    "Replacing installed {} {} with {}",
+                    root_name,
+                    old.version,
+                    root_version.as_deref().unwrap_or_default()
+                ));
+                replace_old = Some(std::path::PathBuf::from(&old.install_path));
+                installed.remove(&root_name);
+            }
+        }
         if args.force {
-            let (root_name, _) = crate::core::package::parse_package_spec(spec);
             installed.remove(&root_name);
         }
 
@@ -110,6 +125,9 @@ pub fn run(args: InstallArgs) -> Result<()> {
             total_installed += 1;
             last_pkg = Some((pkg.name.clone(), pkg.version.clone()));
         }
+        if let Some(old_path) = replace_old {
+            crate::ops::uninstall::remove_old_install(&old_path, &prefix)?;
+        }
     }
 
     ui::output::section("Summary");
@@ -122,4 +140,21 @@ pub fn run(args: InstallArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// True when the spec names an explicit version that differs from the installed one.
+fn replaces_installed(spec_version: Option<&str>, installed_version: &str) -> bool {
+    matches!(spec_version, Some(v) if v != installed_version)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replaces_installed;
+
+    #[test]
+    fn replace_decision() {
+        assert!(replaces_installed(Some("2.0"), "1.0"));
+        assert!(!replaces_installed(Some("1.0"), "1.0"));
+        assert!(!replaces_installed(None, "1.0"));
+    }
 }
